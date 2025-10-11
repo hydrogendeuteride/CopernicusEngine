@@ -12,6 +12,8 @@
 
 #include <chrono>
 #include <thread>
+#include <span>
+#include <array>
 
 #include "render/vk_pipelines.h"
 #include <iostream>
@@ -31,6 +33,7 @@
 #include "vk_resource.h"
 #include "engine_context.h"
 #include "core/vk_pipeline_manager.h"
+#include "core/config.h"
 
 VulkanEngine *loadedEngine = nullptr;
 
@@ -314,9 +317,14 @@ void VulkanEngine::draw()
         RGImageHandle hGBufferAlbedo = _renderGraph->import_gbuffer_albedo();
         RGImageHandle hSwapchain = _renderGraph->import_swapchain_image(swapchainImageIndex);
 
-        // Create a transient shadow depth target (fixed resolution for now)
+        // Create transient depth targets for cascaded shadow maps
         const VkExtent2D shadowExtent{2048, 2048};
-        RGImageHandle hShadow = _renderGraph->create_depth_image("shadow.depth", shadowExtent, VK_FORMAT_D32_SFLOAT);
+        std::array<RGImageHandle, kShadowCascadeCount> hShadowCascades{};
+        for (int i = 0; i < kShadowCascadeCount; ++i)
+        {
+            std::string name = std::string("shadow.cascade.") + std::to_string(i);
+            hShadowCascades[i] = _renderGraph->create_depth_image(name.c_str(), shadowExtent, VK_FORMAT_D32_SFLOAT);
+        }
 
         _resourceManager->register_upload_pass(*_renderGraph, get_current_frame());
 
@@ -331,7 +339,7 @@ void VulkanEngine::draw()
             }
             if (auto *shadow = _renderPassManager->getPass<ShadowPass>())
             {
-                shadow->register_graph(_renderGraph.get(), hShadow, shadowExtent);
+                shadow->register_graph(_renderGraph.get(), std::span<RGImageHandle>(hShadowCascades.data(), hShadowCascades.size()), shadowExtent);
             }
             if (auto *geometry = _renderPassManager->getPass<GeometryPass>())
             {
@@ -339,7 +347,8 @@ void VulkanEngine::draw()
             }
             if (auto *lighting = _renderPassManager->getPass<LightingPass>())
             {
-                lighting->register_graph(_renderGraph.get(), hDraw, hGBufferPosition, hGBufferNormal, hGBufferAlbedo, hShadow);
+                lighting->register_graph(_renderGraph.get(), hDraw, hGBufferPosition, hGBufferNormal, hGBufferAlbedo,
+                                         std::span<RGImageHandle>(hShadowCascades.data(), hShadowCascades.size()));
             }
             if (auto *transparent = _renderPassManager->getPass<TransparentPass>())
             {

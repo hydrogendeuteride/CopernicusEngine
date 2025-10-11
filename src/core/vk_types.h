@@ -71,10 +71,14 @@ struct GPUSceneData {
     glm::mat4 view;
     glm::mat4 proj;
     glm::mat4 viewproj;
-    glm::mat4 lightViewProj;
+    glm::mat4 lightViewProj; // legacy single-shadow; kept for transition
     glm::vec4 ambientColor;
     glm::vec4 sunlightDirection; // w for sun power
     glm::vec4 sunlightColor;
+
+    // CSM data (unused by current shaders until wired)
+    glm::mat4 lightViewProjCascades[4];
+    glm::vec4 cascadeSplitsView;
 };
 
 enum class MaterialPass :uint8_t {

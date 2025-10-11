@@ -1,6 +1,7 @@
 #include "vk_renderpass_shadow.h"
 
 #include <unordered_set>
+#include <string>
 
 #include "core/engine_context.h"
 #include "render/rg_graph.h"
@@ -24,9 +25,13 @@ void ShadowPass::init(EngineContext *context)
     if (!_context || !_context->pipelines) return;
 
     // Build a depth-only graphics pipeline for shadow map rendering
+    // Keep push constants matching current shader layout for now
     VkPushConstantRange pc{};
     pc.offset = 0;
-    pc.size = sizeof(GPUDrawPushConstants);
+    // Push constants layout in shadow.vert is mat4 + device address + uint, rounded to 16 bytes
+    const uint32_t pcRaw = static_cast<uint32_t>(sizeof(GPUDrawPushConstants) + sizeof(uint32_t));
+    const uint32_t pcAligned = (pcRaw + 15u) & ~15u; // 16-byte alignment to match std430 expectations
+    pc.size = pcAligned;
     pc.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     GraphicsPipelineCreateInfo info{};
@@ -40,11 +45,11 @@ void ShadowPass::init(EngineContext *context)
         b.set_cull_mode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         b.set_multisampling_none();
         b.disable_blending();
-        // Reverse-Z depth test & depth-only pipeline
+        // Reverse-Z depth test for shadow maps (clear=0.0, GREATER_OR_EQUAL)
         b.enable_depthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
         b.set_depth_format(VK_FORMAT_D32_SFLOAT);
 
-        // Static depth bias to help with surface acne (will tune later)
+        // Static depth bias to help with surface acne (tune later)
         b._rasterizer.depthBiasEnable = VK_TRUE;
         b._rasterizer.depthBiasConstantFactor = 2.0f;
         b._rasterizer.depthBiasSlopeFactor = 2.0f;
@@ -65,53 +70,61 @@ void ShadowPass::execute(VkCommandBuffer)
     // Shadow rendering is done via the RenderGraph registration.
 }
 
-void ShadowPass::register_graph(RenderGraph *graph, RGImageHandle shadowDepth, VkExtent2D extent)
+void ShadowPass::register_graph(RenderGraph *graph, std::span<RGImageHandle> cascades, VkExtent2D extent)
 {
-    if (!graph || !shadowDepth.valid()) return;
+    if (!graph || cascades.empty()) return;
 
-    graph->add_pass(
-        "ShadowMap",
-        RGPassType::Graphics,
-        [shadowDepth](RGPassBuilder &builder, EngineContext *ctx)
-        {
-            // Reverse-Z depth clear to 0.0
-            VkClearValue clear{}; clear.depthStencil = {0.f, 0};
-            builder.write_depth(shadowDepth, true, clear);
+    for (uint32_t i = 0; i < cascades.size(); ++i)
+    {
+        RGImageHandle shadowDepth = cascades[i];
+        if (!shadowDepth.valid()) continue;
 
-            // Ensure index/vertex buffers are tracked as reads (like Geometry)
-            if (ctx)
+        std::string passName = std::string("ShadowMap[") + std::to_string(i) + "]";
+        graph->add_pass(
+            passName.c_str(),
+            RGPassType::Graphics,
+            [shadowDepth](RGPassBuilder &builder, EngineContext *ctx)
             {
-                const DrawContext &dc = ctx->getMainDrawContext();
-                std::unordered_set<VkBuffer> indexSet;
-                std::unordered_set<VkBuffer> vertexSet;
-                auto collect = [&](const std::vector<RenderObject> &v)
-                {
-                    for (const auto &r : v)
-                    {
-                        if (r.indexBuffer) indexSet.insert(r.indexBuffer);
-                        if (r.vertexBuffer) vertexSet.insert(r.vertexBuffer);
-                    }
-                };
-                collect(dc.OpaqueSurfaces);
-                // Transparent surfaces are ignored for shadow map in this simple pass
+                // Reverse-Z depth clear to 0.0
+                VkClearValue clear{}; clear.depthStencil = {0.f, 0};
+                builder.write_depth(shadowDepth, true, clear);
 
-                for (VkBuffer b : indexSet)
-                    builder.read_buffer(b, RGBufferUsage::IndexRead, 0, "shadow.index");
-                for (VkBuffer b : vertexSet)
-                    builder.read_buffer(b, RGBufferUsage::StorageRead, 0, "shadow.vertex");
-            }
-        },
-        [this, shadowDepth, extent](VkCommandBuffer cmd, const RGPassResources &res, EngineContext *ctx)
-        {
-            draw_shadow(cmd, ctx, res, shadowDepth, extent);
-        });
+                // Ensure index/vertex buffers are tracked as reads (like Geometry)
+                if (ctx)
+                {
+                    const DrawContext &dc = ctx->getMainDrawContext();
+                    std::unordered_set<VkBuffer> indexSet;
+                    std::unordered_set<VkBuffer> vertexSet;
+                    auto collect = [&](const std::vector<RenderObject> &v)
+                    {
+                        for (const auto &r : v)
+                        {
+                            if (r.indexBuffer) indexSet.insert(r.indexBuffer);
+                            if (r.vertexBuffer) vertexSet.insert(r.vertexBuffer);
+                        }
+                    };
+                    collect(dc.OpaqueSurfaces);
+                    // Ignore transparent for shadow map
+
+                    for (VkBuffer b : indexSet)
+                        builder.read_buffer(b, RGBufferUsage::IndexRead, 0, "shadow.index");
+                    for (VkBuffer b : vertexSet)
+                        builder.read_buffer(b, RGBufferUsage::StorageRead, 0, "shadow.vertex");
+                }
+            },
+            [this, shadowDepth, extent, i](VkCommandBuffer cmd, const RGPassResources &res, EngineContext *ctx)
+            {
+                draw_shadow(cmd, ctx, res, shadowDepth, extent, i);
+            });
+    }
 }
 
 void ShadowPass::draw_shadow(VkCommandBuffer cmd,
                              EngineContext *context,
                              const RGPassResources &/*resources*/,
                              RGImageHandle /*shadowDepth*/,
-                             VkExtent2D extent) const
+                             VkExtent2D extent,
+                             uint32_t cascadeIndex) const
 {
     EngineContext *ctxLocal = context ? context : _context;
     if (!ctxLocal || !ctxLocal->currentFrame) return;
@@ -166,6 +179,12 @@ void ShadowPass::draw_shadow(VkCommandBuffer cmd,
     const DrawContext &dc = ctxLocal->getMainDrawContext();
 
     VkBuffer lastIndexBuffer = VK_NULL_HANDLE;
+
+    struct ShadowPC
+    {
+        GPUDrawPushConstants draw;
+        uint32_t cascadeIndex;
+    };
     for (const auto &r : dc.OpaqueSurfaces)
     {
         if (r.indexBuffer != lastIndexBuffer)
@@ -174,11 +193,11 @@ void ShadowPass::draw_shadow(VkCommandBuffer cmd,
             vkCmdBindIndexBuffer(cmd, r.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
         }
 
-        GPUDrawPushConstants pc{};
-        pc.worldMatrix = r.transform;
-        pc.vertexBuffer = r.vertexBufferAddress;
-        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pc);
-
+        ShadowPC spc{};
+        spc.draw.worldMatrix = r.transform;
+        spc.draw.vertexBuffer = r.vertexBufferAddress;
+        spc.cascadeIndex = cascadeIndex;
+        vkCmdPushConstants(cmd, layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(ShadowPC), &spc);
         vkCmdDrawIndexed(cmd, r.indexCount, 1, r.firstIndex, 0, 0);
     }
 }

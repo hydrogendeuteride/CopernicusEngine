@@ -8,7 +8,7 @@ layout(location=0) out vec4 outColor;
 layout(set=1, binding=0) uniform sampler2D posTex;
 layout(set=1, binding=1) uniform sampler2D normalTex;
 layout(set=1, binding=2) uniform sampler2D albedoTex;
-layout(set=2, binding=0) uniform sampler2D shadowTex;
+layout(set=2, binding=0) uniform sampler2D shadowTex[MAX_CASCADES];
 
 const float PI = 3.14159265359;
 
@@ -31,7 +31,15 @@ const vec2 POISSON_16[16] = vec2[16](
 
 float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
 {
-    vec4 lclip = sceneData.lightViewProj * vec4(worldPos, 1.0);
+    // Choose cascade based on view-space depth
+    float viewDepth = - (sceneData.view * vec4(worldPos, 1.0)).z; // positive
+    int ci = 0;
+    if (viewDepth > sceneData.cascadeSplitsView.x) ci = 1;
+    if (viewDepth > sceneData.cascadeSplitsView.y) ci = 2;
+    if (viewDepth > sceneData.cascadeSplitsView.z) ci = 3;
+    ci = clamp(ci, 0, MAX_CASCADES-1);
+
+    vec4 lclip = sceneData.lightViewProjCascades[ci] * vec4(worldPos, 1.0);
     vec3 ndc  = lclip.xyz / lclip.w;
     vec2 suv  = ndc.xy * 0.5 + 0.5;
 
@@ -48,7 +56,7 @@ float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
     float ddz  = max(abs(dzdx), abs(dzdy));
     float bias = slopeBias + ddz * 0.75;
 
-    ivec2 dim       = textureSize(shadowTex, 0);
+    ivec2 dim       = textureSize(shadowTex[ci], 0);
     vec2  texelSize = 1.0 / vec2(dim);
 
     float baseRadius = 1.25;
@@ -70,8 +78,9 @@ float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
         float pr   = length(pu);
         float w    = 1.0 - smoothstep(0.0, 0.65, pr);
 
-        float mapD = texture(shadowTex, suv + off).r;
+        float mapD = texture(shadowTex[ci], suv + off).r;
 
+        // Standard depth shadow map: occluded when current > mapD + bias
         float occ  = step(current + bias, mapD);
 
         occluded += occ * w;

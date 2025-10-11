@@ -1,6 +1,7 @@
 #pragma once
 #include "vk_renderpass.h"
 #include <render/rg_types.h>
+#include <span>
 
 class LightingPass : public IRenderPass
 {
@@ -13,19 +14,20 @@ public:
 
     const char *getName() const override { return "Lighting"; }
 
+    // Register lighting; consumes GBuffer + CSM cascades.
     void register_graph(class RenderGraph *graph,
                         RGImageHandle drawHandle,
                         RGImageHandle gbufferPosition,
                         RGImageHandle gbufferNormal,
                         RGImageHandle gbufferAlbedo,
-                        RGImageHandle shadowDepth);
+                        std::span<RGImageHandle> shadowCascades);
 
 private:
     EngineContext *_context = nullptr;
 
     VkDescriptorSetLayout _gBufferInputDescriptorLayout = VK_NULL_HANDLE;
     VkDescriptorSet _gBufferInputDescriptorSet = VK_NULL_HANDLE;
-    VkDescriptorSetLayout _shadowDescriptorLayout = VK_NULL_HANDLE; // set=2
+    VkDescriptorSetLayout _shadowDescriptorLayout = VK_NULL_HANDLE; // set=2 (array)
 
     VkPipelineLayout _pipelineLayout = VK_NULL_HANDLE;
     VkPipeline _pipeline = VK_NULL_HANDLE;
@@ -34,7 +36,7 @@ private:
                        EngineContext *context,
                        const class RGPassResources &resources,
                        RGImageHandle drawHandle,
-                       RGImageHandle shadowDepth);
+                       std::span<RGImageHandle> shadowCascades);
 
     DeletionQueue _deletionQueue;
 };
