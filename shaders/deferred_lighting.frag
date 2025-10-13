@@ -80,8 +80,11 @@ float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
 
         float mapD = texture(shadowTex[ci], suv + off).r;
 
-        // Standard depth shadow map: occluded when current > mapD + bias
-        float occ  = step(current + bias, mapD);
+        // Forward-Z depth shadow map:
+        //  - Occluded when current + bias > mapD
+        //  - Unoccluded otherwise
+        // Use step(edge, x): returns 1 when x >= edge. Make occ=1 for occluded.
+        float occ  = step(mapD + bias, current);
 
         occluded += occ * w;
         wsum     += w;
@@ -161,7 +164,7 @@ void main(){
     vec3 kD = (1.0 - kS) * (1.0 - metallic);
 
     float NdotL = max(dot(N, L), 0.0);
-    // Shadowing (directional, reversed-Z shadow map)
+    // Shadowing (directional, forward-Z shadow map)
     float visibility = calcShadowVisibility(pos, N, L);
 
     vec3 irradiance = sceneData.sunlightColor.rgb * sceneData.sunlightColor.a * NdotL * visibility;

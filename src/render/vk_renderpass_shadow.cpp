@@ -45,11 +45,11 @@ void ShadowPass::init(EngineContext *context)
         b.set_cull_mode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_CLOCKWISE);
         b.set_multisampling_none();
         b.disable_blending();
-        // Reverse-Z depth test for shadow maps (clear=0.0, GREATER_OR_EQUAL)
-        b.enable_depthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+        // Forward-Z for shadow maps only (engine uses reversed-Z elsewhere)
+        // We clear depth to 1.0 and use LESS_OR_EQUAL so the nearest depth wins.
+        b.enable_depthtest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
         b.set_depth_format(VK_FORMAT_D32_SFLOAT);
 
-        // Static depth bias to help with surface acne (tune later)
         b._rasterizer.depthBiasEnable = VK_TRUE;
         b._rasterizer.depthBiasConstantFactor = 2.0f;
         b._rasterizer.depthBiasSlopeFactor = 2.0f;
@@ -85,8 +85,8 @@ void ShadowPass::register_graph(RenderGraph *graph, std::span<RGImageHandle> cas
             RGPassType::Graphics,
             [shadowDepth](RGPassBuilder &builder, EngineContext *ctx)
             {
-                // Reverse-Z depth clear to 0.0
-                VkClearValue clear{}; clear.depthStencil = {0.f, 0};
+                // Forward-Z in shadow pass: clear depth to 1.0 (far)
+                VkClearValue clear{}; clear.depthStencil = {1.f, 0};
                 builder.write_depth(shadowDepth, true, clear);
 
                 // Ensure index/vertex buffers are tracked as reads (like Geometry)

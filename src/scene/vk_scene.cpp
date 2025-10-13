@@ -110,7 +110,9 @@ void SceneManager::update_scene()
     {
         using namespace glm;
         const vec3 camPos = vec3(inverse(view)[3]);
-        vec3 L = normalize(-vec3(sceneData.sunlightDirection));
+        // Use light-ray direction (from light to scene).
+        // Shaders compute per-fragment L as -sunlightDirection (vector to light).
+        vec3 L = normalize(vec3(sceneData.sunlightDirection));
         if (!glm::all(glm::isfinite(L)) || glm::length2(L) < 1e-10f)
             L = glm::vec3(0.0f, -1.0f, 0.0f);
 
