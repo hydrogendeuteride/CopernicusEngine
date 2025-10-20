@@ -35,6 +35,9 @@ void SamplerManager::init(DeviceManager *deviceManager)
     sh.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
     sh.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
     sh.compareEnable = VK_FALSE; // manual PCF
+    // Depth shadow maps are single-level; keep base LOD only and avoid mip filtering.
+    sh.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    sh.maxLod = 0.0f;
     sh.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
     vkCreateSampler(_deviceManager->device(), &sh, nullptr, &_shadowLinearClamp);
 }

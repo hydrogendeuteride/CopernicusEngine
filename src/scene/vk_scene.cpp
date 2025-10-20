@@ -122,7 +122,7 @@ void SceneManager::update_scene()
         glm::vec3 up    = glm::normalize(glm::cross(L, right));
 
         const float csmFar = kShadowCSMFar; // configurable shadow distance
-        const float lambda = 0.8f; // split weighting
+        const float lambda = 0.5f; // split weighting
         const int cascades = kShadowCascadeCount;
 
         float splits[4] = {0, 0, 0, 0};
@@ -213,7 +213,9 @@ void SceneManager::update_scene()
             float bottom = centerLS.y - radius;
             float top    = centerLS.y + radius;
 
-            mat4 projLight = orthoRH_ZO(left, rightE, bottom, top, nearLS, farLS);
+            mat4 projLight = orthoRH_ZO(-40.f, 40.f, -40.f, 40.f, nearLS, farLS);
+
+            // projLight[1][1] *= -1.0f;
             return projLight * viewLight;
         };
 

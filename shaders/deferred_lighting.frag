@@ -19,20 +19,20 @@ float hash12(vec2 p)
 }
 
 const vec2 POISSON_16[16] = vec2[16](
-    vec2(0.2852, -0.1883), vec2(-0.1464, 0.2591),
-    vec2(-0.3651, -0.0974), vec2(0.0901, 0.3807),
-    vec2(0.4740, 0.0679), vec2(-0.0512, -0.4466),
-    vec2(-0.4497, 0.1673), vec2(0.3347, 0.3211),
-    vec2(0.1948, -0.4196), vec2(-0.2919, -0.3291),
-    vec2(-0.0763, 0.4661), vec2(0.4421, -0.2217),
-    vec2(0.0281, -0.2468), vec2(-0.2104, 0.0573),
-    vec2(0.1197, 0.0779), vec2(-0.0905, -0.1203)
+vec2(0.2852, -0.1883), vec2(-0.1464, 0.2591),
+vec2(-0.3651, -0.0974), vec2(0.0901, 0.3807),
+vec2(0.4740, 0.0679), vec2(-0.0512, -0.4466),
+vec2(-0.4497, 0.1673), vec2(0.3347, 0.3211),
+vec2(0.1948, -0.4196), vec2(-0.2919, -0.3291),
+vec2(-0.0763, 0.4661), vec2(0.4421, -0.2217),
+vec2(0.0281, -0.2468), vec2(-0.2104, 0.0573),
+vec2(0.1197, 0.0779), vec2(-0.0905, -0.1203)
 );
 
 float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
 {
     // Choose cascade based on view-space depth
-    float viewDepth = - (sceneData.view * vec4(worldPos, 1.0)).z; // positive
+    float viewDepth = - (sceneData.view * vec4(worldPos, 1.0)).z;// positive
     int ci = 0;
     if (viewDepth > sceneData.cascadeSplitsView.x) ci = 1;
     if (viewDepth > sceneData.cascadeSplitsView.y) ci = 2;

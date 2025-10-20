@@ -76,7 +76,6 @@ struct GPUSceneData {
     glm::vec4 sunlightDirection; // w for sun power
     glm::vec4 sunlightColor;
 
-    // CSM data (unused by current shaders until wired)
     glm::mat4 lightViewProjCascades[4];
     glm::vec4 cascadeSplitsView;
 };
