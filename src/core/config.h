@@ -10,7 +10,7 @@ inline constexpr bool kUseValidationLayers = true;
 // Shadow mapping configuration
 inline constexpr int kShadowCascadeCount = 4;
 // Maximum shadow distance for CSM in view-space units
-inline constexpr float kShadowCSMFar = 400.0f;
+inline constexpr float kShadowCSMFar = 200.0f;
 // Shadow map resolution used for stabilization (texel snapping). Must match actual image size.
 inline constexpr float kShadowMapResolution = 2048.0f;
 // Extra XY expansion for cascade footprint (safety against FOV/aspect changes)

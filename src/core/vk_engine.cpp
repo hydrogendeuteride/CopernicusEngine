@@ -125,7 +125,7 @@ void VulkanEngine::init()
     auto imguiPass = std::make_unique<ImGuiPass>();
     _renderPassManager->setImGuiPass(std::move(imguiPass));
 
-    const std::string structurePath = _assetManager->modelPath("house.glb");
+    const std::string structurePath = _assetManager->modelPath("seoul_high.glb");
     const auto structureFile = _assetManager->loadGLTF(structurePath);
 
     assert(structureFile.has_value());

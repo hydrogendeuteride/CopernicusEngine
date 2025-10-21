@@ -88,7 +88,6 @@ float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
         float w    = 1.0 - smoothstep(0.0, 0.65, pr);
 
         float mapD = texture(shadowTex[ci], suv + off).r;
-        // Reversed-Z friendly compare: visible when current <= map depth
         float vis  = step(mapD, current + bias);
 
         visible += vis * w;

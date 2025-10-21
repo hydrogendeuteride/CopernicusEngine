@@ -107,44 +107,43 @@ void SceneManager::update_scene()
     // Mixed Near + CSM shadow setup
     // - Cascade 0: legacy/simple shadow (near range around camera)
     // - Cascades 1..N-1: cascaded shadow maps covering farther ranges up to kShadowCSMFar
+
+    // ---- Mixed Near + CSM shadow setup (fixed) ----
     {
         const glm::mat4 invView = glm::inverse(view);
         const glm::vec3 camPos = glm::vec3(invView[3]);
 
-        // Sun direction and light basis
+        // Sun direction and light basis (robust)
         glm::vec3 L = glm::normalize(-glm::vec3(sceneData.sunlightDirection));
         if (glm::length(L) < 1e-5f) L = glm::vec3(0.0f, -1.0f, 0.0f);
         const glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
-        glm::vec3 right = glm::normalize(glm::cross(worldUp, L));
-        glm::vec3 up = glm::normalize(glm::cross(L, right));
-        if (glm::length2(right) < 1e-6f)
-        {
-            right = glm::vec3(1, 0, 0);
-            up = glm::normalize(glm::cross(L, right));
-        }
+        glm::vec3 right = glm::cross(L, worldUp);
+        if (glm::length2(right) < 1e-6f) right = glm::vec3(1, 0, 0);
+        right = glm::normalize(right);
+        glm::vec3 up = glm::normalize(glm::cross(right, L));
 
-        // 0) Legacy near/simple shadow matrix (kept for cascade 0)
+        // 0) Legacy near/simple shadow (cascade 0 그대로)
         {
-            const float orthoRange = 30.0f; // XY half-extent around camera
+            const float orthoRange = 20.0f;
             const float nearDist = 0.1f;
-            const float farDist = 150.0f;
-            const glm::vec3 lightPos = camPos - L * 50.0f;
+            const float farDist = 200.0f;
+            const glm::vec3 lightPos = camPos - L * 80.0f;
             const glm::mat4 viewLight = glm::lookAtRH(lightPos, camPos, up);
+
+            // ⚠️ API에 맞게 ZO/NO를 고르세요 (Vulkan/D3D: ZO, OpenGL 기본: NO)
             const glm::mat4 projLight = glm::orthoRH_ZO(-orthoRange, orthoRange, -orthoRange, orthoRange,
                                                         nearDist, farDist);
+
             const glm::mat4 lightVP = projLight * viewLight;
-            sceneData.lightViewProj = lightVP;               // kept for debug/compat
-            sceneData.lightViewProjCascades[0] = lightVP;    // cascade 0 uses the simple map
+            sceneData.lightViewProj = lightVP;
+            sceneData.lightViewProjCascades[0] = lightVP;
         }
 
-        // 1) Build cascade split distances (view-space, positive forward)
+        // 1) Cascade split distances (뷰공간 +Z를 "전방 거리"로 사용)
         const float farView = kShadowCSMFar;
-        // Choose a near/CSM boundary tuned for close-up detail
-        const float nearSplit = 100.0;
-        // Practical split scheme for remaining 3 cascades
-        const float lambda = 0.6f;
-        float cStart = nearSplit;
-        float splits[3]{}; // end distances for cascades 1..3
+        const float nearSplit = 5.0f; // 0번(레거시)와 CSM 경계
+        const float lambda = 0.7f; // practical split
+        float splits[3]{};
         for (int i = 1; i <= 3; ++i)
         {
             float si = float(i) / 3.0f;
@@ -154,73 +153,73 @@ void SceneManager::update_scene()
         }
         sceneData.cascadeSplitsView = glm::vec4(nearSplit, splits[0], splits[1], farView);
 
-        // 2) For cascades 1..3, compute light-space ortho matrices that bound the camera frustum slice
-        auto frustum_corners_world = [&](float zn, float zf)
-        {
-            // camera looks along -Z in view space
+        // 2) 뷰공간 슬라이스 [zn, zf]의 월드 코너 계산
+        auto frustum_corners_world = [&](float zn, float zf) {
+            // 카메라는 뷰공간 -Z를 바라봄. 우리는 "전방거리"를 양수로 넣고 z는 -zn, -zf.
             const float tanHalfFov = tanf(fov * 0.5f);
             const float yN = tanHalfFov * zn;
             const float xN = yN * aspect;
             const float yF = tanHalfFov * zf;
             const float xF = yF * aspect;
 
-            // view-space corners
             glm::vec3 vs[8] = {
                 {-xN, -yN, -zn}, {+xN, -yN, -zn}, {+xN, +yN, -zn}, {-xN, +yN, -zn},
                 {-xF, -yF, -zf}, {+xF, -yF, -zf}, {+xF, +yF, -zf}, {-xF, +yF, -zf}
             };
             std::array<glm::vec3, 8> ws{};
             for (int i = 0; i < 8; ++i)
-            {
                 ws[i] = glm::vec3(invView * glm::vec4(vs[i], 1.0f));
-            }
             return ws;
         };
 
-        auto build_light_matrix_for_slice = [&](float zNearVS, float zFarVS)
-        {
+        auto build_light_matrix_for_slice = [&](float zNearVS, float zFarVS) {
             auto ws = frustum_corners_world(zNearVS, zFarVS);
 
-            // Light view looking toward cascade center
+            // 라이트 뷰: 슬라이스 센터를 본다
             glm::vec3 center(0.0f);
-            for (auto &p : ws) center += p; center *= (1.0f / 8.0f);
-            glm::vec3 lightPos = center - L * 200.0f;
-            glm::mat4 V = glm::lookAtRH(lightPos, center, up);
+            for (auto &p: ws) center += p;
+            center *= (1.0f / 8.0f);
+            const float lightPullback = 30.0f; // 충분히 뒤로 빼서 안정화
+            glm::mat4 V = glm::lookAtRH(center - L * lightPullback, center, up);
 
-            // Project corners to light space and compute AABB
+            // 라이트 공간으로 투영 후 AABB
             glm::vec3 minLS(FLT_MAX), maxLS(-FLT_MAX);
-            for (auto &p : ws)
+            for (auto &p: ws)
             {
                 glm::vec3 q = glm::vec3(V * glm::vec4(p, 1.0f));
                 minLS = glm::min(minLS, q);
                 maxLS = glm::max(maxLS, q);
             }
 
-            // Expand XY a bit to be safe/stable
-            glm::vec2 halfXY = 0.5f * glm::vec2(maxLS.x - minLS.x, maxLS.y - minLS.y);
-            float radius = glm::max(halfXY.x, halfXY.y) * kShadowCascadeRadiusScale + kShadowCascadeRadiusMargin;
+            // XY 반경/센터, 살짝 여유
+            glm::vec2 extXY = glm::vec2(maxLS.x - minLS.x, maxLS.y - minLS.y);
+            float radius = 0.5f * glm::max(extXY.x, extXY.y);
+            radius = radius * kShadowCascadeRadiusScale + kShadowCascadeRadiusMargin;
+
             glm::vec2 centerXY = 0.5f * glm::vec2(maxLS.x + minLS.x, maxLS.y + minLS.y);
 
-            // Optional texel snapping for stability
-            const float texel = (2.0f * radius) / kShadowMapResolution;
+            // Texel snapping (안정화)
+            const float texel = (2.0f * radius) / float(kShadowMapResolution);
             centerXY.x = floorf(centerXY.x / texel) * texel;
             centerXY.y = floorf(centerXY.y / texel) * texel;
 
-            // Compose snapped view matrix by overriding translation in light space
-            glm::mat4 Vsnapped = V;
-            // Extract current translation in light space for center; replace x/y with snapped center
-            glm::vec3 centerLS = glm::vec3(V * glm::vec4(center, 1.0f));
-            glm::vec3 delta = glm::vec3(centerXY, centerLS.z) - centerLS;
-            // Apply delta in light space by post-multiplying with a translation
-            Vsnapped = glm::translate(glm::mat4(1.0f), -delta) * V;
+            // 스냅된 XY 센터를 반영하도록 라이트 뷰를 라이트공간에서 평행이동
+            glm::mat4 Vsnapped = glm::translate(glm::mat4(1.0f),
+                                                -glm::vec3(centerXY.x, centerXY.y, 0.0f)) * V;
 
-            float nearLS = minLS.z - 50.0f;   // pull near/far generously around slice depth range
-            float farLS  = maxLS.z + 250.0f;
-            glm::mat4 P = glm::orthoRH_ZO(-radius, radius, -radius, radius, std::max(0.1f, -nearLS), std::max(10.0f, farLS - nearLS + 10.0f));
+            // 깊이 범위(표준 Z, reversed-Z 안 씀)
+            // lookAtRH는 -Z 쪽을 앞(카메라 전방)으로 둔다: 가까운 점 z는 덜 음수(값이 큰 쪽), 먼 점은 더 음수(값이 작은 쪽)
+            const float zPad = 50.0f; // 슬라이스 앞뒤 여유
+            float zNear = glm::max(0.1f, -maxLS.z - zPad); // "가까움": -z(덜음수) → 양수 거리
+            float zFar = -minLS.z + zPad; // "멀리":   -z(더음수) → 더 큰 양수
+
+            // ⚠️ API에 맞게 ZO/NO를 선택
+            glm::mat4 P = glm::orthoRH_ZO(-radius, radius, -radius, radius, zNear, zFar);
+
             return P * Vsnapped;
         };
 
-        // Fill cascades 1..3
+        // 3) Cascades 1..3 채우기
         float prev = nearSplit;
         for (int ci = 1; ci < kShadowCascadeCount; ++ci)
         {
@@ -229,6 +228,7 @@ void SceneManager::update_scene()
             prev = end;
         }
     }
+
 
     auto end = std::chrono::system_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
