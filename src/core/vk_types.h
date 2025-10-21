@@ -75,6 +75,9 @@ struct GPUSceneData {
     glm::vec4 ambientColor;
     glm::vec4 sunlightDirection; // w for sun power
     glm::vec4 sunlightColor;
+
+    glm::mat4 lightViewProjCascades[4];
+    glm::vec4 cascadeSplitsView;
 };
 
 enum class MaterialPass :uint8_t {

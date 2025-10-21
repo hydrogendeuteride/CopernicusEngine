@@ -4,6 +4,7 @@
 
 #include "vk_swapchain.h"
 #include "core/engine_context.h"
+#include "core/config.h"
 #include "glm/gtx/transform.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -104,7 +105,9 @@ void SceneManager::update_scene()
     sceneData.viewproj = projection * view;
 
     // Build a simple directional light view-projection (reversed-Z orthographic)
-    // Centered around the camera for now (non-cascaded, non-stabilized)
+    // Centered around the camera for now. For the initial CSM-plumbing test,
+    // duplicate this single shadow matrix across all cascades so we render
+    // four identical shadow maps. This verifies the pass/descriptor wiring.
     {
         const glm::vec3 camPos = glm::vec3(glm::inverse(view)[3]);
         glm::vec3 L = glm::normalize(-glm::vec3(sceneData.sunlightDirection));
@@ -124,11 +127,27 @@ void SceneManager::update_scene()
         const float farDist = 200.0f;
         const glm::vec3 lightPos = camPos - L * 100.0f;
         glm::mat4 viewLight = glm::lookAtRH(lightPos, camPos, up);
-        // Standard RH ZO ortho with near<far, then explicitly flip Z to reversed-Z
+        // Standard RH ZO ortho with near<far (works with our reversed-Z depth setup
+        // as we clamp and bias in shader). We'll stabilize/flip later when CSM lands.
         glm::mat4 projLight = glm::orthoRH_ZO(-orthoRange, orthoRange, -orthoRange, orthoRange,
                                               nearDist, farDist);
 
         sceneData.lightViewProj = projLight * viewLight;
+
+        // Fill cascade arrays with the same matrix for now so the shadow
+        // pass can run four times using identical transforms.
+        for (int c = 0; c < kShadowCascadeCount; ++c)
+        {
+            sceneData.lightViewProjCascades[c] = sceneData.lightViewProj;
+        }
+
+        // Provide a simple increasing split hint (view-space distances).
+        // Not used yet by shaders, but helps when we switch to CSM.
+        const float farView = kShadowCSMFar;
+        sceneData.cascadeSplitsView = glm::vec4(0.1f * farView,
+                                                0.3f * farView,
+                                                0.6f * farView,
+                                                1.0f * farView);
     }
 
     auto end = std::chrono::system_clock::now();

@@ -28,6 +28,16 @@ void SamplerManager::init(DeviceManager *deviceManager)
     sampl.magFilter = VK_FILTER_LINEAR;
     sampl.minFilter = VK_FILTER_LINEAR;
     vkCreateSampler(_deviceManager->device(), &sampl, nullptr, &_defaultSamplerLinear);
+
+    // Shadow linear clamp sampler (border=white)
+    VkSamplerCreateInfo sh = sampl;
+    sh.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sh.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sh.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    sh.compareEnable = VK_FALSE; // manual PCF
+    sh.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    vkCreateSampler(_deviceManager->device(), &sh, nullptr, &_shadowLinearClamp);
+
 }
 
 void SamplerManager::cleanup()
@@ -43,5 +53,11 @@ void SamplerManager::cleanup()
     {
         vkDestroySampler(_deviceManager->device(), _defaultSamplerLinear, nullptr);
         _defaultSamplerLinear = VK_NULL_HANDLE;
+    }
+
+    if (_shadowLinearClamp)
+    {
+        vkDestroySampler(_deviceManager->device(), _shadowLinearClamp, nullptr);
+        _shadowLinearClamp = VK_NULL_HANDLE;
     }
 }

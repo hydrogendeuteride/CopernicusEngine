@@ -10,11 +10,13 @@
 #include "core/vk_pipeline_manager.h"
 #include "core/asset_manager.h"
 #include "core/vk_descriptors.h"
+#include "core/config.h"
 
 #include "vk_mem_alloc.h"
 #include "vk_sampler_manager.h"
 #include "vk_swapchain.h"
 #include "render/rg_graph.h"
+#include <array>
 
 void LightingPass::init(EngineContext *context)
 {
@@ -43,10 +45,10 @@ void LightingPass::init(EngineContext *context)
         writer.update_set(_context->getDevice()->device(), _gBufferInputDescriptorSet);
     }
 
-    // Shadow map descriptor layout (set = 2, updated per-frame)
+    // Shadow map descriptor layout (set = 2, updated per-frame). Use array of cascades
     {
         DescriptorLayoutBuilder builder;
-        builder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+        builder.add_binding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kShadowCascadeCount);
         _shadowDescriptorLayout = builder.build(_context->getDevice()->device(), VK_SHADER_STAGE_FRAGMENT_BIT);
     }
 
@@ -95,9 +97,9 @@ void LightingPass::register_graph(RenderGraph *graph,
                                   RGImageHandle gbufferPosition,
                                   RGImageHandle gbufferNormal,
                                   RGImageHandle gbufferAlbedo,
-                                  RGImageHandle shadowDepth)
+                                  std::span<RGImageHandle> shadowCascades)
 {
-    if (!graph || !drawHandle.valid() || !gbufferPosition.valid() || !gbufferNormal.valid() || !gbufferAlbedo.valid() || !shadowDepth.valid())
+    if (!graph || !drawHandle.valid() || !gbufferPosition.valid() || !gbufferNormal.valid() || !gbufferAlbedo.valid())
     {
         return;
     }
@@ -105,18 +107,21 @@ void LightingPass::register_graph(RenderGraph *graph,
     graph->add_pass(
         "Lighting",
         RGPassType::Graphics,
-        [drawHandle, gbufferPosition, gbufferNormal, gbufferAlbedo, shadowDepth](RGPassBuilder &builder, EngineContext *)
+        [drawHandle, gbufferPosition, gbufferNormal, gbufferAlbedo, shadowCascades](RGPassBuilder &builder, EngineContext *)
         {
             builder.read(gbufferPosition, RGImageUsage::SampledFragment);
             builder.read(gbufferNormal, RGImageUsage::SampledFragment);
             builder.read(gbufferAlbedo, RGImageUsage::SampledFragment);
-            builder.read(shadowDepth, RGImageUsage::SampledFragment);
+            for (size_t i = 0; i < shadowCascades.size(); ++i)
+            {
+                if (shadowCascades[i].valid()) builder.read(shadowCascades[i], RGImageUsage::SampledFragment);
+            }
 
             builder.write_color(drawHandle);
         },
-        [this, drawHandle, shadowDepth](VkCommandBuffer cmd, const RGPassResources &res, EngineContext *ctx)
+        [this, drawHandle, shadowCascades](VkCommandBuffer cmd, const RGPassResources &res, EngineContext *ctx)
         {
-            draw_lighting(cmd, ctx, res, drawHandle, shadowDepth);
+            draw_lighting(cmd, ctx, res, drawHandle, shadowCascades);
         });
 }
 
@@ -124,7 +129,7 @@ void LightingPass::draw_lighting(VkCommandBuffer cmd,
                                  EngineContext *context,
                                  const RGPassResources &resources,
                                  RGImageHandle drawHandle,
-                                 RGImageHandle shadowDepth)
+                                 std::span<RGImageHandle> shadowCascades)
 {
     EngineContext *ctxLocal = context ? context : _context;
     if (!ctxLocal || !ctxLocal->currentFrame) return;
@@ -173,12 +178,21 @@ void LightingPass::draw_lighting(VkCommandBuffer cmd,
     VkDescriptorSet shadowSet = ctxLocal->currentFrame->_frameDescriptors.allocate(
         deviceManager->device(), _shadowDescriptorLayout);
     {
-        VkImageView shadowView = resources.image_view(shadowDepth);
-        DescriptorWriter writer2;
-        writer2.write_image(0, shadowView, ctxLocal->getSamplers()->defaultLinear(),
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-        writer2.update_set(deviceManager->device(), shadowSet);
+        const uint32_t cascadeCount = std::min<uint32_t>(kShadowCascadeCount, static_cast<uint32_t>(shadowCascades.size()));
+        std::array<VkDescriptorImageInfo, kShadowCascadeCount> infos{};
+        for (uint32_t i = 0; i < cascadeCount; ++i)
+        {
+            infos[i].sampler = ctxLocal->getSamplers()->shadowLinearClamp();
+            infos[i].imageView = resources.image_view(shadowCascades[i]);
+            infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+        VkWriteDescriptorSet write{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        write.dstSet = shadowSet;
+        write.dstBinding = 0;
+        write.descriptorCount = cascadeCount;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.pImageInfo = infos.data();
+        vkUpdateDescriptorSets(deviceManager->device(), 1, &write, 0, nullptr);
     }
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _pipelineLayout, 2, 1, &shadowSet, 0, nullptr);
 

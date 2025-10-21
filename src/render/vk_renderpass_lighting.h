@@ -17,8 +17,7 @@ public:
                         RGImageHandle drawHandle,
                         RGImageHandle gbufferPosition,
                         RGImageHandle gbufferNormal,
-                        RGImageHandle gbufferAlbedo,
-                        RGImageHandle shadowDepth);
+                        RGImageHandle gbufferAlbedo, std::span<RGImageHandle> shadowCascades);
 
 private:
     EngineContext *_context = nullptr;
@@ -34,7 +33,7 @@ private:
                        EngineContext *context,
                        const class RGPassResources &resources,
                        RGImageHandle drawHandle,
-                       RGImageHandle shadowDepth);
+                       std::span<RGImageHandle> shadowCascades);
 
     DeletionQueue _deletionQueue;
 };

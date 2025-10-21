@@ -2,14 +2,13 @@
 
 #include "vk_renderpass.h"
 #include <render/rg_types.h>
+#include <span>
 
 class RenderGraph;
 class EngineContext;
 class RGPassResources;
 
-// Depth-only directional shadow map pass (skeleton)
-// - Writes a depth image using reversed-Z (clear=0)
-// - Draw function will be filled in a later step
+// Depth-only directional shadow map pass (CSM-ready API)
 class ShadowPass : public IRenderPass
 {
 public:
@@ -19,8 +18,8 @@ public:
 
     const char *getName() const override { return "ShadowMap"; }
 
-    // Register the depth-only pass into the render graph
-    void register_graph(RenderGraph *graph, RGImageHandle shadowDepth, VkExtent2D extent);
+    // Register N cascades; one graphics pass per cascade.
+    void register_graph(RenderGraph *graph, std::span<RGImageHandle> cascades, VkExtent2D extent);
 
 private:
     EngineContext *_context = nullptr;
@@ -29,5 +28,6 @@ private:
                      EngineContext *context,
                      const RGPassResources &resources,
                      RGImageHandle shadowDepth,
-                     VkExtent2D extent) const;
+                     VkExtent2D extent,
+                     uint32_t cascadeIndex) const;
 };

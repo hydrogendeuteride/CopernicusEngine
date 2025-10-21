@@ -676,7 +676,16 @@ void RenderGraph::execute(VkCommandBuffer cmd)
                 if (rec && rec->imageView != VK_NULL_HANDLE)
                 {
                     depthInfo = vkinit::depth_attachment_info(rec->imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-                    if (p.depthAttachment.clearOnLoad) depthInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                	if (p.depthAttachment.clearOnLoad)
+                	{
+                		depthInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+                		depthInfo.clearValue = p.depthAttachment.clear;
+                	}
+                	else
+                	{
+                		depthInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+                	}
+                	if (p.depthAttachment.clearOnLoad) depthInfo.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
                     else depthInfo.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
                     if (!p.depthAttachment.store) depthInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
                     hasDepth = true;
