@@ -124,10 +124,10 @@ void SceneManager::update_scene()
 
         // 0) Legacy near/simple shadow (cascade 0 그대로)
         {
-            const float orthoRange = 20.0f;
+            const float orthoRange = 10.0f;
             const float nearDist = 0.1f;
             const float farDist = 200.0f;
-            const glm::vec3 lightPos = camPos - L * 80.0f;
+            const glm::vec3 lightPos = camPos - L * 180.0f;
             const glm::mat4 viewLight = glm::lookAtRH(lightPos, camPos, up);
 
             // ⚠️ API에 맞게 ZO/NO를 고르세요 (Vulkan/D3D: ZO, OpenGL 기본: NO)
@@ -179,7 +179,7 @@ void SceneManager::update_scene()
             glm::vec3 center(0.0f);
             for (auto &p: ws) center += p;
             center *= (1.0f / 8.0f);
-            const float lightPullback = 30.0f; // 충분히 뒤로 빼서 안정화
+            const float lightPullback = 50.0f; // 충분히 뒤로 빼서 안정화
             glm::mat4 V = glm::lookAtRH(center - L * lightPullback, center, up);
 
             // 라이트 공간으로 투영 후 AABB
