@@ -116,13 +116,13 @@ void SceneManager::update_scene()
         if (!glm::all(glm::isfinite(L)) || glm::length2(L) < 1e-10f)
             L = glm::vec3(0.0f, -1.0f, 0.0f);
 
-        const glm::vec3 worldUp(0,1,0), altUp(0,0,1);
+        const glm::vec3 worldUp(0, 1, 0), altUp(0, 0, 1);
         glm::vec3 upPick = (std::abs(glm::dot(worldUp, L)) > 0.99f) ? altUp : worldUp;
         glm::vec3 right = glm::normalize(glm::cross(upPick, L));
-        glm::vec3 up    = glm::normalize(glm::cross(L, right));
+        glm::vec3 up = glm::normalize(glm::cross(L, right));
 
-        const float csmFar = kShadowCSMFar; // configurable shadow distance
-        const float lambda = 0.5f; // split weighting
+        const float csmFar = kShadowCSMFar;
+        const float lambda = 0.5f;
         const int cascades = kShadowCascadeCount;
 
         float splits[4] = {0, 0, 0, 0};
@@ -138,84 +138,81 @@ void SceneManager::update_scene()
 
         mat4 invView = inverse(view);
 
-        auto buildCascade = [&](float nearD, float farD) -> mat4 {
-            // Frustum in view-space (RH, forward -Z)
-            float tanHalfFov = tanf(fov * 0.5f);
-            float yn = tanHalfFov * nearD;
-            float xn = yn * aspect;
-            float yf = tanHalfFov * farD;
-            float xf = yf * aspect;
+        float baseWorldTexel = 0.0f;
 
-            vec3 cornersV[8] = {
-                {-xn, -yn, -nearD}, {xn, -yn, -nearD}, {xn, yn, -nearD}, {-xn, yn, -nearD},
-                {-xf, -yf, -farD}, {xf, -yf, -farD}, {xf, yf, -farD}, {-xf, yf, -farD}
-            };
-            vec3 cornersW[8];
-            vec3 centerWS(0.0f);
+        auto buildCascade = [&](int idx, float nearD, float farD) -> mat4 {
+            float tanHalf = tanf(fov * 0.5f);
+            float yf = tanHalf * farD;
+            float xf = yf * aspect;
+            float rStable = 1.05f * sqrtf(xf * xf + yf * yf);
+
+            float texelWorld;
+            if (idx == 0)
+            {
+                baseWorldTexel = (2.0f * rStable) / kShadowMapResolution;
+                baseWorldTexel = powf(2.0f, ceilf(log2f(baseWorldTexel)));
+                texelWorld = baseWorldTexel;
+            }
+            else
+            {
+                texelWorld = baseWorldTexel * (1 << idx);
+                rStable = 0.5f * texelWorld * kShadowMapResolution;
+            }
+
+            vec3 cornersV[8]; {
+                float tanHalfFov = tanf(fov * 0.5f);
+                float yn = tanHalfFov * nearD, xn = yn * aspect;
+                float yf = tanHalfFov * farD, xf = yf * aspect;
+                cornersV[0] = {-xn, -yn, -nearD};
+                cornersV[1] = {xn, -yn, -nearD};
+                cornersV[2] = {xn, yn, -nearD};
+                cornersV[3] = {-xn, yn, -nearD};
+                cornersV[4] = {-xf, -yf, -farD};
+                cornersV[5] = {xf, -yf, -farD};
+                cornersV[6] = {xf, yf, -farD};
+                cornersV[7] = {-xf, yf, -farD};
+            }
+            mat4 invView = inverse(view);
+            vec3 cornersW[8], centerWS(0);
             for (int i = 0; i < 8; ++i)
             {
-                vec3 w = vec3(invView * vec4(cornersV[i], 1.0f));
-                cornersW[i] = w;
-                centerWS += w;
+                cornersW[i] = vec3(invView * vec4(cornersV[i], 1));
+                centerWS += cornersW[i];
             }
-            centerWS *= (1.0f / 8.0f);
+            centerWS *= 1.0f / 8.0f;
 
-            // Initial light view
-            const float lightDist = 100.0f;
+            float lightDist = rStable + 50.0f;
             vec3 lightPos = centerWS - L * lightDist;
             mat4 viewLight = lookAtRH(lightPos, centerWS, up);
 
-            // Compute symmetric bounds around center in light space
-            vec2 centerLS = vec2(viewLight * vec4(centerWS, 1.0f));
-            float minZ = 1e9f, maxZ = -1e9f;
-            float radius = 0.0f;
-            for (int i = 0; i < 8; ++i)
-            {
-                vec3 p = vec3(viewLight * vec4(cornersW[i], 1.0f));
-                minZ = std::min(minZ, p.z);
-                maxZ = std::max(maxZ, p.z);
-                radius = std::max(radius, glm::length(vec2(p.x, p.y) - centerLS));
-            }
-
-            // Pad extents
-            radius *= 1.05f;
-            float sliceLen = farD - nearD;
-            float zPad = std::max(50.0f, 0.2f * sliceLen);
-            // Two-sided along light direction: include casters between light and slice
-            float nearLS = 0.01f;
-            float farLS  = -minZ + zPad;
-
-            // Stabilize by snapping to shadow texel grid
-            float texelSize = (2.0f * radius) / kShadowMapResolution;
-            vec2 snapped = floor(centerLS / texelSize) * texelSize;
+            vec2 centerLS = vec2(viewLight * vec4(centerWS, 1));
+            vec2 snapped = floor(centerLS / texelWorld) * texelWorld;
             vec2 deltaLS = snapped - centerLS;
             vec3 shiftWS = right * deltaLS.x + up * deltaLS.y;
             vec3 centerSnapped = centerWS + shiftWS;
-            vec3 lightPosSnapped = centerSnapped - L * lightDist;
-            viewLight = lookAtRH(lightPosSnapped, centerSnapped, up);
 
-            // Recompute z-range with snapped view
-            centerLS = vec2(viewLight * vec4(centerSnapped, 1.0f));
-            minZ = 1e9f; maxZ = -1e9f; radius = 0.0f;
+            lightPos = centerSnapped - L * lightDist;
+            viewLight = lookAtRH(lightPos, centerSnapped, up);
+
+            float radius = ceil(rStable / texelWorld) * texelWorld;
+            vec2 cLS = vec2(viewLight * vec4(centerSnapped, 1));
+            float left = cLS.x - radius, rightE = cLS.x + radius;
+            float bottom = cLS.y - radius, top = cLS.y + radius;
+
+            float minZ = 1e9f, maxZ = -1e9f;
             for (int i = 0; i < 8; ++i)
             {
-                vec3 p = vec3(viewLight * vec4(cornersW[i], 1.0f));
+                vec3 p = vec3(viewLight * vec4(cornersW[i], 1));
                 minZ = std::min(minZ, p.z);
                 maxZ = std::max(maxZ, p.z);
-                radius = std::max(radius, glm::length(vec2(p.x, p.y) - centerLS));
             }
-            // Keep near plane close to the light to include forward casters
-            nearLS = 0.01f;
-            farLS  = -minZ + zPad;
+            float sliceLen = farD - nearD;
+            float zPad = std::max(10.0f, 0.2f * sliceLen);
+            float casterExtrude = 100.0f;
+            float nearLS = 0.01f;
+            float farLS = -minZ + zPad + casterExtrude;
 
-            float left   = centerLS.x - radius;
-            float rightE = centerLS.x + radius;
-            float bottom = centerLS.y - radius;
-            float top    = centerLS.y + radius;
-
-            mat4 projLight = orthoRH_ZO(-40.f, 40.f, -40.f, 40.f, nearLS, farLS);
-
-            // projLight[1][1] *= -1.0f;
+            mat4 projLight = orthoRH_ZO(left, rightE, bottom, top, nearLS, farLS);
             return projLight * viewLight;
         };
 
@@ -223,9 +220,8 @@ void SceneManager::update_scene()
         {
             float nearD = (i == 0) ? nearPlane : splits[i - 1];
             float farD = splits[i];
-            sceneData.lightViewProjCascades[i] = buildCascade(nearD, farD);
+            sceneData.lightViewProjCascades[i] = buildCascade(i, nearD, farD);
         }
-        // For legacy paths, keep first cascade in single matrix
         sceneData.lightViewProj = sceneData.lightViewProjCascades[0];
     }
 
