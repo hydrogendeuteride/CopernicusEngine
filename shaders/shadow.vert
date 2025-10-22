@@ -18,14 +18,16 @@ layout(buffer_reference, std430) readonly buffer VertexBuffer{
 layout(push_constant) uniform PushConsts {
     mat4 render_matrix;
     VertexBuffer vertexBuffer;
-    uint cascadeIndex;
+    uint cascadeIndex; // which cascade this pass renders
+    // pad to 16-byte boundary implicitly
 } PC;
 
 void main()
 {
     Vertex v = PC.vertexBuffer.vertices[gl_VertexIndex];
     vec4 worldPos = PC.render_matrix * vec4(v.position, 1.0);
-    uint ci = min(PC.cascadeIndex, uint(MAX_CASCADES-1));
+    // Use cascaded matrix; cascade 0 is the legacy near/simple map
+    uint ci = min(PC.cascadeIndex, uint(3));
     gl_Position = sceneData.lightViewProjCascades[ci] * worldPos;
 }
 

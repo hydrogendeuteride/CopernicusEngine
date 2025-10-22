@@ -8,7 +8,8 @@ layout(location=0) out vec4 outColor;
 layout(set=1, binding=0) uniform sampler2D posTex;
 layout(set=1, binding=1) uniform sampler2D normalTex;
 layout(set=1, binding=2) uniform sampler2D albedoTex;
-layout(set=2, binding=0) uniform sampler2D shadowTex[MAX_CASCADES];
+// Mixed near + CSM: shadowTex[0] is the near/simple map, 1..N-1 are cascades
+layout(set=2, binding=0) uniform sampler2D shadowTex[4];
 
 const float PI = 3.14159265359;
 
@@ -29,22 +30,32 @@ vec2(0.0281, -0.2468), vec2(-0.2104, 0.0573),
 vec2(0.1197, 0.0779), vec2(-0.0905, -0.1203)
 );
 
+// Clipmap selection: choose the smallest level whose light-space XY NDC contains the point.
+uint selectCascadeIndex(vec3 worldPos)
+{
+    for (uint i = 0u; i < 4u; ++i)
+    {
+        vec4 lclip = sceneData.lightViewProjCascades[i] * vec4(worldPos, 1.0);
+        vec3 ndc = lclip.xyz / max(lclip.w, 1e-6);
+        if (abs(ndc.x) <= 1.0 && abs(ndc.y) <= 1.0 && ndc.z >= 0.0 && ndc.z <= 1.0)
+        {
+            return i;
+        }
+    }
+    return 3u; // fallback to farthest level
+}
+
 float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
 {
-    // Choose cascade based on view-space depth
-    float viewDepth = - (sceneData.view * vec4(worldPos, 1.0)).z;// positive
-    int ci = 0;
-    if (viewDepth > sceneData.cascadeSplitsView.x) ci = 1;
-    if (viewDepth > sceneData.cascadeSplitsView.y) ci = 2;
-    if (viewDepth > sceneData.cascadeSplitsView.z) ci = 3;
-    ci = clamp(ci, 0, MAX_CASCADES-1);
+    uint ci = selectCascadeIndex(worldPos);
+    mat4 lightMat = sceneData.lightViewProjCascades[ci];
 
-    vec4 lclip = sceneData.lightViewProjCascades[ci] * vec4(worldPos, 1.0);
+    vec4 lclip = lightMat * vec4(worldPos, 1.0);
     vec3 ndc  = lclip.xyz / lclip.w;
     vec2 suv  = ndc.xy * 0.5 + 0.5;
 
     if (any(lessThan(suv, vec2(0.0))) || any(greaterThan(suv, vec2(1.0))))
-    return 1.0;
+        return 1.0;
 
     float current = clamp(ndc.z, 0.0, 1.0);
 
@@ -60,15 +71,16 @@ float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
     vec2  texelSize = 1.0 / vec2(dim);
 
     float baseRadius = 1.25;
-    float radius     = mix(baseRadius, baseRadius * 4.0, current);
+    // Slightly increase filter for farther cascades
+    float radius     = mix(baseRadius, baseRadius * 3.0, float(ci) / 3.0);
 
     float ang = hash12(suv * 4096.0) * 6.2831853;
     vec2  r   = vec2(cos(ang), sin(ang));
     mat2  rot = mat2(r.x, -r.y, r.y, r.x);
 
     const int TAP_COUNT = 16;
-    float occluded = 0.0;
-    float wsum     = 0.0;
+    float visible = 0.0;
+    float wsum    = 0.0;
 
     for (int i = 0; i < TAP_COUNT; ++i)
     {
@@ -79,19 +91,14 @@ float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
         float w    = 1.0 - smoothstep(0.0, 0.65, pr);
 
         float mapD = texture(shadowTex[ci], suv + off).r;
+        float vis  = step(mapD, current + bias);
 
-        // Forward-Z depth shadow map:
-        //  - Occluded when current + bias > mapD
-        //  - Unoccluded otherwise
-        // Use step(edge, x): returns 1 when x >= edge. Make occ=1 for occluded.
-        float occ  = step(mapD + bias, current);
-
-        occluded += occ * w;
-        wsum     += w;
+        visible += vis * w;
+        wsum    += w;
     }
 
-    float shadow = (wsum > 0.0) ? (occluded / wsum) : 0.0;
-    return 1.0 - shadow;
+    float visibility = (wsum > 0.0) ? (visible / wsum) : 1.0;
+    return visibility;
 }
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0)

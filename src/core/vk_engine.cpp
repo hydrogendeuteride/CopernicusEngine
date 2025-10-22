@@ -18,6 +18,8 @@
 #include "render/vk_pipelines.h"
 #include <iostream>
 #include <glm/gtx/transform.hpp>
+
+#include "config.h"
 #include "render/primitives.h"
 
 #include "vk_mem_alloc.h"
@@ -126,7 +128,7 @@ void VulkanEngine::init()
     auto imguiPass = std::make_unique<ImGuiPass>();
     _renderPassManager->setImGuiPass(std::move(imguiPass));
 
-    const std::string structurePath = _assetManager->modelPath("seoul_high.glb");
+    const std::string structurePath = _assetManager->modelPath("police_office.glb");
     const auto structureFile = _assetManager->loadGLTF(structurePath);
 
     assert(structureFile.has_value());
@@ -317,6 +319,7 @@ void VulkanEngine::draw()
         RGImageHandle hGBufferAlbedo = _renderGraph->import_gbuffer_albedo();
         RGImageHandle hSwapchain = _renderGraph->import_swapchain_image(swapchainImageIndex);
 
+        // Create a transient shadow depth target (fixed resolution for now)
         // Create transient depth targets for cascaded shadow maps
         const VkExtent2D shadowExtent{2048, 2048};
         std::array<RGImageHandle, kShadowCascadeCount> hShadowCascades{};

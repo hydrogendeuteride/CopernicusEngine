@@ -15,6 +15,7 @@ public:
     VkSampler defaultNearest() const { return _defaultSamplerNearest; }
     VkSampler shadowLinearClamp() const { return _shadowLinearClamp; }
 
+
 private:
     DeviceManager *_deviceManager = nullptr;
     VkSampler _defaultSamplerLinear = VK_NULL_HANDLE;

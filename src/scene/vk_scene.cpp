@@ -4,6 +4,7 @@
 
 #include "vk_swapchain.h"
 #include "core/engine_context.h"
+#include "core/config.h"
 #include "glm/gtx/transform.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -106,123 +107,64 @@ void SceneManager::update_scene()
     sceneData.proj = projection;
     sceneData.viewproj = projection * view;
 
-    // Build cascaded directional light view-projection matrices
+    // Clipmap shadow setup (directional). Each level i covers a square region
+    // around the camera in the light's XY plane with radius R_i = R0 * 2^i.
+    // The region center is snapped to the light-space texel grid for stability.
     {
-        using namespace glm;
-        const vec3 camPos = vec3(inverse(view)[3]);
-        // Use light-ray direction (from light to scene).
-        // Shaders compute per-fragment L as -sunlightDirection (vector to light).
-        vec3 L = normalize(vec3(sceneData.sunlightDirection));
-        if (!glm::all(glm::isfinite(L)) || glm::length2(L) < 1e-10f)
-            L = glm::vec3(0.0f, -1.0f, 0.0f);
+        const glm::mat4 invView = glm::inverse(view);
+        const glm::vec3 camPos = glm::vec3(invView[3]);
 
-        const glm::vec3 worldUp(0, 1, 0), altUp(0, 0, 1);
-        glm::vec3 upPick = (std::abs(glm::dot(worldUp, L)) > 0.99f) ? altUp : worldUp;
-        glm::vec3 right = glm::normalize(glm::cross(upPick, L));
-        glm::vec3 up = glm::normalize(glm::cross(L, right));
+        glm::vec3 L = glm::normalize(-glm::vec3(sceneData.sunlightDirection));
+        if (glm::length(L) < 1e-5f) L = glm::vec3(0.0f, -1.0f, 0.0f);
+        const glm::vec3 worldUp(0.0f, 1.0f, 0.0f);
+        glm::vec3 right = glm::cross(L, worldUp);
+        if (glm::length2(right) < 1e-6f) right = glm::vec3(1, 0, 0);
+        right = glm::normalize(right);
+        glm::vec3 up = glm::normalize(glm::cross(right, L));
 
-        const float csmFar = kShadowCSMFar;
-        const float lambda = 0.5f;
-        const int cascades = kShadowCascadeCount;
-
-        float splits[4] = {0, 0, 0, 0};
-        for (int i = 1; i <= cascades; ++i)
-        {
-            float p = (float) i / (float) cascades;
-            float logd = nearPlane * std::pow(csmFar / nearPlane, p);
-            float lind = nearPlane + (csmFar - nearPlane) * p;
-            float d = glm::mix(lind, logd, lambda);
-            if (i - 1 < 4) splits[i - 1] = d;
-        }
-        sceneData.cascadeSplitsView = vec4(splits[0], splits[1], splits[2], splits[3]);
-
-        mat4 invView = inverse(view);
-
-        float baseWorldTexel = 0.0f;
-
-        auto buildCascade = [&](int idx, float nearD, float farD) -> mat4 {
-            float tanHalf = tanf(fov * 0.5f);
-            float yf = tanHalf * farD;
-            float xf = yf * aspect;
-            float rStable = 1.05f * sqrtf(xf * xf + yf * yf);
-
-            float texelWorld;
-            if (idx == 0)
-            {
-                baseWorldTexel = (2.0f * rStable) / kShadowMapResolution;
-                baseWorldTexel = powf(2.0f, ceilf(log2f(baseWorldTexel)));
-                texelWorld = baseWorldTexel;
-            }
-            else
-            {
-                texelWorld = baseWorldTexel * (1 << idx);
-                rStable = 0.5f * texelWorld * kShadowMapResolution;
-            }
-
-            vec3 cornersV[8]; {
-                float tanHalfFov = tanf(fov * 0.5f);
-                float yn = tanHalfFov * nearD, xn = yn * aspect;
-                float yf = tanHalfFov * farD, xf = yf * aspect;
-                cornersV[0] = {-xn, -yn, -nearD};
-                cornersV[1] = {xn, -yn, -nearD};
-                cornersV[2] = {xn, yn, -nearD};
-                cornersV[3] = {-xn, yn, -nearD};
-                cornersV[4] = {-xf, -yf, -farD};
-                cornersV[5] = {xf, -yf, -farD};
-                cornersV[6] = {xf, yf, -farD};
-                cornersV[7] = {-xf, yf, -farD};
-            }
-            mat4 invView = inverse(view);
-            vec3 cornersW[8], centerWS(0);
-            for (int i = 0; i < 8; ++i)
-            {
-                cornersW[i] = vec3(invView * vec4(cornersV[i], 1));
-                centerWS += cornersW[i];
-            }
-            centerWS *= 1.0f / 8.0f;
-
-            float lightDist = rStable + 50.0f;
-            vec3 lightPos = centerWS - L * lightDist;
-            mat4 viewLight = lookAtRH(lightPos, centerWS, up);
-
-            vec2 centerLS = vec2(viewLight * vec4(centerWS, 1));
-            vec2 snapped = floor(centerLS / texelWorld) * texelWorld;
-            vec2 deltaLS = snapped - centerLS;
-            vec3 shiftWS = right * deltaLS.x + up * deltaLS.y;
-            vec3 centerSnapped = centerWS + shiftWS;
-
-            lightPos = centerSnapped - L * lightDist;
-            viewLight = lookAtRH(lightPos, centerSnapped, up);
-
-            float radius = ceil(rStable / texelWorld) * texelWorld;
-            vec2 cLS = vec2(viewLight * vec4(centerSnapped, 1));
-            float left = cLS.x - radius, rightE = cLS.x + radius;
-            float bottom = cLS.y - radius, top = cLS.y + radius;
-
-            float minZ = 1e9f, maxZ = -1e9f;
-            for (int i = 0; i < 8; ++i)
-            {
-                vec3 p = vec3(viewLight * vec4(cornersW[i], 1));
-                minZ = std::min(minZ, p.z);
-                maxZ = std::max(maxZ, p.z);
-            }
-            float sliceLen = farD - nearD;
-            float zPad = std::max(10.0f, 0.2f * sliceLen);
-            float casterExtrude = 100.0f;
-            float nearLS = 0.01f;
-            float farLS = -minZ + zPad + casterExtrude;
-
-            mat4 projLight = orthoRH_ZO(left, rightE, bottom, top, nearLS, farLS);
-            return projLight * viewLight;
+        auto level_radius = [](int level) {
+            return kShadowClipBaseRadius * powf(2.0f, float(level));
         };
 
-        for (int i = 0; i < cascades; ++i)
+        // Keep a copy of level radii in cascadeSplitsView for debug/visualization
+        sceneData.cascadeSplitsView = glm::vec4(
+            level_radius(0), level_radius(1), level_radius(2), level_radius(3));
+
+        for (int ci = 0; ci < kShadowCascadeCount; ++ci)
         {
-            float nearD = (i == 0) ? nearPlane : splits[i - 1];
-            float farD = splits[i];
-            sceneData.lightViewProjCascades[i] = buildCascade(i, nearD, farD);
+            const float radius = level_radius(ci);
+
+            // Compute camera coordinates in light's orthonormal basis (world -> light XY)
+            const float u = glm::dot(camPos, right);
+            const float v = glm::dot(camPos, up);
+
+            // Texel size in light-space at this level
+            const float texel = (2.0f * radius) / float(kShadowMapResolution);
+            const float uSnapped = floorf(u / texel) * texel;
+            const float vSnapped = floorf(v / texel) * texel;
+            const float du = uSnapped - u;
+            const float dv = vSnapped - v;
+
+            // World-space snapped center of this clip level
+            const glm::vec3 center = camPos + right * du + up * dv;
+
+            // Build light view matrix looking at the snapped center
+            const glm::vec3 eye = center - L * kShadowClipLightPullback;
+            const glm::mat4 V = glm::lookAtRH(eye, center, up);
+
+            // Conservative Z range along light direction
+            const float zNear = 0.1f;
+            const float zFar = kShadowClipLightPullback + kShadowClipZPadding;
+
+            const glm::mat4 P = glm::orthoRH_ZO(-radius, radius, -radius, radius, zNear, zFar);
+            const glm::mat4 lightVP = P * V;
+
+            sceneData.lightViewProjCascades[ci] = lightVP;
+            if (ci == 0)
+            {
+                sceneData.lightViewProj = lightVP;
+            }
         }
-        sceneData.lightViewProj = sceneData.lightViewProjCascades[0];
     }
 
     auto end = std::chrono::system_clock::now();

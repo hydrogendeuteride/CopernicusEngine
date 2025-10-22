@@ -19,8 +19,7 @@ public:
                         RGImageHandle drawHandle,
                         RGImageHandle gbufferPosition,
                         RGImageHandle gbufferNormal,
-                        RGImageHandle gbufferAlbedo,
-                        std::span<RGImageHandle> shadowCascades);
+                        RGImageHandle gbufferAlbedo, std::span<RGImageHandle> shadowCascades);
 
 private:
     EngineContext *_context = nullptr;
