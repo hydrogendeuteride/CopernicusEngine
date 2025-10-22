@@ -30,16 +30,19 @@ const vec2 POISSON_16[16] = vec2[16](
     vec2(0.1197, 0.0779), vec2(-0.0905, -0.1203)
 );
 
+// Clipmap selection: choose the smallest level whose light-space XY NDC contains the point.
 uint selectCascadeIndex(vec3 worldPos)
 {
-    // Compute view-space positive depth
-    vec4 vpos = sceneData.view * vec4(worldPos, 1.0);
-    float depthVS = -vpos.z;
-    // Near/simple map covers [0, sceneData.cascadeSplitsView.x)
-    if (depthVS < sceneData.cascadeSplitsView.x) return 0u;
-    if (depthVS < sceneData.cascadeSplitsView.y) return 1u;
-    if (depthVS < sceneData.cascadeSplitsView.z) return 2u;
-    return 3u; // last cascade extends to w
+    for (uint i = 0u; i < 4u; ++i)
+    {
+        vec4 lclip = sceneData.lightViewProjCascades[i] * vec4(worldPos, 1.0);
+        vec3 ndc = lclip.xyz / max(lclip.w, 1e-6);
+        if (abs(ndc.x) <= 1.0 && abs(ndc.y) <= 1.0 && ndc.z >= 0.0 && ndc.z <= 1.0)
+        {
+            return i;
+        }
+    }
+    return 3u; // fallback to farthest level
 }
 
 float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)

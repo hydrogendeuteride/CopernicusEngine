@@ -104,11 +104,9 @@ void SceneManager::update_scene()
     sceneData.proj = projection;
     sceneData.viewproj = projection * view;
 
-    // Mixed Near + CSM shadow setup
-    // - Cascade 0: legacy/simple shadow (near range around camera)
-    // - Cascades 1..N-1: cascaded shadow maps covering farther ranges up to kShadowCSMFar
-
-    // ---- Mixed Near + CSM shadow setup (fixed) ----
+    // Clipmap shadow setup (directional). Each level i covers a square region
+    // around the camera in the light's XY plane with radius R_i = R0 * 2^i.
+    // The region center is snapped to the light-space texel grid for stability.
     {
         const glm::mat4 invView = glm::inverse(view);
         const glm::vec3 camPos = glm::vec3(invView[3]);
@@ -119,96 +117,50 @@ void SceneManager::update_scene()
         glm::vec3 right = glm::cross(L, worldUp);
         if (glm::length2(right) < 1e-6f) right = glm::vec3(1, 0, 0);
         right = glm::normalize(right);
-        glm::vec3 up = glm::normalize(glm::cross(right, L)); {
-            const float orthoRange = 10.0f;
-            const float nearDist = 0.1f;
-            const float farDist = 200.0f;
-            const glm::vec3 lightPos = camPos - L * 50.0f;
-            const glm::mat4 viewLight = glm::lookAtRH(lightPos, camPos, up);
+        glm::vec3 up = glm::normalize(glm::cross(right, L));
 
-            const glm::mat4 projLight = glm::orthoRH_ZO(-orthoRange, orthoRange, -orthoRange, orthoRange,
-                                                        nearDist, farDist);
-
-            const glm::mat4 lightVP = projLight * viewLight;
-            sceneData.lightViewProj = lightVP;
-            sceneData.lightViewProjCascades[0] = lightVP;
-        }
-
-        const float farView = kShadowCSMFar;
-        const float nearSplit = 5.0f;
-        const float lambda = 1.0f;
-        float splits[3]{};
-        for (int i = 1; i <= 3; ++i)
-        {
-            float si = float(i) / 3.0f;
-            float logd = nearSplit * powf(farView / nearSplit, si);
-            float lind = glm::mix(nearSplit, farView, si);
-            splits[i - 1] = glm::mix(lind, logd, lambda);
-        }
-        sceneData.cascadeSplitsView = glm::vec4(nearSplit, splits[0], splits[1], farView);
-
-        auto frustum_corners_world = [&](float zn, float zf) {
-            const float tanHalfFov = tanf(fov * 0.5f);
-            const float yN = tanHalfFov * zn;
-            const float xN = yN * aspect;
-            const float yF = tanHalfFov * zf;
-            const float xF = yF * aspect;
-
-            glm::vec3 vs[8] = {
-                {-xN, -yN, -zn}, {+xN, -yN, -zn}, {+xN, +yN, -zn}, {-xN, +yN, -zn},
-                {-xF, -yF, -zf}, {+xF, -yF, -zf}, {+xF, +yF, -zf}, {-xF, +yF, -zf}
-            };
-            std::array<glm::vec3, 8> ws{};
-            for (int i = 0; i < 8; ++i)
-                ws[i] = glm::vec3(invView * glm::vec4(vs[i], 1.0f));
-            return ws;
+        auto level_radius = [](int level) {
+            return kShadowClipBaseRadius * powf(2.0f, float(level));
         };
 
-        auto build_light_matrix_for_slice = [&](float zNearVS, float zFarVS) {
-            auto ws = frustum_corners_world(zNearVS, zFarVS);
+        // Keep a copy of level radii in cascadeSplitsView for debug/visualization
+        sceneData.cascadeSplitsView = glm::vec4(
+            level_radius(0), level_radius(1), level_radius(2), level_radius(3));
 
-            glm::vec3 center(0.0f);
-            for (auto &p: ws) center += p;
-            center *= (1.0f / 8.0f);
-            const float lightPullback = 20.0f;
-            glm::mat4 V = glm::lookAtRH(center - L * lightPullback, center, up);
+        for (int ci = 0; ci < kShadowCascadeCount; ++ci)
+        {
+            const float radius = level_radius(ci);
 
-            glm::vec3 minLS(FLT_MAX), maxLS(-FLT_MAX);
-            for (auto &p: ws)
-            {
-                glm::vec3 q = glm::vec3(V * glm::vec4(p, 1.0f));
-                minLS = glm::min(minLS, q);
-                maxLS = glm::max(maxLS, q);
-            }
+            // Compute camera coordinates in light's orthonormal basis (world -> light XY)
+            const float u = glm::dot(camPos, right);
+            const float v = glm::dot(camPos, up);
 
-            glm::vec2 extXY = glm::vec2(maxLS.x - minLS.x, maxLS.y - minLS.y);
-            float radius = 0.5f * glm::max(extXY.x, extXY.y);
-            radius = radius * kShadowCascadeRadiusScale + kShadowCascadeRadiusMargin;
-
-            glm::vec2 centerXY = 0.5f * glm::vec2(maxLS.x + minLS.x, maxLS.y + minLS.y);
-
+            // Texel size in light-space at this level
             const float texel = (2.0f * radius) / float(kShadowMapResolution);
-            centerXY.x = floorf(centerXY.x / texel) * texel;
-            centerXY.y = floorf(centerXY.y / texel) * texel;
+            const float uSnapped = floorf(u / texel) * texel;
+            const float vSnapped = floorf(v / texel) * texel;
+            const float du = uSnapped - u;
+            const float dv = vSnapped - v;
 
-            glm::mat4 Vsnapped = glm::translate(glm::mat4(1.0f),
-                                                -glm::vec3(centerXY.x, centerXY.y, 0.0f)) * V;
+            // World-space snapped center of this clip level
+            const glm::vec3 center = camPos + right * du + up * dv;
 
-            const float zPad = 50.0f;
-            float zNear = glm::max(0.1f, -maxLS.z - zPad);
-            float zFar = -minLS.z + zPad;
+            // Build light view matrix looking at the snapped center
+            const glm::vec3 eye = center - L * kShadowClipLightPullback;
+            const glm::mat4 V = glm::lookAtRH(eye, center, up);
 
-            glm::mat4 P = glm::orthoRH_ZO(-radius, radius, -radius, radius, zNear, zFar);
+            // Conservative Z range along light direction
+            const float zNear = 0.1f;
+            const float zFar = kShadowClipLightPullback + kShadowClipZPadding;
 
-            return P * Vsnapped;
-        };
+            const glm::mat4 P = glm::orthoRH_ZO(-radius, radius, -radius, radius, zNear, zFar);
+            const glm::mat4 lightVP = P * V;
 
-        float prev = nearSplit;
-        for (int ci = 1; ci < kShadowCascadeCount; ++ci)
-        {
-            float end = (ci < kShadowCascadeCount - 1) ? splits[ci - 1] : farView;
-            sceneData.lightViewProjCascades[ci] = build_light_matrix_for_slice(prev, end);
-            prev = end;
+            sceneData.lightViewProjCascades[ci] = lightVP;
+            if (ci == 0)
+            {
+                sceneData.lightViewProj = lightVP;
+            }
         }
     }
 
