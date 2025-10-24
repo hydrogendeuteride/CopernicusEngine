@@ -8,7 +8,6 @@ layout(location=0) out vec4 outColor;
 layout(set=1, binding=0) uniform sampler2D posTex;
 layout(set=1, binding=1) uniform sampler2D normalTex;
 layout(set=1, binding=2) uniform sampler2D albedoTex;
-// Mixed near + CSM: shadowTex[0] is the near/simple map, 1..N-1 are cascades
 layout(set=2, binding=0) uniform sampler2D shadowTex[4];
 
 const float PI = 3.14159265359;
@@ -42,7 +41,7 @@ uint selectCascadeIndex(vec3 worldPos)
             return i;
         }
     }
-    return 3u; // fallback to farthest level
+    return 3u;
 }
 
 float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
@@ -71,7 +70,7 @@ float calcShadowVisibility(vec3 worldPos, vec3 N, vec3 L)
     vec2  texelSize = 1.0 / vec2(dim);
 
     float baseRadius = 1.25;
-    // Slightly increase filter for farther cascades
+
     float radius     = mix(baseRadius, baseRadius * 3.0, float(ci) / 3.0);
 
     float ang = hash12(suv * 4096.0) * 6.2831853;

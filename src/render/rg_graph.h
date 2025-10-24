@@ -70,6 +70,9 @@ struct Pass; // fwd
         uint32_t bufferWrites = 0;
         uint32_t colorAttachmentCount = 0;
         bool hasDepth = false;
+        // Last frame timings (ms); -1 when unavailable
+        float gpuMillis = -1.0f;
+        float cpuMillis = -1.0f;
     };
 
     struct RGDebugImageInfo
@@ -104,6 +107,9 @@ struct Pass; // fwd
     void debug_get_images(std::vector<RGDebugImageInfo>& out) const;
     void debug_get_buffers(std::vector<RGDebugBufferInfo>& out) const;
 
+    // Resolve GPU timestamps from the previous execute() call. Call after waiting on the render fence.
+    void resolve_timings();
+
 private:
 	struct ImportedImage
 	{
@@ -137,6 +143,12 @@ private:
     };
 
 	EngineContext* _context = nullptr;
-	RGResourceRegistry _resources;
-	std::vector<Pass> _passes;
+    RGResourceRegistry _resources;
+    std::vector<Pass> _passes;
+
+    // --- Timing data for last executed frame ---
+    VkQueryPool _timestampPool = VK_NULL_HANDLE; // holds 2 queries per pass (begin/end)
+    std::vector<float> _lastGpuMillis; // per pass
+    std::vector<float> _lastCpuMillis; // per pass (command recording time)
+    std::vector<bool> _wroteTimestamps; // per pass; true if queries were written in last execute
 };

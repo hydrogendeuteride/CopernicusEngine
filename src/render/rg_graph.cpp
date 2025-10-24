@@ -15,6 +15,7 @@
 #include <fmt/core.h>
 
 #include "vk_device.h"
+#include <chrono>
 
 void RenderGraph::init(EngineContext *ctx)
 {
@@ -603,6 +604,25 @@ bool RenderGraph::compile()
 
 void RenderGraph::execute(VkCommandBuffer cmd)
 {
+    // Create/reset timestamp query pool for this execution (2 queries per pass)
+    if (_timestampPool != VK_NULL_HANDLE)
+    {
+        vkDestroyQueryPool(_context->getDevice()->device(), _timestampPool, nullptr);
+        _timestampPool = VK_NULL_HANDLE;
+    }
+    const uint32_t queryCount = static_cast<uint32_t>(_passes.size() * 2);
+    if (queryCount > 0)
+    {
+        VkQueryPoolCreateInfo qpci{ .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO };
+        qpci.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        qpci.queryCount = queryCount;
+        VK_CHECK(vkCreateQueryPool(_context->getDevice()->device(), &qpci, nullptr, &_timestampPool));
+        vkCmdResetQueryPool(cmd, _timestampPool, 0, queryCount);
+    }
+
+    _lastCpuMillis.assign(_passes.size(), -1.0f);
+    _wroteTimestamps.assign(_passes.size(), false);
+
     for (size_t passIndex = 0; passIndex < _passes.size(); ++passIndex)
     {
         auto &p = _passes[passIndex];
@@ -625,6 +645,14 @@ void RenderGraph::execute(VkCommandBuffer cmd)
             dep.pBufferMemoryBarriers = p.preBufferBarriers.empty() ? nullptr : p.preBufferBarriers.data();
             vkCmdPipelineBarrier2(cmd, &dep);
         }
+
+        // Timestamp begin and CPU start after barriers
+        if (_timestampPool != VK_NULL_HANDLE)
+        {
+            const uint32_t qidx = static_cast<uint32_t>(passIndex * 2 + 0);
+            vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, _timestampPool, qidx);
+        }
+        auto cpuStart = std::chrono::high_resolution_clock::now();
 
         // Begin dynamic rendering if the pass declared attachments
         bool doRendering = (!p.colorAttachments.empty() || p.hasDepth);
@@ -716,6 +744,16 @@ void RenderGraph::execute(VkCommandBuffer cmd)
             vkCmdEndRendering(cmd);
         }
 
+        // CPU end and timestamp end
+        auto cpuEnd = std::chrono::high_resolution_clock::now();
+        _lastCpuMillis[passIndex] = std::chrono::duration<float, std::milli>(cpuEnd - cpuStart).count();
+        if (_timestampPool != VK_NULL_HANDLE)
+        {
+            const uint32_t qidx = static_cast<uint32_t>(passIndex * 2 + 1);
+            vkCmdWriteTimestamp2(cmd, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, _timestampPool, qidx);
+            _wroteTimestamps[passIndex] = true;
+        }
+
         if (_context && _context->getDevice())
         {
             vkdebug::cmd_end_label(_context->getDevice()->device(), cmd);
@@ -788,6 +826,9 @@ void RenderGraph::debug_get_passes(std::vector<RGDebugPassInfo> &out) const
         info.bufferWrites = static_cast<uint32_t>(p.bufferWrites.size());
         info.colorAttachmentCount = static_cast<uint32_t>(p.colorAttachments.size());
         info.hasDepth = p.hasDepth;
+        size_t idx = &p - _passes.data();
+        if (idx < _lastGpuMillis.size()) info.gpuMillis = _lastGpuMillis[idx];
+        if (idx < _lastCpuMillis.size()) info.cpuMillis = _lastCpuMillis[idx];
         out.push_back(std::move(info));
     }
 }
@@ -893,4 +934,45 @@ RGImageHandle RenderGraph::import_swapchain_image(uint32_t index)
 	d.extent = _context->getSwapchain()->swapchainExtent();
 	d.currentLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 	return import_image(d);
+}
+
+void RenderGraph::resolve_timings()
+{
+    if (_timestampPool == VK_NULL_HANDLE || _passes.empty())
+    {
+        _lastGpuMillis.assign(_passes.size(), -1.0f);
+        return;
+    }
+
+    const uint32_t queryCount = static_cast<uint32_t>(_passes.size() * 2);
+    std::vector<uint64_t> results(queryCount, 0);
+    VkResult r = vkGetQueryPoolResults(
+        _context->getDevice()->device(), _timestampPool,
+        0, queryCount,
+        sizeof(uint64_t) * results.size(), results.data(), sizeof(uint64_t),
+        VK_QUERY_RESULT_64_BIT);
+    // Convert ticks to ms
+    VkPhysicalDeviceProperties props{};
+    vkGetPhysicalDeviceProperties(_context->getDevice()->physicalDevice(), &props);
+    const double tickNs = props.limits.timestampPeriod;
+
+    _lastGpuMillis.assign(_passes.size(), -1.0f);
+    for (size_t i = 0; i < _passes.size(); ++i)
+    {
+        if (!_wroteTimestamps.empty() && !_wroteTimestamps[i]) { _lastGpuMillis[i] = -1.0f; continue; }
+        const uint64_t t0 = results[i*2 + 0];
+        const uint64_t t1 = results[i*2 + 1];
+        if (t1 > t0)
+        {
+            double ns = double(t1 - t0) * tickNs;
+            _lastGpuMillis[i] = static_cast<float>(ns / 1.0e6);
+        }
+        else
+        {
+            _lastGpuMillis[i] = -1.0f;
+        }
+    }
+
+    vkDestroyQueryPool(_context->getDevice()->device(), _timestampPool, nullptr);
+    _timestampPool = VK_NULL_HANDLE;
 }

@@ -128,7 +128,7 @@ void VulkanEngine::init()
     auto imguiPass = std::make_unique<ImGuiPass>();
     _renderPassManager->setImGuiPass(std::move(imguiPass));
 
-    const std::string structurePath = _assetManager->modelPath("police_office.glb");
+    const std::string structurePath = _assetManager->modelPath("resi.glb");
     const auto structureFile = _assetManager->loadGLTF(structurePath);
 
     assert(structureFile.has_value());
@@ -263,6 +263,11 @@ void VulkanEngine::draw()
     VK_CHECK(vkWaitForFences(_deviceManager->device(), 1, &get_current_frame()._renderFence, true, 1000000000));
 
     get_current_frame()._deletionQueue.flush();
+    // Resolve last frame's pass timings before we clear and rebuild the graph
+    if (_renderGraph)
+    {
+        _renderGraph->resolve_timings();
+    }
     get_current_frame()._frameDescriptors.clear_pools(_deviceManager->device());
     //< frame_clear
 
@@ -515,13 +520,15 @@ void VulkanEngine::run()
                 ImGui::SameLine();
                 ImGui::Text("%zu passes", passInfos.size());
 
-                if (ImGui::BeginTable("passes", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+                if (ImGui::BeginTable("passes", 8, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
                 {
                     ImGui::TableSetupColumn("Enable", ImGuiTableColumnFlags_WidthFixed, 70);
                     ImGui::TableSetupColumn("Name");
-                    ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 90);
-                    ImGui::TableSetupColumn("Imgs", ImGuiTableColumnFlags_WidthFixed, 60);
-                    ImGui::TableSetupColumn("Bufs", ImGuiTableColumnFlags_WidthFixed, 60);
+                    ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 80);
+                    ImGui::TableSetupColumn("GPU ms", ImGuiTableColumnFlags_WidthFixed, 70);
+                    ImGui::TableSetupColumn("CPU rec ms", ImGuiTableColumnFlags_WidthFixed, 90);
+                    ImGui::TableSetupColumn("Imgs", ImGuiTableColumnFlags_WidthFixed, 55);
+                    ImGui::TableSetupColumn("Bufs", ImGuiTableColumnFlags_WidthFixed, 55);
                     ImGui::TableSetupColumn("Attachments", ImGuiTableColumnFlags_WidthFixed, 100);
                     ImGui::TableHeadersRow();
 
@@ -551,10 +558,14 @@ void VulkanEngine::run()
                         ImGui::TableSetColumnIndex(2);
                         ImGui::TextUnformatted(typeName(pi.type));
                         ImGui::TableSetColumnIndex(3);
-                        ImGui::Text("%u/%u", pi.imageReads, pi.imageWrites);
+                        if (pi.gpuMillis >= 0.0f) ImGui::Text("%.2f", pi.gpuMillis); else ImGui::TextUnformatted("-");
                         ImGui::TableSetColumnIndex(4);
-                        ImGui::Text("%u/%u", pi.bufferReads, pi.bufferWrites);
+                        if (pi.cpuMillis >= 0.0f) ImGui::Text("%.2f", pi.cpuMillis); else ImGui::TextUnformatted("-");
                         ImGui::TableSetColumnIndex(5);
+                        ImGui::Text("%u/%u", pi.imageReads, pi.imageWrites);
+                        ImGui::TableSetColumnIndex(6);
+                        ImGui::Text("%u/%u", pi.bufferReads, pi.bufferWrites);
+                        ImGui::TableSetColumnIndex(7);
                         ImGui::Text("%u%s", pi.colorAttachmentCount, pi.hasDepth ? "+D" : "");
                     }
                     ImGui::EndTable();
