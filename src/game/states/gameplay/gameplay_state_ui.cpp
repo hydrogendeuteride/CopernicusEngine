@@ -228,7 +228,7 @@ namespace Game
 
     void GameplayState::on_draw_ui(GameStateContext &ctx)
     {
-        GameplayPredictionAdapter prediction(*this);
+        GameplayPredictionAdapter prediction(build_prediction_access());
         PredictionSubjectStateProvider prediction_subjects =
                 PredictionHostContextBuilder(prediction.context()).make_subject_state_provider();
 
@@ -1009,13 +1009,14 @@ namespace Game
             ImGui::End();
         }
 
-        ManeuverUiController::open_nodes_panel_from_orbit_pick_release(*this, ctx);
+        ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
+        ManeuverUiController::open_nodes_panel_from_orbit_pick_release(maneuver_ui);
 
         if (_show_maneuver_nodes_panel)
         {
-            ManeuverUiController::draw_nodes_panel(*this, ctx);
+            ManeuverUiController::draw_nodes_panel(maneuver_ui);
         }
-        ManeuverUiController::draw_imgui_gizmo(*this, ctx);
+        ManeuverUiController::draw_imgui_gizmo(maneuver_ui);
         if (_show_orbit_drag_debug)
         {
             draw_orbit_drag_debug_window(ctx);
@@ -1033,7 +1034,7 @@ namespace Game
             return;
         }
 
-        GameplayPredictionAdapter prediction(*this);
+        GameplayPredictionAdapter prediction(build_prediction_access());
 
         const ImGuiViewport *viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(

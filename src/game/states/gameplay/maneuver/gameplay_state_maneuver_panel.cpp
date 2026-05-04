@@ -103,14 +103,15 @@ namespace Game
         }
     } // namespace
 
-    void ManeuverUiController::draw_nodes_panel(GameplayState &state, GameStateContext &ctx)
+    void ManeuverUiController::draw_nodes_panel(Context &context)
     {
-        auto &_maneuver = state._maneuver;
-        auto &_prediction = state._prediction;
-        auto &_orbit = state._orbit;
-        auto &_show_maneuver_nodes_panel = state._show_maneuver_nodes_panel;
+        GameStateContext &ctx = context.ctx;
+        auto &_maneuver = context.maneuver;
+        auto &_prediction = context.prediction;
+        const auto &_orbit = context.maneuver_prediction.orbit;
+        auto &_show_maneuver_nodes_panel = context.show_nodes_panel;
         auto current_sim_time_s = [&]() {
-            return state.current_sim_time_s();
+            return context.current_sim_time_s();
         };
         auto clear_gizmo_interaction = [&]() {
             _maneuver.clear_gizmo_interaction();
@@ -119,30 +120,30 @@ namespace Game
             _maneuver.cancel_edit_preview();
         };
         auto apply_maneuver_command = [&](const ManeuverCommand &command) {
-            return state.apply_maneuver_command(command);
+            return context.apply_maneuver_command(command);
         };
         auto compute_maneuver_align_delta = [&](GameStateContext &align_ctx,
                                                  const OrbitPredictionCache &cache,
                                                  const std::vector<orbitsim::TrajectorySample> &traj_base) {
-            return ManeuverPredictionBridge::compute_align_delta(state, align_ctx, cache, traj_base);
+            return ManeuverPredictionBridge::compute_align_delta(context.maneuver_prediction, align_ctx, cache, traj_base);
         };
         auto update_maneuver_node_time_edit_preview = [&](const int node_id, const double previous_time_s) {
-            ManeuverPredictionBridge::update_node_time_edit_preview(state, node_id, previous_time_s);
+            ManeuverPredictionBridge::update_node_time_edit_preview(context.maneuver_prediction, node_id, previous_time_s);
         };
         auto finish_maneuver_node_time_edit_preview = [&](const bool changed) {
-            ManeuverPredictionBridge::finish_node_time_edit_preview(state, changed);
+            ManeuverPredictionBridge::finish_node_time_edit_preview(context.maneuver_prediction, changed);
         };
         auto update_maneuver_node_dv_edit_preview = [&](const int node_id) {
-            ManeuverPredictionBridge::update_node_dv_edit_preview(state, node_id);
+            ManeuverPredictionBridge::update_node_dv_edit_preview(context.maneuver_prediction, node_id);
         };
         auto finish_maneuver_node_dv_edit_preview = [&](const bool changed) {
-            ManeuverPredictionBridge::finish_node_dv_edit_preview(state, changed);
+            ManeuverPredictionBridge::finish_node_dv_edit_preview(context.maneuver_prediction, changed);
         };
         auto resolve_maneuver_node_primary_body_id = [&](const ManeuverNode &node, const double query_time_s) {
-            return ManeuverPredictionBridge::resolve_node_primary_body_id(state, node, query_time_s);
+            return ManeuverPredictionBridge::resolve_node_primary_body_id(context.maneuver_prediction, node, query_time_s);
         };
         auto remove_node_suffix = [&](const int node_id, const int hint_index) {
-            (void) state.apply_maneuver_command(ManeuverCommand::remove_node_suffix(node_id, hint_index));
+            (void) context.apply_maneuver_command(ManeuverCommand::remove_node_suffix(node_id, hint_index));
         };
 
         // Main editor window for the maneuver plan: creation, selection, timeline editing, and execution controls.
@@ -153,7 +154,7 @@ namespace Game
         }
 
         const double now_s = current_sim_time_s();
-        GameplayPredictionAdapter prediction(state);
+        GameplayPredictionAdapter prediction(context.prediction_access);
         const GameplayPredictionContext prediction_context = prediction.context();
         PredictionFrameContextBuilder prediction_frame(prediction_context);
         PredictionWindowContextBuilder prediction_window(prediction_context);
@@ -170,10 +171,10 @@ namespace Game
             return format_t_plus_label(to_t_plus_s(absolute_time_s));
         };
         const auto default_node_primary_body_id = [&]() -> orbitsim::BodyId {
-            if (_prediction->state().analysis_selection.spec.mode == PredictionAnalysisMode::FixedBodyBCI &&
-                _prediction->state().analysis_selection.spec.fixed_body_id != orbitsim::kInvalidBodyId)
+            if (_prediction.state().analysis_selection.spec.mode == PredictionAnalysisMode::FixedBodyBCI &&
+                _prediction.state().analysis_selection.spec.fixed_body_id != orbitsim::kInvalidBodyId)
             {
-                return _prediction->state().analysis_selection.spec.fixed_body_id;
+                return _prediction.state().analysis_selection.spec.fixed_body_id;
             }
 
             if (const OrbitPredictionCache *player_cache = prediction.effective_prediction_cache(player_track))
@@ -273,7 +274,7 @@ namespace Game
         {
             if (!_maneuver.settings().live_preview_active)
             {
-                _prediction->clear_maneuver_live_preview_state();
+                _prediction.clear_maneuver_live_preview_state();
                 cancel_edit_preview();
             }
             (void) apply_maneuver_command(ManeuverCommand::mark_plan_dirty());
@@ -574,7 +575,7 @@ namespace Game
             ManeuverGizmoViewContext overlay_view{};
             glm::vec2 overlay_screen{0.0f, 0.0f};
             double overlay_depth_m = 0.0;
-            if (!build_gizmo_view_context(state, ctx, overlay_view) ||
+            if (!build_gizmo_view_context(context, overlay_view) ||
                 !Gizmo::project_maneuver_gizmo_point(overlay_view, overlay_world, overlay_screen, overlay_depth_m))
             {
                 return;

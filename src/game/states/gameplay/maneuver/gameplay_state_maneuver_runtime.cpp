@@ -82,9 +82,11 @@ namespace Game
             return;
         }
 
+        GameplayPredictionContext prediction_context = build_prediction_context();
+        ManeuverPredictionBridge::Context maneuver_prediction = build_maneuver_prediction_context();
         PredictionSubjectStateProvider subjects =
-                PredictionHostContextBuilder(GameplayPredictionAdapter::build_context(*this)).make_subject_state_provider();
-        PredictionFrameContextBuilder prediction_frame(GameplayPredictionAdapter::build_context(*this));
+                PredictionHostContextBuilder(prediction_context).make_subject_state_provider();
+        PredictionFrameContextBuilder prediction_frame(prediction_context);
 
         const double now_s = current_sim_time_s();
         if (!std::isfinite(now_s) || now_s + 1e-4 < node->time_s)
@@ -103,7 +105,7 @@ namespace Game
         glm::dvec3 r_rel_m(0.0);
         glm::dvec3 v_rel_mps = ship_vel_world;
         const orbitsim::BodyId primary_body_id =
-                ManeuverPredictionBridge::resolve_node_primary_body_id(*this, *node, now_s);
+                ManeuverPredictionBridge::resolve_node_primary_body_id(maneuver_prediction, *node, now_s);
         if (_orbit.scenario_owner() && primary_body_id != orbitsim::kInvalidBodyId)
         {
             const orbitsim::MassiveBody *world_ref_sim = _orbit.scenario_owner()->world_reference_sim_body();

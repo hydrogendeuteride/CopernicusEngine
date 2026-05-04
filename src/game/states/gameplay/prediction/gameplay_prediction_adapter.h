@@ -1,6 +1,5 @@
 #pragma once
 
-#include "game/states/gameplay/gameplay_state.h"
 #include "game/states/gameplay/prediction/gameplay_prediction_context.h"
 #include "game/states/gameplay/prediction/prediction_system.h"
 #include "game/states/gameplay/prediction/prediction_frame_controller.h"
@@ -8,10 +7,28 @@
 #include "game/states/gameplay/prediction/runtime/prediction_runtime_context.h"
 #include "orbitsim/spacecraft_lookup.hpp"
 
+#include <functional>
 #include <limits>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace Game
 {
+    class ManeuverSystem;
+    struct CelestialBodyInfo;
+    struct GameStateContext;
+    struct OrbiterInfo;
+
+    struct GameplayPredictionAccess
+    {
+        std::function<GameplayPredictionContext()> build_context;
+        PredictionSystem &prediction;
+        ManeuverSystem &maneuver;
+        std::function<double()> current_sim_time_s;
+        std::function<void()> mark_prediction_dirty;
+    };
+
     namespace PredictionDrawDetail
     {
         struct PredictionGlobalDrawContext;
@@ -21,12 +38,11 @@ namespace Game
     class GameplayPredictionAdapter
     {
     public:
-        explicit GameplayPredictionAdapter(GameplayState &state)
-            : _state(state)
+        explicit GameplayPredictionAdapter(GameplayPredictionAccess access)
+            : _access(std::move(access))
         {
         }
 
-        [[nodiscard]] static GameplayPredictionContext build_context(const GameplayState &state);
         [[nodiscard]] GameplayPredictionContext context() const;
 
         void poll_completed_prediction_results();
@@ -206,13 +222,8 @@ namespace Game
                                                              double query_time_s,
                                                              orbitsim::BodyId preferred_body_id = orbitsim::kInvalidBodyId) const;
         WorldVec3 prediction_world_reference_body_world() const;
-        double current_sim_time_s() const { return _state.current_sim_time_s(); }
-        OrbiterInfo *find_player_orbiter() { return _state._orbit.find_player_orbiter(); }
-        const OrbiterInfo *find_player_orbiter() const { return _state._orbit.find_player_orbiter(); }
-        OrbiterInfo *find_orbiter(EntityId entity) { return _state._orbit.find_orbiter(entity); }
-        const OrbiterInfo *find_orbiter(EntityId entity) const { return _state._orbit.find_orbiter(entity); }
-        EntityId player_entity() const { return _state._orbit.player_entity(); }
+        double current_sim_time_s() const { return _access.current_sim_time_s(); }
 
-        GameplayState &_state;
+        GameplayPredictionAccess _access;
     };
 } // namespace Game

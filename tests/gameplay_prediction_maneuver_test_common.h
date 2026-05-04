@@ -7,6 +7,7 @@
 #endif
 #include "game/states/gameplay/gameplay_state.h"
 #include "game/orbit/orbit_prediction_tuning.h"
+#include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
 #include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
 #include "game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_internal.h"
 #include "game/states/gameplay/prediction/runtime/prediction_request_factory.h"
@@ -26,6 +27,16 @@ namespace GameplayTestHooks
 
 namespace
 {
+    Game::GameplayPredictionAdapter make_prediction_adapter(Game::GameplayState &state)
+    {
+        return Game::GameplayPredictionAdapter(state.build_prediction_access());
+    }
+
+    Game::ManeuverPredictionBridge::Context make_maneuver_prediction_context(Game::GameplayState &state)
+    {
+        return state.build_maneuver_prediction_context();
+    }
+
     std::unique_ptr<Game::OrbitalScenario> make_reference_orbitsim(const double time_s,
                                                                    const double reference_mass_kg = 5.972e24)
     {
@@ -92,7 +103,7 @@ namespace
                                           bool *out_preview_request_active = nullptr)
     {
         const Game::PredictionOrbiterRequestBuildResult result =
-                Game::PredictionRequestFactory::build_orbiter_request(Game::GameplayPredictionAdapter(state).build_prediction_runtime_context(),
+                Game::PredictionRequestFactory::build_orbiter_request(make_prediction_adapter(state).build_prediction_runtime_context(),
                                                                       track,
                                                                       subject_pos_world,
                                                                       subject_vel_world,
@@ -116,7 +127,7 @@ namespace
                                                  orbitsim::State &out_state)
     {
         return Game::PredictionRequestFactory::resolve_preview_anchor_state(
-                Game::GameplayPredictionAdapter(state).build_prediction_runtime_context(),
+                make_prediction_adapter(state).build_prediction_runtime_context(),
                 track,
                 out_state);
     }

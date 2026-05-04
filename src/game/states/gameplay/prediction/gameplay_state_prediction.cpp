@@ -8,54 +8,72 @@
 
 namespace Game
 {
-    GameplayPredictionContext GameplayPredictionAdapter::build_context(const GameplayState &state)
+    GameplayPredictionContext GameplayState::build_prediction_context()
     {
         return GameplayPredictionContext{
-            .orbit = state._orbit,
-            .world = state._world,
-            .physics = state._physics.get(),
-            .physics_context = state._physics_context.get(),
-            .scenario_config = state._scenario_config,
-            .orbital_physics = state._orbital_physics,
-            .time_warp = state._time_warp,
-            .maneuver = state._maneuver,
-            .prediction = state._prediction.get(),
-            .fixed_time_s = state._fixed_time_s,
-            .current_sim_time_s = state.current_sim_time_s(),
-            .debug_draw_enabled = state._debug_draw_enabled,
+            .orbit = _orbit,
+            .world = _world,
+            .physics = _physics.get(),
+            .physics_context = _physics_context.get(),
+            .scenario_config = _scenario_config,
+            .orbital_physics = _orbital_physics,
+            .time_warp = _time_warp,
+            .maneuver = _maneuver,
+            .prediction = _prediction.get(),
+            .fixed_time_s = _fixed_time_s,
+            .current_sim_time_s = current_sim_time_s(),
+            .debug_draw_enabled = _debug_draw_enabled,
             .resolve_maneuver_node_primary_body_id =
-                    [&state](const ManeuverNode &node, const double query_time_s) {
+                    [this](const ManeuverNode &node, const double query_time_s) {
+                        ManeuverPredictionBridge::Context context = build_maneuver_prediction_context();
                         return ManeuverPredictionBridge::resolve_node_primary_body_id(
-                                state,
+                                context,
                                 node,
                                 query_time_s);
                     },
         };
     }
 
+    GameplayPredictionAccess GameplayState::build_prediction_access()
+    {
+        return GameplayPredictionAccess{
+            .build_context = [this]() {
+                return build_prediction_context();
+            },
+            .prediction = *_prediction,
+            .maneuver = _maneuver,
+            .current_sim_time_s = [this]() {
+                return current_sim_time_s();
+            },
+            .mark_prediction_dirty = [this]() {
+                mark_prediction_dirty();
+            },
+        };
+    }
+
     GameplayPredictionContext GameplayPredictionAdapter::context() const
     {
-        return build_context(_state);
+        return _access.build_context();
     }
 
     GameplayPredictionState &GameplayPredictionAdapter::prediction_draw_state()
     {
-        return _state._prediction->state();
+        return _access.prediction.state();
     }
 
     const GameplayPredictionState &GameplayPredictionAdapter::prediction_draw_state() const
     {
-        return _state._prediction->state();
+        return _access.prediction.state();
     }
 
     OrbitPlotBudgetSettings &GameplayPredictionAdapter::prediction_draw_budget()
     {
-        return _state._prediction->budget();
+        return _access.prediction.budget();
     }
 
     const OrbitPlotBudgetSettings &GameplayPredictionAdapter::prediction_draw_budget() const
     {
-        return _state._prediction->budget();
+        return _access.prediction.budget();
     }
 
     bool GameplayPredictionAdapter::prediction_subject_world_state(const PredictionSubjectKey key,
@@ -112,12 +130,12 @@ namespace Game
 
     void GameplayPredictionAdapter::rebuild_prediction_subjects()
     {
-        _state._prediction->sync_subjects(PredictionHostContextBuilder(context()).build());
+        _access.prediction.sync_subjects(PredictionHostContextBuilder(context()).build());
     }
 
     std::vector<PredictionSubjectKey> GameplayPredictionAdapter::collect_visible_prediction_subjects() const
     {
-        return _state._prediction->collect_visible_subjects();
+        return _access.prediction.collect_visible_subjects();
     }
 
 #if defined(VULKAN_ENGINE_GAMEPLAY_TEST_ACCESS)
@@ -139,52 +157,52 @@ namespace Game
 
     PredictionTrackState *GameplayPredictionAdapter::find_prediction_track(PredictionSubjectKey key)
     {
-        return _state._prediction->find_track(key);
+        return _access.prediction.find_track(key);
     }
 
     const PredictionTrackState *GameplayPredictionAdapter::find_prediction_track(PredictionSubjectKey key) const
     {
-        return _state._prediction->find_track(key);
+        return _access.prediction.find_track(key);
     }
 
     PredictionTrackState *GameplayPredictionAdapter::active_prediction_track()
     {
-        return _state._prediction->active_track();
+        return _access.prediction.active_track();
     }
 
     const PredictionTrackState *GameplayPredictionAdapter::active_prediction_track() const
     {
-        return _state._prediction->active_track();
+        return _access.prediction.active_track();
     }
 
     PredictionTrackState *GameplayPredictionAdapter::player_prediction_track()
     {
-        return _state._prediction->player_track(player_prediction_subject_key());
+        return _access.prediction.player_track(player_prediction_subject_key());
     }
 
     const PredictionTrackState *GameplayPredictionAdapter::player_prediction_track() const
     {
-        return _state._prediction->player_track(player_prediction_subject_key());
+        return _access.prediction.player_track(player_prediction_subject_key());
     }
 
     OrbitPredictionCache *GameplayPredictionAdapter::effective_prediction_cache(PredictionTrackState *track)
     {
-        return _state._prediction->effective_cache(track);
+        return _access.prediction.effective_cache(track);
     }
 
     const OrbitPredictionCache *GameplayPredictionAdapter::effective_prediction_cache(const PredictionTrackState *track) const
     {
-        return _state._prediction->effective_cache(track);
+        return _access.prediction.effective_cache(track);
     }
 
     OrbitPredictionCache *GameplayPredictionAdapter::player_prediction_cache()
     {
-        return _state._prediction->player_cache(player_prediction_subject_key());
+        return _access.prediction.player_cache(player_prediction_subject_key());
     }
 
     const OrbitPredictionCache *GameplayPredictionAdapter::player_prediction_cache() const
     {
-        return _state._prediction->player_cache(player_prediction_subject_key());
+        return _access.prediction.player_cache(player_prediction_subject_key());
     }
 
     bool GameplayPredictionAdapter::prediction_subject_is_player(PredictionSubjectKey key) const

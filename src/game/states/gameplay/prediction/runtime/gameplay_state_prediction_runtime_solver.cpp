@@ -8,7 +8,7 @@ namespace Game
 {
     void GameplayPredictionAdapter::poll_completed_prediction_results()
     {
-        if (_state._prediction->poll_completed_results(PredictionHostContextBuilder(context()).build()))
+        if (_access.prediction.poll_completed_results(PredictionHostContextBuilder(context()).build()))
         {
             sync_prediction_dirty_flag();
         }
@@ -16,7 +16,7 @@ namespace Game
 
     void GameplayPredictionAdapter::apply_completed_prediction_result(OrbitPredictionService::Result result)
     {
-        (void) _state._prediction->apply_completed_solver_result(
+        (void) _access.prediction.apply_completed_solver_result(
                 PredictionHostContextBuilder(context()).build(),
                 std::move(result));
     }

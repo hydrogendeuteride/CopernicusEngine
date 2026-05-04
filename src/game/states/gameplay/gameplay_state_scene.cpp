@@ -425,7 +425,7 @@ namespace Game
             _orbit.orbiters().push_back(std::move(info));
         }
 
-        GameplayPredictionAdapter(*this).rebuild_prediction_subjects();
+        GameplayPredictionAdapter(build_prediction_access()).rebuild_prediction_subjects();
 
         // Configure explicit rebase anchor and camera target.
         {

@@ -1,8 +1,11 @@
 #include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
 
-#include "game/states/gameplay/gameplay_state.h"
+#include "game/game_world.h"
+#include "game/state/game_state.h"
 #include "game/states/gameplay/maneuver/gameplay_state_maneuver_util.h"
 #include "game/states/gameplay/maneuver/maneuver_commands.h"
+#include "game/states/gameplay/orbital_physics_system.h"
+#include "game/states/gameplay/orbital_runtime_system.h"
 #include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
 #include "game/states/gameplay/prediction/prediction_frame_context_builder.h"
 #include "game/states/gameplay/prediction/prediction_host_context_builder.h"
@@ -14,101 +17,101 @@
 
 namespace Game
 {
-    void ManeuverPredictionBridge::begin_node_dv_edit_preview(GameplayState &state, const int node_id)
+    void ManeuverPredictionBridge::begin_node_dv_edit_preview(Context &context, const int node_id)
     {
-        if (!state._maneuver.begin_dv_edit_preview(node_id))
+        if (!context.maneuver.begin_dv_edit_preview(node_id))
         {
             return;
         }
 
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = context.prediction.active_track())
         {
-            PredictionWindowContextBuilder(GameplayPredictionAdapter::build_context(state))
-                    .refresh_preview_anchor(*track, state.current_sim_time_s(), true);
+            PredictionWindowContextBuilder(context.prediction_access.build_context())
+                    .refresh_preview_anchor(*track, context.current_sim_time_s(), true);
         }
     }
 
-    void ManeuverPredictionBridge::update_node_dv_edit_preview(GameplayState &state, const int node_id)
+    void ManeuverPredictionBridge::update_node_dv_edit_preview(Context &context, const int node_id)
     {
-        begin_node_dv_edit_preview(state, node_id);
-        if (!state._maneuver.mark_edit_preview_changed(ManeuverNodeEditPreview::State::EditingDv, node_id))
+        begin_node_dv_edit_preview(context, node_id);
+        if (!context.maneuver.mark_edit_preview_changed(ManeuverNodeEditPreview::State::EditingDv, node_id))
         {
             return;
         }
 
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = context.prediction.active_track())
         {
-            state._prediction->mark_maneuver_preview_dirty(*track);
-            state._prediction->sync_visible_dirty_flag(state._prediction->collect_visible_subjects());
+            context.prediction.mark_maneuver_preview_dirty(*track);
+            context.prediction.sync_visible_dirty_flag(context.prediction.collect_visible_subjects());
         }
     }
 
-    void ManeuverPredictionBridge::finish_node_dv_edit_preview(GameplayState &state, const bool changed)
+    void ManeuverPredictionBridge::finish_node_dv_edit_preview(Context &context, const bool changed)
     {
         const bool preview_changed =
-                state._maneuver.finish_edit_preview(ManeuverNodeEditPreview::State::EditingDv, changed);
+                context.maneuver.finish_edit_preview(ManeuverNodeEditPreview::State::EditingDv, changed);
         if (!preview_changed)
         {
             return;
         }
 
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = context.prediction.active_track())
         {
-            state._prediction->await_maneuver_preview_full_refine(*track, state.current_sim_time_s());
+            context.prediction.await_maneuver_preview_full_refine(*track, context.current_sim_time_s());
         }
-        (void) state.apply_maneuver_command(ManeuverCommand::mark_plan_dirty());
+        (void) context.apply_maneuver_command(ManeuverCommand::mark_plan_dirty());
     }
 
-    void ManeuverPredictionBridge::begin_node_time_edit_preview(GameplayState &state,
+    void ManeuverPredictionBridge::begin_node_time_edit_preview(Context &context,
                                                                 const int node_id,
                                                                 const double previous_time_s)
     {
-        if (!state._maneuver.begin_time_edit_preview(node_id, previous_time_s))
+        if (!context.maneuver.begin_time_edit_preview(node_id, previous_time_s))
         {
             return;
         }
 
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = context.prediction.active_track())
         {
-            PredictionWindowContextBuilder(GameplayPredictionAdapter::build_context(state))
-                    .refresh_preview_anchor(*track, state.current_sim_time_s(), true);
+            PredictionWindowContextBuilder(context.prediction_access.build_context())
+                    .refresh_preview_anchor(*track, context.current_sim_time_s(), true);
         }
     }
 
-    void ManeuverPredictionBridge::update_node_time_edit_preview(GameplayState &state,
+    void ManeuverPredictionBridge::update_node_time_edit_preview(Context &context,
                                                                  const int node_id,
                                                                  const double previous_time_s)
     {
-        begin_node_time_edit_preview(state, node_id, previous_time_s);
-        if (!state._maneuver.mark_edit_preview_changed(ManeuverNodeEditPreview::State::EditingTime, node_id))
+        begin_node_time_edit_preview(context, node_id, previous_time_s);
+        if (!context.maneuver.mark_edit_preview_changed(ManeuverNodeEditPreview::State::EditingTime, node_id))
         {
             return;
         }
 
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = context.prediction.active_track())
         {
-            state._prediction->mark_maneuver_preview_dirty(*track);
-            state._prediction->sync_visible_dirty_flag(state._prediction->collect_visible_subjects());
+            context.prediction.mark_maneuver_preview_dirty(*track);
+            context.prediction.sync_visible_dirty_flag(context.prediction.collect_visible_subjects());
         }
     }
 
-    void ManeuverPredictionBridge::finish_node_time_edit_preview(GameplayState &state, const bool changed)
+    void ManeuverPredictionBridge::finish_node_time_edit_preview(Context &context, const bool changed)
     {
         const bool preview_changed =
-                state._maneuver.finish_edit_preview(ManeuverNodeEditPreview::State::EditingTime, changed);
+                context.maneuver.finish_edit_preview(ManeuverNodeEditPreview::State::EditingTime, changed);
         if (!preview_changed)
         {
             return;
         }
 
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = context.prediction.active_track())
         {
-            state._prediction->await_maneuver_preview_full_refine(*track, state.current_sim_time_s());
+            context.prediction.await_maneuver_preview_full_refine(*track, context.current_sim_time_s());
         }
-        (void) state.apply_maneuver_command(ManeuverCommand::mark_plan_dirty());
+        (void) context.apply_maneuver_command(ManeuverCommand::mark_plan_dirty());
     }
 
-    orbitsim::BodyId ManeuverPredictionBridge::resolve_node_primary_body_id(const GameplayState &state,
+    orbitsim::BodyId ManeuverPredictionBridge::resolve_node_primary_body_id(const Context &context,
                                                                             const ManeuverNode &node,
                                                                             const double query_time_s)
     {
@@ -118,14 +121,14 @@ namespace Game
         }
 
         const PredictionSubjectKey player_subject =
-                PredictionHostContextBuilder(GameplayPredictionAdapter::build_context(state))
+                PredictionHostContextBuilder(context.prediction_access.build_context())
                         .make_subject_state_provider()
                         .player_subject_key();
         const PredictionTrackState *player_track =
-                state._prediction ? state._prediction->player_track(player_subject) : nullptr;
+                context.prediction.player_track(player_subject);
         const OrbitPredictionCache *player_cache =
-                state._prediction ? state._prediction->effective_cache(player_track) : nullptr;
-        PredictionFrameContextBuilder prediction_frame(GameplayPredictionAdapter::build_context(state));
+                context.prediction.effective_cache(player_track);
+        PredictionFrameContextBuilder prediction_frame(context.prediction_access.build_context());
         if (player_cache)
         {
             const OrbitPredictionCache &cache = *player_cache;
@@ -170,15 +173,15 @@ namespace Game
             return node.primary_body_id;
         }
 
-        if (state._orbit.scenario_owner() && state._orbit.scenario_owner()->world_reference_body())
+        if (context.orbit.scenario_owner() && context.orbit.scenario_owner()->world_reference_body())
         {
-            return state._orbit.scenario_owner()->world_reference_body()->sim_id;
+            return context.orbit.scenario_owner()->world_reference_body()->sim_id;
         }
 
         return orbitsim::kInvalidBodyId;
     }
 
-    WorldVec3 ManeuverPredictionBridge::compute_align_delta(GameplayState &state,
+    WorldVec3 ManeuverPredictionBridge::compute_align_delta(const Context &context,
                                                             GameStateContext &ctx,
                                                             const OrbitPredictionCache &cache,
                                                             const std::vector<orbitsim::TrajectorySample> &traj_base)
@@ -190,10 +193,10 @@ namespace Game
 
         const float alpha_f = std::clamp(ctx.interpolation_alpha(), 0.0f, 1.0f);
         const double interp_dt_s =
-                (state._orbital_physics.last_sim_step_dt_s() > 0.0)
-                    ? state._orbital_physics.last_sim_step_dt_s()
+                (context.orbital_physics.last_sim_step_dt_s() > 0.0)
+                    ? context.orbital_physics.last_sim_step_dt_s()
                     : static_cast<double>(ctx.fixed_delta_time());
-        double align_now_s = state.current_sim_time_s();
+        double align_now_s = context.current_sim_time_s();
         if (std::isfinite(interp_dt_s) && interp_dt_s > 0.0)
         {
             align_now_s -= (1.0 - static_cast<double>(alpha_f)) * interp_dt_s;
@@ -208,7 +211,7 @@ namespace Game
             return WorldVec3(0.0, 0.0, 0.0);
         }
 
-        GameplayPredictionAdapter prediction(state);
+        GameplayPredictionAdapter prediction(context.prediction_access);
         WorldVec3 predicted_now = (align_hi > 0)
                                       ? prediction.prediction_sample_hermite_world(cache, traj_base[align_hi - 1],
                                                                                    traj_base[align_hi], align_now_s, align_now_s)
@@ -217,7 +220,7 @@ namespace Game
         WorldVec3 ship_pos_world{0.0, 0.0, 0.0};
         glm::dvec3 ship_vel_world(0.0);
         glm::vec3 ship_vel_local_f(0.0f);
-        if (!PredictionHostContextBuilder(GameplayPredictionAdapter::build_context(state))
+        if (!PredictionHostContextBuilder(context.prediction_access.build_context())
                      .make_subject_state_provider()
                      .get_player_world_state(
                     ship_pos_world,
@@ -227,8 +230,8 @@ namespace Game
             return WorldVec3(0.0, 0.0, 0.0);
         }
 
-        const EntityId player_eid = state._orbit.player_entity();
-        if (const Entity *player = state._world.entities().find(player_eid))
+        const EntityId player_eid = context.orbit.player_entity();
+        if (const Entity *player = context.world.entities().find(player_eid))
         {
             ship_pos_world = player->get_render_physics_center_of_mass_world(alpha_f);
         }
