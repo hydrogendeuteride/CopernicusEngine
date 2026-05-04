@@ -74,7 +74,7 @@ namespace Game
         track.latest_requested_derived_display_frame_key = request.display_frame_key;
         track.latest_requested_derived_display_frame_revision = request.display_frame_revision;
         track.latest_requested_derived_analysis_body_id = request.analysis_body_id;
-        track.latest_requested_derived_publish_stage = request.solver_result.publish_stage;
+        track.latest_requested_derived_publish_stage = request.solver_result.envelope.publish_stage;
         track.pending_derived_has_maneuver_plan = request.maneuver_plan_signature_valid;
         track.pending_derived_plan_signature =
                 request.maneuver_plan_signature_valid ? request.maneuver_plan_signature : 0u;

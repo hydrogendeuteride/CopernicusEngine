@@ -45,7 +45,7 @@ namespace Game
                 ramp.vel_far_mps = std::min(ramp.vel_far_mps, 2.5);
             }
 
-            if (request.lagrange_sensitive)
+            if (request.options.lagrange_sensitive)
             {
                 ramp.pos_near_m *= 0.5;
                 ramp.pos_far_m *= 0.25;
@@ -74,7 +74,7 @@ namespace Game
                 ramp.vel_far_mps = std::min(ramp.vel_far_mps, 0.5);
             }
 
-            if (request.lagrange_sensitive)
+            if (request.options.lagrange_sensitive)
             {
                 ramp.pos_near_m *= 0.5;
                 ramp.pos_far_m *= 0.5;
@@ -199,7 +199,7 @@ namespace Game
 
         const std::size_t soft_cap = OrbitPredictionTuning::kAdaptiveEphemerisSoftMaxSegments;
         const std::size_t hard_cap = std::max<std::size_t>(
-                request.lagrange_sensitive ? OrbitPredictionTuning::kLagrangeEphemerisMaxSamples : soft_cap,
+                request.options.lagrange_sensitive ? OrbitPredictionTuning::kLagrangeEphemerisMaxSamples : soft_cap,
                 soft_cap);
 
         out.duration_s = sampling_spec.horizon_s;
@@ -213,7 +213,7 @@ namespace Game
             max_dt_s = std::min(max_dt_s,
                                 OrbitPredictionTuning::kAdaptiveEphemerisMaxDtControlledS);
         }
-        if (request.lagrange_sensitive)
+        if (request.options.lagrange_sensitive)
         {
             max_dt_s = std::min(max_dt_s, OrbitPredictionTuning::kLagrangeEphemerisMaxDtS);
         }

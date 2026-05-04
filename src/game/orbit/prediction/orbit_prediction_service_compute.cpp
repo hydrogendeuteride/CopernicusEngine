@@ -17,13 +17,13 @@ namespace Game
                 const Request &request)
         {
             Result out{};
-            out.generation_id = generation_id;
-            out.track_id = request.track_id;
-            out.maneuver_plan_revision = request.maneuver_plan_revision;
-            out.maneuver_plan_signature_valid = request.maneuver_plan_signature_valid;
-            out.maneuver_plan_signature = request.maneuver_plan_signature;
-            out.build_time_s = request.sim_time_s;
-            out.solve_quality = request.solve_quality;
+            out.envelope.generation_id = generation_id;
+            out.envelope.track_id = request.envelope.track_id;
+            out.envelope.maneuver_plan_revision = request.envelope.maneuver_plan_revision;
+            out.envelope.maneuver_plan_signature_valid = request.envelope.maneuver_plan_signature_valid;
+            out.envelope.maneuver_plan_signature = request.envelope.maneuver_plan_signature;
+            out.timing.build_time_s = request.world.sim_time_s;
+            out.envelope.solve_quality = request.options.solve_quality;
             return out;
         }
 
@@ -34,21 +34,21 @@ namespace Game
 
         void ensure_single_publish_chunk_metadata(Result &result)
         {
-            if (!result.published_chunks.empty())
+            if (!result.publish.published_chunks.empty())
             {
                 return;
             }
 
-            const bool has_planned_path = !result.trajectory_segments_inertial_planned.empty();
+            const bool has_planned_path = !result.planned.trajectory_segments_inertial.empty();
             const std::vector<orbitsim::TrajectorySegment> &segments =
-                    has_planned_path ? result.trajectory_segments_inertial_planned
+                    has_planned_path ? result.planned.trajectory_segments_inertial
                                      : result.resolved_trajectory_segments_inertial();
             if (segments.empty())
             {
                 return;
             }
 
-            result.published_chunks.push_back(OrbitPredictionService::PublishedChunk{
+            result.publish.published_chunks.push_back(OrbitPredictionService::PublishedChunk{
                     .chunk_id = 0u,
                     .quality_state = OrbitPredictionService::ChunkQualityState::Final,
                     .t0_s = segments.front().t0_s,
@@ -56,7 +56,7 @@ namespace Game
                     .includes_planned_path = has_planned_path,
                     .reused_from_cache = has_planned_path
                                                  ? result.diagnostics.trajectory_planned.cache_reused
-                                                 : result.baseline_reused,
+                                                 : result.envelope.baseline_reused,
             });
         }
 
@@ -64,7 +64,7 @@ namespace Game
                 const Request &request,
                 Status &out_status)
         {
-            if (request.kind != OrbitPredictionService::RequestKind::Spacecraft)
+            if (request.envelope.kind != OrbitPredictionService::RequestKind::Spacecraft)
             {
                 out_status = Status::Success;
                 return std::nullopt;
@@ -92,18 +92,20 @@ namespace Game
             }
 
             return std::max(OrbitPredictionTuning::kMinHorizonS,
-                            std::isfinite(request.future_window_s) ? std::max(0.0, request.future_window_s) : 0.0);
+                            std::isfinite(request.options.future_window_s)
+                                    ? std::max(0.0, request.options.future_window_s)
+                                    : 0.0);
         }
 
         orbitsim::GameSimulation::Config build_prediction_sim_config(
                 const Request &request,
                 const std::optional<OrbitPredictionService::EphemerisSamplingSpec> &spacecraft_sampling_spec)
         {
-            orbitsim::GameSimulation::Config sim_config = request.sim_config;
+            orbitsim::GameSimulation::Config sim_config = request.world.sim_config;
             apply_prediction_integrator_profile(sim_config,
                                                 request,
                                                 resolve_integrator_horizon_s(request, spacecraft_sampling_spec));
-            if (request.lagrange_sensitive)
+            if (request.options.lagrange_sensitive)
             {
                 apply_lagrange_integrator_profile(sim_config);
             }
@@ -112,7 +114,7 @@ namespace Game
 
         Status populate_prediction_bodies(orbitsim::GameSimulation &sim, const Request &request)
         {
-            for (const orbitsim::MassiveBody &body : request.massive_bodies)
+            for (const orbitsim::MassiveBody &body : request.world.massive_bodies)
             {
                 const auto body_handle =
                         (body.id != orbitsim::kInvalidBodyId)
@@ -139,7 +141,7 @@ namespace Game
         {
             PreparedPredictionJob prepared{};
 
-            if (!std::isfinite(request.sim_time_s))
+            if (!std::isfinite(request.world.sim_time_s))
             {
                 prepared.status = Status::InvalidInput;
                 return prepared;
@@ -155,7 +157,7 @@ namespace Game
 
             prepared.sim = orbitsim::GameSimulation(build_prediction_sim_config(request,
                                                                                 prepared.spacecraft_sampling_spec));
-            if (!prepared.sim.set_time_s(request.sim_time_s))
+            if (!prepared.sim.set_time_s(request.world.sim_time_s))
             {
                 prepared.status = Status::InvalidInput;
                 return prepared;
@@ -271,7 +273,7 @@ namespace Game
 
         bool publish(Result result)
         {
-            result.compute_time_ms = elapsed_prediction_compute_ms(compute_start);
+            result.timing.compute_time_ms = elapsed_prediction_compute_ms(compute_start);
             return service.publish_completed_result(job, std::move(result));
         }
 
@@ -291,7 +293,7 @@ namespace Game
         void publish_success(Result result)
         {
             ensure_single_publish_chunk_metadata(result);
-            result.valid = true;
+            result.envelope.valid = true;
             result.diagnostics.status = Status::Success;
             publish(std::move(result));
         }
@@ -324,11 +326,11 @@ namespace Game
               out(make_initial_prediction_result(generation_id, request))
         {
             cancel_requested = [this]() {
-                return !service.should_continue_job(request.track_id,
+                return !service.should_continue_job(request.envelope.track_id,
                                                     generation_id,
                                                     request_epoch,
-                                                    request.maneuver_plan_revision,
-                                                    request.solve_quality);
+                                                    request.envelope.maneuver_plan_revision,
+                                                    request.options.solve_quality);
             };
             resolve_ephemeris =
                     [this](const EphemerisBuildRequest &req,
@@ -355,9 +357,9 @@ namespace Game
                 return;
             }
 
-            out.massive_bodies = prepared.sim.massive_bodies();
+            out.core.massive_bodies = prepared.sim.massive_bodies();
 
-            if (request.kind == RequestKind::Celestial)
+            if (request.envelope.kind == RequestKind::Celestial)
             {
                 run_celestial_route(prepared.sim);
                 return;

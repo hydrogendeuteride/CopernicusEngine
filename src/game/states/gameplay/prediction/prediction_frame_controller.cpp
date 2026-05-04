@@ -17,28 +17,28 @@ namespace Game
             OrbitPredictionService::Result result{};
             const auto &base_samples = cache.solver.resolved_trajectory_inertial();
             const auto &base_segments = cache.solver.resolved_trajectory_segments_inertial();
-            result.track_id = track_id;
-            result.generation_id = cache.identity.generation_id;
-            result.maneuver_plan_revision = cache.identity.maneuver_plan_revision;
-            result.maneuver_plan_signature_valid = cache.identity.maneuver_plan_signature_valid;
-            result.maneuver_plan_signature = cache.identity.maneuver_plan_signature;
-            result.valid = base_samples.size() >= 2 && !base_segments.empty();
-            result.solve_quality = OrbitPredictionService::SolveQuality::Full;
-            result.build_time_s = cache.identity.build_time_s;
+            result.envelope.track_id = track_id;
+            result.envelope.generation_id = cache.identity.generation_id;
+            result.envelope.maneuver_plan_revision = cache.identity.maneuver_plan_revision;
+            result.envelope.maneuver_plan_signature_valid = cache.identity.maneuver_plan_signature_valid;
+            result.envelope.maneuver_plan_signature = cache.identity.maneuver_plan_signature;
+            result.envelope.valid = base_samples.size() >= 2 && !base_segments.empty();
+            result.envelope.solve_quality = OrbitPredictionService::SolveQuality::Full;
+            result.timing.build_time_s = cache.identity.build_time_s;
             if (cache.solver.shared_solver_core_data)
             {
                 result.set_shared_core_data(cache.solver.shared_solver_core_data);
             }
             else
             {
-                result.shared_ephemeris = cache.solver.shared_ephemeris;
-                result.massive_bodies = cache.solver.massive_bodies;
-                result.trajectory_inertial = cache.solver.trajectory_inertial;
-                result.trajectory_segments_inertial = cache.solver.trajectory_segments_inertial;
+                result.core.shared_ephemeris = cache.solver.shared_ephemeris;
+                result.core.massive_bodies = cache.solver.massive_bodies;
+                result.core.trajectory_inertial = cache.solver.trajectory_inertial;
+                result.core.trajectory_segments_inertial = cache.solver.trajectory_segments_inertial;
             }
-            result.trajectory_inertial_planned = cache.solver.trajectory_inertial_planned;
-            result.trajectory_segments_inertial_planned = cache.solver.trajectory_segments_inertial_planned;
-            result.maneuver_previews = cache.solver.maneuver_previews;
+            result.planned.trajectory_inertial = cache.solver.trajectory_inertial_planned;
+            result.planned.trajectory_segments_inertial = cache.solver.trajectory_segments_inertial_planned;
+            result.planned.maneuver_previews = cache.solver.maneuver_previews;
             return result;
         }
     } // namespace

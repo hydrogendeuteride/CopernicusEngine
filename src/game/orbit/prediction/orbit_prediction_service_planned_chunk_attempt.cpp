@@ -65,8 +65,8 @@ namespace Game
                 std::vector<OrbitPredictionService::ManeuverImpulse> &out_impulses)
         {
             out_impulses.clear();
-            out_impulses.reserve(request.maneuver_impulses.size());
-            for (const OrbitPredictionService::ManeuverImpulse &impulse : request.maneuver_impulses)
+            out_impulses.reserve(request.maneuver.maneuver_impulses.size());
+            for (const OrbitPredictionService::ManeuverImpulse &impulse : request.maneuver.maneuver_impulses)
             {
                 if (!planned_maneuver_impulse_input_is_valid(impulse))
                 {
@@ -112,7 +112,7 @@ namespace Game
         {
             uint64_t upstream_maneuver_hash = kPlannedCacheHashSeed;
             out_status = OrbitPredictionService::Status::Success;
-            for (const OrbitPredictionService::ManeuverImpulse &upstream_impulse : request.maneuver_impulses)
+            for (const OrbitPredictionService::ManeuverImpulse &upstream_impulse : request.maneuver.maneuver_impulses)
             {
                 if (!planned_maneuver_impulse_input_is_valid(upstream_impulse))
                 {
@@ -219,25 +219,25 @@ namespace Game
             subchunk_plan.requires_seam_validation = false;
 
             OrbitPredictionService::Request chunk_request = ctx.request;
-            chunk_request.sim_time_s = subchunk.t0_s;
-            chunk_request.future_window_s = extended_t1_s - subchunk.t0_s;
-            chunk_request.maneuver_impulses = chunk_impulses;
+            chunk_request.world.sim_time_s = subchunk.t0_s;
+            chunk_request.options.future_window_s = extended_t1_s - subchunk.t0_s;
+            chunk_request.maneuver.maneuver_impulses = chunk_impulses;
 
             const orbitsim::AdaptiveSegmentOptions chunk_segment_opt =
                     build_spacecraft_adaptive_segment_options_for_chunk(chunk_request,
                                                                        subchunk_plan,
                                                                        ctx.cancel_requested);
 
-            orbitsim::GameSimulation::Config chunk_sim_config = ctx.request.sim_config;
+            orbitsim::GameSimulation::Config chunk_sim_config = ctx.request.world.sim_config;
             apply_prediction_integrator_profile(chunk_sim_config,
                                                 chunk_request,
-                                                chunk_request.future_window_s);
-            if (ctx.request.lagrange_sensitive)
+                                                chunk_request.options.future_window_s);
+            if (ctx.request.options.lagrange_sensitive)
             {
                 apply_lagrange_integrator_profile(chunk_sim_config);
             }
 
-            std::vector<orbitsim::MassiveBody> chunk_massive_bodies = ctx.out.massive_bodies;
+            std::vector<orbitsim::MassiveBody> chunk_massive_bodies = ctx.out.core.massive_bodies;
             for (orbitsim::MassiveBody &body_at_start : chunk_massive_bodies)
             {
                 std::size_t eph_body_index = 0u;
@@ -250,9 +250,9 @@ namespace Game
 
             OrbitPredictionService::EphemerisBuildRequest chunk_ephemeris_request{};
             chunk_ephemeris_request.sim_time_s = subchunk.t0_s;
-            chunk_ephemeris_request.sim_config = chunk_request.sim_config;
+            chunk_ephemeris_request.sim_config = chunk_request.world.sim_config;
             chunk_ephemeris_request.massive_bodies = chunk_massive_bodies;
-            chunk_ephemeris_request.duration_s = chunk_request.future_window_s;
+            chunk_ephemeris_request.duration_s = chunk_request.options.future_window_s;
             chunk_ephemeris_request.adaptive_options =
                     build_adaptive_ephemeris_options_for_chunk(chunk_request,
                                                               subchunk_plan,

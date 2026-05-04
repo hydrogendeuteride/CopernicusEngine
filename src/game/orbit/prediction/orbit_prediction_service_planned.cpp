@@ -30,13 +30,13 @@ namespace Game
                 const double time_s,
                 const orbitsim::BodyId preferred_body_id)
         {
-            if (ctx.out.massive_bodies.empty() || !finite_state(state))
+            if (ctx.out.core.massive_bodies.empty() || !finite_state(state))
             {
                 return orbitsim::kInvalidBodyId;
             }
 
             const orbitsim::CelestialEphemeris &eph = ctx.ephemeris;
-            const auto &bodies = ctx.out.massive_bodies;
+            const auto &bodies = ctx.out.core.massive_bodies;
             const std::size_t primary_index = select_primary_index_with_hysteresis(
                     bodies,
                     state.position_m,
@@ -49,7 +49,7 @@ namespace Game
                         }
                         return bodies[i].state.position_m;
                     },
-                    ctx.request.sim_config.softening_length_m,
+                    ctx.request.world.sim_config.softening_length_m,
                     preferred_body_id);
             return primary_index < bodies.size()
                            ? bodies[primary_index].id
@@ -102,7 +102,7 @@ namespace Game
                     ctx,
                     previous_state,
                     sample_time_s,
-                    ctx.request.preferred_primary_body_id);
+                    ctx.request.subject.preferred_primary_body_id);
             out_diag.current_primary_body_id = select_primary_body_id_for_planned(
                     ctx,
                     current_state,
@@ -239,7 +239,7 @@ namespace Game
         const uint64_t baseline_generation_id =
                 planned_baseline_generation_hash(ctx.request, solve_plan.t0_s, range_start_state);
         const uint64_t frame_independent_generation =
-                planned_solver_context_hash(ctx.request, ctx.out.massive_bodies);
+                planned_solver_context_hash(ctx.request, ctx.out.core.massive_bodies);
         double diagnostic_dt_sum_s = 0.0;
         bool have_dt = false;
         std::vector<orbitsim::TrajectorySegment> previous_chunk_seam_segments;
@@ -266,8 +266,8 @@ namespace Game
             const OrbitPredictionService::ChunkActivityProbe activity_probe =
                     classify_chunk_activity(ctx.request,
                                             chunk,
-                                            &ctx.out.trajectory_segments_inertial,
-                                            ctx.out.shared_ephemeris);
+                                            &ctx.out.core.trajectory_segments_inertial,
+                                            ctx.out.core.shared_ephemeris);
 
             OrbitPredictionService::PredictionChunkPlan effective_chunk = chunk;
             effective_chunk.profile_id = activity_probe.recommended_profile_id;

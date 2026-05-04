@@ -239,9 +239,9 @@ namespace Game
             const OrbitPredictionService::EphemerisSamplingSpec &sampling_spec)
     {
         OrbitPredictionService::EphemerisBuildRequest out{};
-        out.sim_time_s = request.sim_time_s;
-        out.sim_config = request.sim_config;
-        out.massive_bodies = request.massive_bodies;
+        out.sim_time_s = request.world.sim_time_s;
+        out.sim_config = request.world.sim_config;
+        out.massive_bodies = request.world.massive_bodies;
         out.duration_s = sampling_spec.horizon_s;
         out.adaptive_options = build_adaptive_ephemeris_options(request, sampling_spec);
         return out;
@@ -252,14 +252,14 @@ namespace Game
             const orbitsim::MassiveBody &subject_body)
     {
         CelestialPredictionSamplingSpec out{};
-        if (request.massive_bodies.size() < 2)
+        if (request.world.massive_bodies.size() < 2)
         {
             return out;
         }
 
         std::vector<orbitsim::MassiveBody> candidate_bodies;
-        candidate_bodies.reserve(request.massive_bodies.size() - 1);
-        for (const orbitsim::MassiveBody &body : request.massive_bodies)
+        candidate_bodies.reserve(request.world.massive_bodies.size() - 1);
+        for (const orbitsim::MassiveBody &body : request.world.massive_bodies)
         {
             if (body.id != subject_body.id)
             {
@@ -275,7 +275,7 @@ namespace Game
                 candidate_bodies,
                 subject_body.state.position_m,
                 [&candidate_bodies](const std::size_t i) -> orbitsim::Vec3 { return candidate_bodies[i].state.position_m; },
-                request.sim_config.softening_length_m);
+                request.world.sim_config.softening_length_m);
         const orbitsim::MassiveBody &reference_body = candidate_bodies[primary_index];
 
         out.rel_pos_m = glm::dvec3(subject_body.state.position_m - reference_body.state.position_m);
@@ -285,7 +285,7 @@ namespace Game
             return out;
         }
 
-        const double mu_ref_m3_s2 = request.sim_config.gravitational_constant * reference_body.mass_kg;
+        const double mu_ref_m3_s2 = request.world.sim_config.gravitational_constant * reference_body.mass_kg;
         if (!(mu_ref_m3_s2 > 0.0) || !std::isfinite(mu_ref_m3_s2))
         {
             return out;
@@ -295,7 +295,9 @@ namespace Game
                 OrbitPredictionMath::select_prediction_horizon(mu_ref_m3_s2, out.rel_pos_m, out.rel_vel_mps);
 
         const double requested_window_s =
-                std::isfinite(request.future_window_s) ? std::max(0.0, request.future_window_s) : 0.0;
+                std::isfinite(request.options.future_window_s)
+                        ? std::max(0.0, request.options.future_window_s)
+                        : 0.0;
         double horizon_s = std::max(OrbitPredictionTuning::kMinHorizonS, horizon_s_auto);
         horizon_s = std::max(horizon_s, std::max(1.0, requested_window_s));
         if (!(horizon_s > 0.0))

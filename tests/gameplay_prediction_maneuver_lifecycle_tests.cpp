@@ -412,7 +412,7 @@ TEST(GameplayPredictionManeuverTests, LifecycleReducerRecordsAndResetsDerivedReq
     request.analysis_body_id = 13;
     request.maneuver_plan_signature_valid = true;
     request.maneuver_plan_signature = 77u;
-    request.solver_result.publish_stage = Game::OrbitPredictionService::PublishStage::FullStreaming;
+    request.solver_result.envelope.publish_stage = Game::OrbitPredictionService::PublishStage::FullStreaming;
 
     Game::PredictionLifecycleReducer::mark_derived_request_submitted(track, request);
 

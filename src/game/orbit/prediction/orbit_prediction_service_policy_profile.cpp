@@ -70,21 +70,21 @@ namespace Game
                 const double time_s,
                 const orbitsim::BodyId preferred_body_id)
         {
-            if (request.massive_bodies.empty() || !finite_state(state))
+            if (request.world.massive_bodies.empty() || !finite_state(state))
             {
                 return orbitsim::kInvalidBodyId;
             }
 
             const std::size_t primary_index = select_primary_index_with_hysteresis(
-                    request.massive_bodies,
+                    request.world.massive_bodies,
                     state.position_m,
                     [&shared_ephemeris, &request, time_s](const std::size_t i) -> orbitsim::Vec3 {
-                        return body_position_at_time(shared_ephemeris, request.massive_bodies, i, time_s);
+                        return body_position_at_time(shared_ephemeris, request.world.massive_bodies, i, time_s);
                     },
-                    request.sim_config.softening_length_m,
+                    request.world.sim_config.softening_length_m,
                     preferred_body_id);
-            return primary_index < request.massive_bodies.size()
-                           ? request.massive_bodies[primary_index].id
+            return primary_index < request.world.massive_bodies.size()
+                           ? request.world.massive_bodies[primary_index].id
                            : orbitsim::kInvalidBodyId;
         }
 
@@ -94,23 +94,27 @@ namespace Game
                 const orbitsim::State &state,
                 const double time_s)
         {
-            if (request.massive_bodies.empty() || !finite_state(state))
+            if (request.world.massive_bodies.empty() || !finite_state(state))
             {
                 return 1.0;
             }
 
-            const double eps2 = request.sim_config.softening_length_m * request.sim_config.softening_length_m;
+            const double eps2 =
+                    request.world.sim_config.softening_length_m * request.world.sim_config.softening_length_m;
             double total_metric = 0.0;
             double dominant_metric = 0.0;
-            for (std::size_t i = 0; i < request.massive_bodies.size(); ++i)
+            for (std::size_t i = 0; i < request.world.massive_bodies.size(); ++i)
             {
-                const double mass_kg = request.massive_bodies[i].mass_kg;
+                const double mass_kg = request.world.massive_bodies[i].mass_kg;
                 if (!(mass_kg > 0.0) || !std::isfinite(mass_kg))
                 {
                     continue;
                 }
 
-                const orbitsim::Vec3 dr = body_position_at_time(shared_ephemeris, request.massive_bodies, i, time_s) -
+                const orbitsim::Vec3 dr = body_position_at_time(shared_ephemeris,
+                                                                request.world.massive_bodies,
+                                                                i,
+                                                                time_s) -
                                           state.position_m;
                 const double r2 = glm::dot(dr, dr) + eps2;
                 if (!(r2 > 0.0) || !std::isfinite(r2))
@@ -266,7 +270,7 @@ namespace Game
                 shared_ephemeris,
                 start_state,
                 chunk.t0_s,
-                request.preferred_primary_body_id);
+                request.subject.preferred_primary_body_id);
         probe.primary_body_id_mid = select_primary_body_id_for_state(
                 request,
                 shared_ephemeris,
@@ -280,7 +284,7 @@ namespace Game
                 chunk.t1_s,
                 probe.primary_body_id_mid);
 
-        for (const OrbitPredictionService::ManeuverImpulse &impulse : request.maneuver_impulses)
+        for (const OrbitPredictionService::ManeuverImpulse &impulse : request.maneuver.maneuver_impulses)
         {
             if (!std::isfinite(impulse.t_s))
             {
@@ -357,7 +361,7 @@ namespace Game
     {
         OrbitPredictionService::PredictionProfileDefinition def{};
         def.profile_id = chunk.profile_id;
-        const double elapsed_s = std::max(0.0, chunk.t0_s - request.sim_time_s);
+        const double elapsed_s = std::max(0.0, chunk.t0_s - request.world.sim_time_s);
         const bool deep_tail_window = elapsed_s >= OrbitPredictionTuning::kPredictionChunkBandCruiseEndS;
 
         const bool preview_sensitive = chunk.profile_id == PredictionProfileId::Exact;
@@ -390,7 +394,7 @@ namespace Game
             base_ephemeris_max_dt_s = std::min(base_ephemeris_max_dt_s,
                                                OrbitPredictionTuning::kAdaptiveEphemerisMaxDtControlledS);
         }
-        if (request.lagrange_sensitive)
+        if (request.options.lagrange_sensitive)
         {
             base_ephemeris_max_dt_s = std::min(base_ephemeris_max_dt_s,
                                                OrbitPredictionTuning::kLagrangeEphemerisMaxDtS);

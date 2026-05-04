@@ -22,8 +22,8 @@ namespace Game
             const EphemerisResolverFn &resolve_ephemeris)
     {
         EphemerisResolveOutcome outcome{};
-        outcome.ephemeris = request.shared_ephemeris;
-        if (!ephemeris_covers_horizon(outcome.ephemeris, request.sim_time_s, horizon_s))
+        outcome.ephemeris = request.world.shared_ephemeris;
+        if (!ephemeris_covers_horizon(outcome.ephemeris, request.world.sim_time_s, horizon_s))
         {
             outcome.ephemeris = resolve_ephemeris(build_ephemeris_build_request(request, sampling_spec),
                                                   cancel_requested,
@@ -57,12 +57,12 @@ namespace Game
             const EphemerisResolverFn &resolve_ephemeris,
             OrbitPredictionService::Result &out)
     {
-        if (request.subject_body_id == orbitsim::kInvalidBodyId)
+        if (request.subject.subject_body_id == orbitsim::kInvalidBodyId)
         {
             return OrbitPredictionService::Status::InvalidSubject;
         }
 
-        const orbitsim::MassiveBody *subject_sim = sim.body_by_id(request.subject_body_id);
+        const orbitsim::MassiveBody *subject_sim = sim.body_by_id(request.subject.subject_body_id);
         if (!subject_sim)
         {
             return OrbitPredictionService::Status::InvalidSubject;
@@ -100,8 +100,8 @@ namespace Game
         std::vector<orbitsim::TrajectorySample> traj_inertial =
                 resample_ephemeris_uniform(*ephemeris.ephemeris,
                                            subject_sim->id,
-                                           request.sim_time_s,
-                                           request.sim_time_s + celestial_sampling.horizon_s,
+                                           request.world.sim_time_s,
+                                           request.world.sim_time_s + celestial_sampling.horizon_s,
                                            kCelestialUISampleCount);
         if (traj_inertial.size() < 2)
         {
@@ -119,14 +119,14 @@ namespace Game
             return OrbitPredictionService::Status::ContinuityFailed;
         }
 
-        out.shared_ephemeris = std::move(ephemeris.ephemeris);
+        out.core.shared_ephemeris = std::move(ephemeris.ephemeris);
         out.diagnostics.trajectory_base =
                 make_stage_diagnostics_from_segments(traj_segments_inertial,
                                                      celestial_sampling.horizon_s);
         out.diagnostics.trajectory_sample_count = traj_inertial.size();
         sync_prediction_stage_counts(out);
-        out.trajectory_inertial = std::move(traj_inertial);
-        out.trajectory_segments_inertial = std::move(traj_segments_inertial);
+        out.core.trajectory_inertial = std::move(traj_inertial);
+        out.core.trajectory_segments_inertial = std::move(traj_segments_inertial);
         return OrbitPredictionService::Status::Success;
     }
 
@@ -182,8 +182,8 @@ namespace Game
             return OrbitPredictionService::Status::Cancelled;
         }
 
-        out.trajectory_segments_inertial = std::move(trajectory_segments);
-        out.trajectory_inertial = std::move(trajectory_samples);
+        out.core.trajectory_segments_inertial = std::move(trajectory_segments);
+        out.core.trajectory_inertial = std::move(trajectory_samples);
         return OrbitPredictionService::Status::Success;
     }
 } // namespace Game

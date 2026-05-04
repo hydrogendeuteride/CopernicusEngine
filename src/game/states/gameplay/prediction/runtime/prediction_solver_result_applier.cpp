@@ -82,7 +82,7 @@ namespace Game
                                                  const OrbitPredictionService::Result &result,
                                                  const orbitsim::TrajectoryFrameSpec &resolved_frame_spec)
         {
-            return result.baseline_reused &&
+            return result.envelope.baseline_reused &&
                    track.cache.identity.valid &&
                    track.cache.display.resolved_frame_spec_valid &&
                    frame_supports_live_base_frame_reuse(resolved_frame_spec) &&
@@ -98,11 +98,11 @@ namespace Game
                                         const PredictionDragDebugTelemetry::TimePoint &solver_result_tp)
         {
             PredictionDragDebugTelemetry &debug = track.drag_debug;
-            debug.last_result_solve_quality = result.solve_quality;
+            debug.last_result_solve_quality = result.envelope.solve_quality;
             debug.last_solver_result_tp = solver_result_tp;
-            debug.last_solver_result_generation_id = result.generation_id;
+            debug.last_solver_result_generation_id = result.envelope.generation_id;
             ++debug.solver_result_count;
-            if (debug.last_request_generation_id == result.generation_id &&
+            if (debug.last_request_generation_id == result.envelope.generation_id &&
                 PredictionDragDebugTelemetry::has_time(debug.last_request_tp))
             {
                 PredictionRuntimeDetail::update_last_and_peak(
@@ -139,9 +139,9 @@ namespace Game
             out_segments.clear();
             if (context.subject_is_player && context.subject_is_player(track.key))
             {
-                if (!result.trajectory_segments_inertial_planned.empty())
+                if (!result.planned.trajectory_segments_inertial.empty())
                 {
-                    out_segments = result.trajectory_segments_inertial_planned;
+                    out_segments = result.planned.trajectory_segments_inertial;
                 }
                 else if (!result.resolved_trajectory_segments_inertial().empty())
                 {
@@ -179,29 +179,30 @@ namespace Game
                 PredictionRuntimeDetail::describe_prediction_track_lifecycle(track);
         const bool live_fast_preview_result =
                 track.supports_maneuvers &&
-                result.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
+                result.envelope.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
                 context.maneuver_live_preview_available;
         if (track.supports_maneuvers &&
             track.latest_requested_generation_id != 0 &&
-            result.generation_id < track.latest_requested_generation_id &&
+            result.envelope.generation_id < track.latest_requested_generation_id &&
             !live_fast_preview_result)
         {
             return out;
         }
-        if (track.supports_maneuvers && result.maneuver_plan_revision != context.maneuver_plan_revision)
+        if (track.supports_maneuvers &&
+            result.envelope.maneuver_plan_revision != context.maneuver_plan_revision)
         {
             Logger::warn("Dropping stale maneuver solver result: track={} gen={} result_plan_rev={} current_plan_rev={} "
                          "latest_request_gen={} request_pending={} derived_pending={} invalidated={} dirty={}",
-                         result.track_id,
-                         result.generation_id,
-                         result.maneuver_plan_revision,
+                         result.envelope.track_id,
+                         result.envelope.generation_id,
+                         result.envelope.maneuver_plan_revision,
                          context.maneuver_plan_revision,
                          track.latest_requested_generation_id,
                          track.request_pending,
                          track.derived_request_pending,
                          track.invalidated_while_pending,
                          track.dirty);
-            if (result.generation_id == track.latest_requested_generation_id)
+            if (result.envelope.generation_id == track.latest_requested_generation_id)
             {
                 PredictionLifecycleReducer::mark_solver_result_rejected_for_rebuild(track);
             }
@@ -210,7 +211,7 @@ namespace Game
 
         const OrbitPredictionService::AdaptiveStageDiagnostics previous_frame_base_diagnostics =
                 track.derived_diagnostics.frame_base;
-        track.solver_ms_last = std::max(0.0, result.compute_time_ms);
+        track.solver_ms_last = std::max(0.0, result.timing.compute_time_ms);
         track.solver_diagnostics = result.diagnostics;
         track.derived_diagnostics = {};
         record_solver_result_debug(track, result, solver_result_tp);
@@ -221,15 +222,15 @@ namespace Game
         const uint64_t current_plan_signature =
                 current_plan_active ? context.maneuver_plan_signature : 0u;
         if (active_maneuver_edit &&
-            result.maneuver_plan_signature_valid &&
-            result.maneuver_plan_signature != current_plan_signature &&
-            result.solve_quality != OrbitPredictionService::SolveQuality::FastPreview)
+            result.envelope.maneuver_plan_signature_valid &&
+            result.envelope.maneuver_plan_signature != current_plan_signature &&
+            result.envelope.solve_quality != OrbitPredictionService::SolveQuality::FastPreview)
         {
             PredictionLifecycleReducer::mark_solver_result_rejected_for_rebuild(track);
             return out;
         }
 
-        if (!result.valid || result.resolved_trajectory_inertial().size() < 2)
+        if (!result.envelope.valid || result.resolved_trajectory_inertial().size() < 2)
         {
             PredictionLifecycleReducer::mark_solver_result_rejected_for_rebuild(track, true, false);
             return out;
@@ -244,7 +245,7 @@ namespace Game
         }
 
         OrbitPredictionCache resolve_cache{};
-        resolve_cache.identity.build_time_s = result.build_time_s;
+        resolve_cache.identity.build_time_s = result.timing.build_time_s;
         if (result.has_shared_core_data())
         {
             resolve_cache.set_shared_solver_core_data(result.shared_core_data());
@@ -257,7 +258,7 @@ namespace Game
             resolve_cache.solver.trajectory_inertial = result.resolved_trajectory_inertial();
         }
         const double reference_time_s =
-                context.orbital_scenario ? context.orbital_scenario->sim.time_s() : result.build_time_s;
+                context.orbital_scenario ? context.orbital_scenario->sim.time_s() : result.timing.build_time_s;
         const orbitsim::TrajectoryFrameSpec resolved_frame_spec =
                 context.resolve_display_frame_spec
                         ? context.resolve_display_frame_spec(resolve_cache, reference_time_s)
@@ -279,11 +280,11 @@ namespace Game
         collect_player_lookup_segments(track, context, result, player_lookup_segments);
 
         OrbitPredictionDerivedService::Request derived_request{};
-        derived_request.track_id = result.track_id;
-        derived_request.generation_id = result.generation_id;
-        derived_request.maneuver_plan_revision = result.maneuver_plan_revision;
-        derived_request.maneuver_plan_signature_valid = result.maneuver_plan_signature_valid;
-        derived_request.maneuver_plan_signature = result.maneuver_plan_signature;
+        derived_request.track_id = result.envelope.track_id;
+        derived_request.generation_id = result.envelope.generation_id;
+        derived_request.maneuver_plan_revision = result.envelope.maneuver_plan_revision;
+        derived_request.maneuver_plan_signature_valid = result.envelope.maneuver_plan_signature_valid;
+        derived_request.maneuver_plan_signature = result.envelope.maneuver_plan_signature;
         derived_request.priority = PredictionRuntimeDetail::classify_prediction_subject_priority(
                 context.selection,
                 track.key,
@@ -307,8 +308,8 @@ namespace Game
 
         PredictionLifecycleReducer::mark_solver_result_accepted(
                 track,
-                derived_request.solver_result.solve_quality,
-                derived_request.solver_result.publish_stage,
+                derived_request.solver_result.envelope.solve_quality,
+                derived_request.solver_result.envelope.publish_stage,
                 lifecycle_before_apply);
 
         out.derived_request = std::move(derived_request);

@@ -194,11 +194,11 @@ TEST(GameplayPredictionManeuverTests, FullRequestAnchorsPlanHorizonAfterNearbyNo
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_DOUBLE_EQ(request.future_window_s, 650.0);
-    ASSERT_EQ(request.maneuver_impulses.size(), 1u);
-    EXPECT_EQ(request.maneuver_impulses.front().node_id, node.id);
-    EXPECT_DOUBLE_EQ(request.maneuver_impulses.front().t_s, node.time_s);
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    EXPECT_DOUBLE_EQ(request.options.future_window_s, 650.0);
+    ASSERT_EQ(request.maneuver.maneuver_impulses.size(), 1u);
+    EXPECT_EQ(request.maneuver.maneuver_impulses.front().node_id, node.id);
+    EXPECT_DOUBLE_EQ(request.maneuver.maneuver_impulses.front().t_s, node.time_s);
 }
 
 TEST(GameplayPredictionManeuverTests, FullRequestKeepsFarFutureNodeWhenPlanHorizonIsShorterThanNodeTime)
@@ -232,11 +232,11 @@ TEST(GameplayPredictionManeuverTests, FullRequestKeepsFarFutureNodeWhenPlanHoriz
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_DOUBLE_EQ(request.future_window_s, 50'500.0);
-    ASSERT_EQ(request.maneuver_impulses.size(), 1u);
-    EXPECT_EQ(request.maneuver_impulses.front().node_id, node.id);
-    EXPECT_DOUBLE_EQ(request.maneuver_impulses.front().t_s, node.time_s);
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    EXPECT_DOUBLE_EQ(request.options.future_window_s, 50'500.0);
+    ASSERT_EQ(request.maneuver.maneuver_impulses.size(), 1u);
+    EXPECT_EQ(request.maneuver.maneuver_impulses.front().node_id, node.id);
+    EXPECT_DOUBLE_EQ(request.maneuver.maneuver_impulses.front().t_s, node.time_s);
 }
 
 TEST(GameplayPredictionManeuverTests, FullRequestUsesConfiguredPlanHorizonForNearFutureNode)
@@ -270,11 +270,11 @@ TEST(GameplayPredictionManeuverTests, FullRequestUsesConfiguredPlanHorizonForNea
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_DOUBLE_EQ(request.future_window_s, 60'348.448);
-    ASSERT_EQ(request.maneuver_impulses.size(), 1u);
-    EXPECT_EQ(request.maneuver_impulses.front().node_id, node.id);
-    EXPECT_DOUBLE_EQ(request.maneuver_impulses.front().t_s, node.time_s);
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    EXPECT_DOUBLE_EQ(request.options.future_window_s, 60'348.448);
+    ASSERT_EQ(request.maneuver.maneuver_impulses.size(), 1u);
+    EXPECT_EQ(request.maneuver.maneuver_impulses.front().node_id, node.id);
+    EXPECT_DOUBLE_EQ(request.maneuver.maneuver_impulses.front().t_s, node.time_s);
 }
 
 TEST(GameplayPredictionManeuverTests, ShortCurrentCacheRebuildsToConfiguredPlanHorizon)
@@ -576,10 +576,10 @@ TEST(GameplayPredictionManeuverTests, FastPreviewRequestKeepsUpstreamManeuversBe
                                                                   queued);
 
     ASSERT_TRUE(requested);
-    ASSERT_EQ(queued.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_EQ(queued.maneuver_impulses.size(), 2u);
-    EXPECT_EQ(queued.maneuver_impulses[0].node_id, first.id);
-    EXPECT_EQ(queued.maneuver_impulses[1].node_id, second.id);
+    ASSERT_EQ(queued.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_EQ(queued.maneuver.maneuver_impulses.size(), 2u);
+    EXPECT_EQ(queued.maneuver.maneuver_impulses[0].node_id, first.id);
+    EXPECT_EQ(queued.maneuver.maneuver_impulses[1].node_id, second.id);
 }
 
 TEST(GameplayPredictionManeuverTests, FastPreviewRequestKeepsDownstreamManeuversBeyondPreviewDisplayWindow)
@@ -620,10 +620,10 @@ TEST(GameplayPredictionManeuverTests, FastPreviewRequestKeepsDownstreamManeuvers
                                                                   queued);
 
     ASSERT_TRUE(requested);
-    ASSERT_EQ(queued.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_EQ(queued.maneuver_impulses.size(), 2u);
-    EXPECT_EQ(queued.maneuver_impulses[0].node_id, anchor.id);
-    EXPECT_EQ(queued.maneuver_impulses[1].node_id, downstream.id);
+    ASSERT_EQ(queued.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_EQ(queued.maneuver.maneuver_impulses.size(), 2u);
+    EXPECT_EQ(queued.maneuver.maneuver_impulses[0].node_id, anchor.id);
+    EXPECT_EQ(queued.maneuver.maneuver_impulses[1].node_id, downstream.id);
 }
 
 TEST(GameplayPredictionManeuverTests, FastPreviewRequestCapsHorizonToExactPatchWindow)
@@ -660,14 +660,14 @@ TEST(GameplayPredictionManeuverTests, FastPreviewRequestCapsHorizonToExactPatchW
                                                               request);
 
     ASSERT_TRUE(built);
-    ASSERT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_TRUE(request.preview_patch.active);
-    EXPECT_DOUBLE_EQ(request.future_window_s, 500.0);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_time_s, selected.time_s);
-    EXPECT_DOUBLE_EQ(request.preview_patch.visual_window_s, 180.0);
-    EXPECT_DOUBLE_EQ(request.preview_patch.exact_window_s, 180.0);
-    EXPECT_GT(request.future_window_s, request.preview_patch.visual_window_s);
-    EXPECT_LT(request.future_window_s, 2.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
+    ASSERT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_TRUE(request.maneuver.preview_patch.active);
+    EXPECT_DOUBLE_EQ(request.options.future_window_s, 500.0);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_time_s, selected.time_s);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.visual_window_s, 180.0);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.exact_window_s, 180.0);
+    EXPECT_GT(request.options.future_window_s, request.maneuver.preview_patch.visual_window_s);
+    EXPECT_LT(request.options.future_window_s, 2.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
 }
 
 TEST(GameplayPredictionManeuverTests, FastPreviewRequestUsesSelectedNodePreviewForAnchorState)
@@ -717,15 +717,15 @@ TEST(GameplayPredictionManeuverTests, FastPreviewRequestUsesSelectedNodePreviewF
                                                               request);
 
     ASSERT_TRUE(built);
-    ASSERT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_TRUE(request.preview_patch.active);
-    EXPECT_FALSE(request.planned_suffix_refine.active);
-    ASSERT_TRUE(request.preview_patch.anchor_state_valid);
-    EXPECT_TRUE(request.preview_patch.anchor_state_trusted);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_state_inertial.position_m.x, 7'250'000.0);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_state_inertial.position_m.y, 123.0);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_state_inertial.velocity_mps.y, 7'650.0);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_state_inertial.velocity_mps.z, 5.0);
+    ASSERT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_TRUE(request.maneuver.preview_patch.active);
+    EXPECT_FALSE(request.maneuver.planned_suffix_refine.active);
+    ASSERT_TRUE(request.maneuver.preview_patch.anchor_state_valid);
+    EXPECT_TRUE(request.maneuver.preview_patch.anchor_state_trusted);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_state_inertial.position_m.x, 7'250'000.0);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_state_inertial.position_m.y, 123.0);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_state_inertial.velocity_mps.y, 7'650.0);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_state_inertial.velocity_mps.z, 5.0);
 }
 
 TEST(GameplayPredictionManeuverTests, FullRequestEnablesPlannedSuffixRefineForPostDragAnchor)
@@ -789,18 +789,18 @@ TEST(GameplayPredictionManeuverTests, FullRequestEnablesPlannedSuffixRefineForPo
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    ASSERT_TRUE(request.planned_suffix_refine.active);
-    EXPECT_EQ(request.planned_suffix_refine.anchor_node_id, selected.id);
-    EXPECT_DOUBLE_EQ(request.planned_suffix_refine.anchor_time_s, selected.time_s);
-    ASSERT_EQ(request.planned_suffix_refine.prefix_segments_inertial.size(), 2u);
-    EXPECT_DOUBLE_EQ(request.planned_suffix_refine.prefix_segments_inertial.front().t0_s, 100.0);
-    EXPECT_DOUBLE_EQ(request.planned_suffix_refine.prefix_segments_inertial.back().t0_s +
-                             request.planned_suffix_refine.prefix_segments_inertial.back().dt_s,
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    ASSERT_TRUE(request.maneuver.planned_suffix_refine.active);
+    EXPECT_EQ(request.maneuver.planned_suffix_refine.anchor_node_id, selected.id);
+    EXPECT_DOUBLE_EQ(request.maneuver.planned_suffix_refine.anchor_time_s, selected.time_s);
+    ASSERT_EQ(request.maneuver.planned_suffix_refine.prefix_segments_inertial.size(), 2u);
+    EXPECT_DOUBLE_EQ(request.maneuver.planned_suffix_refine.prefix_segments_inertial.front().t0_s, 100.0);
+    EXPECT_DOUBLE_EQ(request.maneuver.planned_suffix_refine.prefix_segments_inertial.back().t0_s +
+                             request.maneuver.planned_suffix_refine.prefix_segments_inertial.back().dt_s,
                      selected.time_s);
-    ASSERT_EQ(request.planned_suffix_refine.prefix_previews.size(), 1u);
-    EXPECT_EQ(request.planned_suffix_refine.prefix_previews.front().node_id, upstream.id);
-    EXPECT_FALSE(request.preview_patch.active);
+    ASSERT_EQ(request.maneuver.planned_suffix_refine.prefix_previews.size(), 1u);
+    EXPECT_EQ(request.maneuver.planned_suffix_refine.prefix_previews.front().node_id, upstream.id);
+    EXPECT_FALSE(request.maneuver.preview_patch.active);
 }
 
 TEST(GameplayPredictionManeuverTests, FastPreviewRequestFallsBackToInertialCacheForAnchorState)
@@ -838,12 +838,12 @@ TEST(GameplayPredictionManeuverTests, FastPreviewRequestFallsBackToInertialCache
                                                               request);
 
     ASSERT_TRUE(built);
-    ASSERT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_TRUE(request.preview_patch.active);
-    ASSERT_TRUE(request.preview_patch.anchor_state_valid);
-    EXPECT_TRUE(request.preview_patch.anchor_state_trusted);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_state_inertial.position_m.x, 7'100'000.0);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_state_inertial.velocity_mps.y, 7'500.0);
+    ASSERT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_TRUE(request.maneuver.preview_patch.active);
+    ASSERT_TRUE(request.maneuver.preview_patch.anchor_state_valid);
+    EXPECT_TRUE(request.maneuver.preview_patch.anchor_state_trusted);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_state_inertial.position_m.x, 7'100'000.0);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_state_inertial.velocity_mps.y, 7'500.0);
 }
 
 TEST(GameplayPredictionManeuverTests, TimeEditActivatesFastPreviewRequest)
@@ -885,11 +885,11 @@ TEST(GameplayPredictionManeuverTests, TimeEditActivatesFastPreviewRequest)
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_TRUE(request.preview_patch.active);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_time_s, selected.time_s);
-    ASSERT_EQ(request.maneuver_impulses.size(), 1u);
-    EXPECT_DOUBLE_EQ(request.maneuver_impulses.front().t_s, selected.time_s);
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_TRUE(request.maneuver.preview_patch.active);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_time_s, selected.time_s);
+    ASSERT_EQ(request.maneuver.maneuver_impulses.size(), 1u);
+    EXPECT_DOUBLE_EQ(request.maneuver.maneuver_impulses.front().t_s, selected.time_s);
 }
 
 TEST(GameplayPredictionManeuverTests, TimeEditUsesBaselineAnchorStateForMovedFirstNode)
@@ -943,11 +943,11 @@ TEST(GameplayPredictionManeuverTests, TimeEditUsesBaselineAnchorStateForMovedFir
                                                               request);
 
     ASSERT_TRUE(built);
-    ASSERT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_TRUE(request.preview_patch.active);
-    ASSERT_TRUE(request.preview_patch.anchor_state_valid);
-    EXPECT_TRUE(request.preview_patch.anchor_state_trusted);
-    EXPECT_DOUBLE_EQ(request.preview_patch.anchor_state_inertial.position_m.x, 7'200'000.0);
+    ASSERT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_TRUE(request.maneuver.preview_patch.active);
+    ASSERT_TRUE(request.maneuver.preview_patch.anchor_state_valid);
+    EXPECT_TRUE(request.maneuver.preview_patch.anchor_state_trusted);
+    EXPECT_DOUBLE_EQ(request.maneuver.preview_patch.anchor_state_inertial.position_m.x, 7'200'000.0);
 }
 
 TEST(GameplayPredictionManeuverTests, TimeEditLeavesAnchorStateUnseededWhenPriorManeuverExists)
@@ -995,10 +995,10 @@ TEST(GameplayPredictionManeuverTests, TimeEditLeavesAnchorStateUnseededWhenPrior
                                                               request);
 
     ASSERT_TRUE(built);
-    ASSERT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
-    ASSERT_TRUE(request.preview_patch.active);
-    EXPECT_FALSE(request.preview_patch.anchor_state_valid);
-    ASSERT_EQ(request.maneuver_impulses.size(), 2u);
+    ASSERT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::FastPreview);
+    ASSERT_TRUE(request.maneuver.preview_patch.active);
+    EXPECT_FALSE(request.maneuver.preview_patch.anchor_state_valid);
+    ASSERT_EQ(request.maneuver.maneuver_impulses.size(), 2u);
 }
 
 TEST(GameplayPredictionManeuverTests, TimeEditFinishRequestsFullRefine)
@@ -1086,8 +1086,8 @@ TEST(GameplayPredictionManeuverTests, FinishedTimeEditDoesNotSeedAnchorFromStale
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_FALSE(request.planned_suffix_refine.active);
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    EXPECT_FALSE(request.maneuver.planned_suffix_refine.active);
 }
 
 TEST(GameplayPredictionManeuverTests, DrawContextUsesAuthoritativePlannedPrefixDuringDeltaVEdit)
@@ -1446,9 +1446,9 @@ TEST(GameplayPredictionManeuverTests, FullRequestKeepsFullStreamPublishDisabledF
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_EQ(request.maneuver_impulses.size(), 1u);
-    EXPECT_FALSE(request.full_stream_publish.active);
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    EXPECT_EQ(request.maneuver.maneuver_impulses.size(), 1u);
+    EXPECT_FALSE(request.maneuver.full_stream_publish.active);
 }
 
 TEST(GameplayPredictionManeuverTests, FullRequestEnablesFullStreamPublishForPostPreviewRefineWithPendingDerivedWork)
@@ -1490,10 +1490,10 @@ TEST(GameplayPredictionManeuverTests, FullRequestEnablesFullStreamPublishForPost
                                                               request);
 
     ASSERT_TRUE(built);
-    EXPECT_EQ(request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_EQ(request.maneuver_impulses.size(), 1u);
-    EXPECT_FALSE(request.planned_suffix_refine.active);
-    EXPECT_TRUE(request.full_stream_publish.active);
+    EXPECT_EQ(request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    EXPECT_EQ(request.maneuver.maneuver_impulses.size(), 1u);
+    EXPECT_FALSE(request.maneuver.planned_suffix_refine.active);
+    EXPECT_TRUE(request.maneuver.full_stream_publish.active);
 }
 
 TEST(GameplayPredictionManeuverTests, FullRequestKeepsFullStreamPublishDisabledOutsideActivePlayerManeuverRefine)
@@ -1525,7 +1525,7 @@ TEST(GameplayPredictionManeuverTests, FullRequestKeepsFullStreamPublishDisabledO
                                                        false,
                                                        false,
                                                        no_maneuver_request));
-    EXPECT_FALSE(no_maneuver_request.full_stream_publish.active);
+    EXPECT_FALSE(no_maneuver_request.maneuver.full_stream_publish.active);
 
     Game::PredictionTrackState overlay_track{};
     overlay_track.key = {Game::PredictionSubjectKind::Orbiter, 2};
@@ -1539,9 +1539,9 @@ TEST(GameplayPredictionManeuverTests, FullRequestKeepsFullStreamPublishDisabledO
                                                        false,
                                                        true,
                                                        overlay_request));
-    EXPECT_EQ(overlay_request.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_EQ(overlay_request.maneuver_impulses.size(), 1u);
-    EXPECT_FALSE(overlay_request.full_stream_publish.active);
+    EXPECT_EQ(overlay_request.options.solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
+    EXPECT_EQ(overlay_request.maneuver.maneuver_impulses.size(), 1u);
+    EXPECT_FALSE(overlay_request.maneuver.full_stream_publish.active);
 }
 
 TEST(GameplayPredictionManeuverTests, ShouldRebuildPredictionTrackWhenCoverageFallsShort)

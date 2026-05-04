@@ -111,10 +111,10 @@ namespace Game
         }
 
         auto core_data = std::make_shared<OrbitPredictionService::Result::CoreData>();
-        core_data->shared_ephemeris = source.shared_ephemeris;
-        core_data->massive_bodies = source.massive_bodies;
-        core_data->trajectory_inertial = source.trajectory_inertial;
-        core_data->trajectory_segments_inertial = source.trajectory_segments_inertial;
+        core_data->shared_ephemeris = source.resolved_shared_ephemeris();
+        core_data->massive_bodies = source.resolved_massive_bodies();
+        core_data->trajectory_inertial = source.resolved_trajectory_inertial();
+        core_data->trajectory_segments_inertial = source.resolved_trajectory_segments_inertial();
         staged_core_data = std::move(core_data);
         return staged_core_data;
     }
@@ -129,17 +129,17 @@ namespace Game
             const bool include_cumulative_planned)
     {
         OrbitPredictionService::Result stage_result{};
-        stage_result.track_id = base_result.track_id;
-        stage_result.generation_id = base_result.generation_id;
-        stage_result.maneuver_plan_revision = base_result.maneuver_plan_revision;
-        stage_result.maneuver_plan_signature_valid = base_result.maneuver_plan_signature_valid;
-        stage_result.maneuver_plan_signature = base_result.maneuver_plan_signature;
-        stage_result.valid = true;
-        stage_result.baseline_reused = base_result.baseline_reused;
-        stage_result.solve_quality = base_result.solve_quality;
-        stage_result.publish_stage = publish_stage;
+        stage_result.envelope.track_id = base_result.envelope.track_id;
+        stage_result.envelope.generation_id = base_result.envelope.generation_id;
+        stage_result.envelope.maneuver_plan_revision = base_result.envelope.maneuver_plan_revision;
+        stage_result.envelope.maneuver_plan_signature_valid = base_result.envelope.maneuver_plan_signature_valid;
+        stage_result.envelope.maneuver_plan_signature = base_result.envelope.maneuver_plan_signature;
+        stage_result.envelope.valid = true;
+        stage_result.envelope.baseline_reused = base_result.envelope.baseline_reused;
+        stage_result.envelope.solve_quality = base_result.envelope.solve_quality;
+        stage_result.envelope.publish_stage = publish_stage;
         stage_result.diagnostics = base_result.diagnostics;
-        stage_result.build_time_s = base_result.build_time_s;
+        stage_result.timing.build_time_s = base_result.timing.build_time_s;
         stage_result.set_shared_core_data(std::move(shared_core_data));
         stage_result.diagnostics.trajectory_planned = stage_output.diagnostics;
         stage_result.diagnostics.trajectory_sample_count_planned = stage_output.samples.size();
@@ -147,12 +147,12 @@ namespace Game
         sync_prediction_stage_counts(stage_result);
         if (include_cumulative_planned)
         {
-            stage_result.trajectory_segments_inertial_planned = stage_output.segments;
-            stage_result.trajectory_inertial_planned = stage_output.samples;
-            stage_result.maneuver_previews = stage_output.previews;
+            stage_result.planned.trajectory_segments_inertial = stage_output.segments;
+            stage_result.planned.trajectory_inertial = stage_output.samples;
+            stage_result.planned.maneuver_previews = stage_output.previews;
         }
-        stage_result.published_chunks = published_chunks;
-        stage_result.streamed_planned_chunks = std::move(streamed_planned_chunks);
+        stage_result.publish.published_chunks = published_chunks;
+        stage_result.publish.streamed_planned_chunks = std::move(streamed_planned_chunks);
         return stage_result;
     }
 
@@ -272,11 +272,11 @@ namespace Game
             const std::chrono::steady_clock::time_point compute_start)
     {
         return FullStreamBatchPublisher{
-                .active = request.solve_quality == OrbitPredictionService::SolveQuality::Full &&
-                          request.full_stream_publish.active,
+                .active = request.options.solve_quality == OrbitPredictionService::SolveQuality::Full &&
+                          request.maneuver.full_stream_publish.active,
                 .min_publish_interval_s =
-                        (request.full_stream_publish.min_publish_interval_s > 0.0)
-                                ? request.full_stream_publish.min_publish_interval_s
+                        (request.maneuver.full_stream_publish.min_publish_interval_s > 0.0)
+                                ? request.maneuver.full_stream_publish.min_publish_interval_s
                                 : OrbitPredictionTuning::kFullStreamPublishMinIntervalS,
                 .last_publish_tp = compute_start,
         };

@@ -827,24 +827,24 @@ TEST(GameplayPredictionManeuverTests, FullStreamingSequenceConvergesAfterFinalDe
     EXPECT_TRUE(state.prediction_for_test().tracks.front().derived_request_pending);
 
     Game::OrbitPredictionService::Result solver_result{};
-    solver_result.track_id = state.prediction_for_test().tracks.front().key.track_id();
-    solver_result.generation_id = 9u;
-    solver_result.valid = true;
-    solver_result.solve_quality = Game::OrbitPredictionService::SolveQuality::Full;
-    solver_result.publish_stage = Game::OrbitPredictionService::PublishStage::Final;
-    solver_result.build_time_s = 0.0;
-    solver_result.trajectory_inertial = {
+    solver_result.envelope.track_id = state.prediction_for_test().tracks.front().key.track_id();
+    solver_result.envelope.generation_id = 9u;
+    solver_result.envelope.valid = true;
+    solver_result.envelope.solve_quality = Game::OrbitPredictionService::SolveQuality::Full;
+    solver_result.envelope.publish_stage = Game::OrbitPredictionService::PublishStage::Final;
+    solver_result.timing.build_time_s = 0.0;
+    solver_result.core.trajectory_inertial = {
             make_sample(0.0, 7'000'000.0),
             make_sample(20.0, 7'250'000.0),
     };
-    solver_result.trajectory_segments_inertial = {
+    solver_result.core.trajectory_segments_inertial = {
             make_segment(0.0, 20.0, 7'000'000.0, 7'250'000.0),
     };
-    solver_result.trajectory_inertial_planned = {
+    solver_result.planned.trajectory_inertial = {
             make_sample(0.0, 7'000'000.0),
             make_sample(20.0, 7'300'000.0),
     };
-    solver_result.trajectory_segments_inertial_planned = {
+    solver_result.planned.trajectory_segments_inertial = {
             make_segment(0.0, 20.0, 7'000'000.0, 7'300'000.0),
     };
 
@@ -853,7 +853,7 @@ TEST(GameplayPredictionManeuverTests, FullStreamingSequenceConvergesAfterFinalDe
     ref.mass_kg = 5.972e24;
     ref.radius_m = 6'371'000.0;
     ref.state = orbitsim::make_state(glm::dvec3(0.0), glm::dvec3(0.0));
-    solver_result.massive_bodies.push_back(ref);
+    solver_result.core.massive_bodies.push_back(ref);
 
     Game::GameplayPredictionAdapter(state).apply_completed_prediction_result(std::move(solver_result));
 

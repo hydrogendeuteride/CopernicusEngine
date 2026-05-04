@@ -38,9 +38,9 @@ namespace Game
 
     inline bool request_can_reuse_spacecraft_baseline(const OrbitPredictionService::Request &request)
     {
-        return request.kind == OrbitPredictionService::RequestKind::Spacecraft &&
-               !request.thrusting &&
-               !request.maneuver_impulses.empty();
+        return request.envelope.kind == OrbitPredictionService::RequestKind::Spacecraft &&
+               !request.options.thrusting &&
+               !request.maneuver.maneuver_impulses.empty();
     }
 
     inline std::size_t prediction_sample_budget(const OrbitPredictionService::Request &request,
@@ -55,7 +55,10 @@ namespace Game
     // ── Inline micro-helpers ──────────────────────────────────────────────────
     inline double request_end_time_s(const OrbitPredictionService::Request &request)
     {
-        return request.sim_time_s + std::max(0.0, std::isfinite(request.future_window_s) ? request.future_window_s : 0.0);
+        return request.world.sim_time_s + std::max(0.0,
+                                                   std::isfinite(request.options.future_window_s)
+                                                           ? request.options.future_window_s
+                                                           : 0.0);
     }
 
     inline bool validate_ephemeris_continuity(const orbitsim::CelestialEphemeris &ephemeris)

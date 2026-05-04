@@ -13,8 +13,8 @@ namespace
     Game::OrbitPredictionService::Request make_request(const double sim_time_s, const double horizon_s)
     {
         Game::OrbitPredictionService::Request request{};
-        request.sim_time_s = sim_time_s;
-        request.future_window_s = horizon_s;
+        request.world.sim_time_s = sim_time_s;
+        request.options.future_window_s = horizon_s;
         return request;
     }
 
@@ -108,33 +108,33 @@ TEST(OrbitPredictionPlannerTests, InsertsManeuverAndPreviewBoundaries)
 
     Game::OrbitPredictionService::Request request =
             make_request(1'000.0, 10.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
-    request.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
-    request.preview_patch.active = true;
-    request.preview_patch.anchor_state_valid = true;
-    request.preview_patch.anchor_time_s = request.sim_time_s + 2.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    request.preview_patch.visual_window_s = 0.5 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    request.preview_patch.exact_window_s = request.preview_patch.visual_window_s;
+    request.options.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
+    request.maneuver.preview_patch.active = true;
+    request.maneuver.preview_patch.anchor_state_valid = true;
+    request.maneuver.preview_patch.anchor_time_s = request.world.sim_time_s + 2.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
+    request.maneuver.preview_patch.visual_window_s = 0.5 * Game::OrbitPredictionTuning::kSecondsPerHour;
+    request.maneuver.preview_patch.exact_window_s = request.maneuver.preview_patch.visual_window_s;
 
     Game::OrbitPredictionService::ManeuverImpulse maneuver_a{};
     maneuver_a.node_id = 1;
-    maneuver_a.t_s = request.sim_time_s + 1.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
+    maneuver_a.t_s = request.world.sim_time_s + 1.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
 
     Game::OrbitPredictionService::ManeuverImpulse maneuver_b{};
     maneuver_b.node_id = 2;
-    maneuver_b.t_s = request.sim_time_s + 5.0 * Game::OrbitPredictionTuning::kSecondsPerDay;
+    maneuver_b.t_s = request.world.sim_time_s + 5.0 * Game::OrbitPredictionTuning::kSecondsPerDay;
 
-    request.maneuver_impulses.push_back(maneuver_a);
-    request.maneuver_impulses.push_back(maneuver_b);
+    request.maneuver.maneuver_impulses.push_back(maneuver_a);
+    request.maneuver.maneuver_impulses.push_back(maneuver_b);
 
     const Game::OrbitPredictionService::PredictionSolvePlan plan = Game::build_prediction_solve_plan(request);
     ASSERT_TRUE(plan.valid);
 
-    EXPECT_TRUE(has_boundary(plan, request.sim_time_s));
-    EXPECT_TRUE(has_boundary(plan, request.preview_patch.anchor_time_s));
-    EXPECT_TRUE(has_boundary(plan, request.preview_patch.anchor_time_s + request.preview_patch.exact_window_s));
-    EXPECT_TRUE(has_boundary(plan, request.preview_patch.anchor_time_s + request.preview_patch.exact_window_s * 2.0));
-    EXPECT_TRUE(has_boundary(plan, request.maneuver_impulses[0].t_s));
-    EXPECT_TRUE(has_boundary(plan, request.maneuver_impulses[1].t_s));
+    EXPECT_TRUE(has_boundary(plan, request.world.sim_time_s));
+    EXPECT_TRUE(has_boundary(plan, request.maneuver.preview_patch.anchor_time_s));
+    EXPECT_TRUE(has_boundary(plan, request.maneuver.preview_patch.anchor_time_s + request.maneuver.preview_patch.exact_window_s));
+    EXPECT_TRUE(has_boundary(plan, request.maneuver.preview_patch.anchor_time_s + request.maneuver.preview_patch.exact_window_s * 2.0));
+    EXPECT_TRUE(has_boundary(plan, request.maneuver.maneuver_impulses[0].t_s));
+    EXPECT_TRUE(has_boundary(plan, request.maneuver.maneuver_impulses[1].t_s));
 
     std::vector<Game::OrbitPredictionService::PredictionChunkPlan> exact_chunks;
     for (const Game::OrbitPredictionService::PredictionChunkPlan &chunk : plan.chunks)
@@ -168,12 +168,12 @@ TEST(OrbitPredictionPlannerTests, InsertsManeuverAndPreviewBoundaries)
         if (has_preview_chunk_flag)
         {
             EXPECT_EQ(chunk.profile_id, Profile::Exact);
-            EXPECT_GE(chunk.t0_s + kEpsilonS, request.preview_patch.anchor_time_s);
+            EXPECT_GE(chunk.t0_s + kEpsilonS, request.maneuver.preview_patch.anchor_time_s);
             EXPECT_LE(chunk.t1_s,
-                      request.preview_patch.anchor_time_s + (2.0 * request.preview_patch.exact_window_s) + kEpsilonS);
+                      request.maneuver.preview_patch.anchor_time_s + (2.0 * request.maneuver.preview_patch.exact_window_s) + kEpsilonS);
         }
 
-        if (std::abs(chunk.t1_s - request.preview_patch.anchor_time_s) <= kEpsilonS)
+        if (std::abs(chunk.t1_s - request.maneuver.preview_patch.anchor_time_s) <= kEpsilonS)
         {
             EXPECT_FALSE(has_preview_chunk_flag);
             EXPECT_FALSE(has_preview_anchor_flag);
@@ -236,17 +236,17 @@ TEST(OrbitPredictionPlannerTests, PreviewAndManeuverChunksTightenProfiles)
 
     Game::OrbitPredictionService::Request request =
             make_request(500.0, 40.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
-    request.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
-    request.preview_patch.active = true;
-    request.preview_patch.anchor_state_valid = true;
-    request.preview_patch.anchor_time_s = request.sim_time_s + 2.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    request.preview_patch.visual_window_s = 0.5 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    request.preview_patch.exact_window_s = request.preview_patch.visual_window_s;
+    request.options.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
+    request.maneuver.preview_patch.active = true;
+    request.maneuver.preview_patch.anchor_state_valid = true;
+    request.maneuver.preview_patch.anchor_time_s = request.world.sim_time_s + 2.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
+    request.maneuver.preview_patch.visual_window_s = 0.5 * Game::OrbitPredictionTuning::kSecondsPerHour;
+    request.maneuver.preview_patch.exact_window_s = request.maneuver.preview_patch.visual_window_s;
 
     Game::OrbitPredictionService::ManeuverImpulse maneuver{};
     maneuver.node_id = 7;
-    maneuver.t_s = request.sim_time_s + 5.0 * Game::OrbitPredictionTuning::kSecondsPerDay;
-    request.maneuver_impulses.push_back(maneuver);
+    maneuver.t_s = request.world.sim_time_s + 5.0 * Game::OrbitPredictionTuning::kSecondsPerDay;
+    request.maneuver.maneuver_impulses.push_back(maneuver);
 
     const Game::OrbitPredictionService::PredictionSolvePlan plan = Game::build_prediction_solve_plan(request);
     ASSERT_TRUE(plan.valid);
@@ -279,13 +279,13 @@ TEST(OrbitPredictionPlannerTests, ActivityClassifierKeepsCalmChunkStable)
 
     Game::OrbitPredictionService::Request request =
             make_request(0.0, 20.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
-    request.preferred_primary_body_id = 1;
+    request.subject.preferred_primary_body_id = 1;
 
     orbitsim::MassiveBody primary{};
     primary.id = 1;
     primary.mass_kg = 5.972e24;
     primary.state = orbitsim::make_state(orbitsim::Vec3(0.0), orbitsim::Vec3(0.0));
-    request.massive_bodies.push_back(primary);
+    request.world.massive_bodies.push_back(primary);
 
     const Game::OrbitPredictionService::PredictionChunkPlan chunk{
             .chunk_id = 0u,
@@ -321,19 +321,19 @@ TEST(OrbitPredictionPlannerTests, ActivityClassifierPromotesAndSplitsHighCurvatu
 
     Game::OrbitPredictionService::Request request =
             make_request(0.0, 20.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
-    request.preferred_primary_body_id = 1;
+    request.subject.preferred_primary_body_id = 1;
 
     orbitsim::MassiveBody primary_a{};
     primary_a.id = 1;
     primary_a.mass_kg = 5.0e24;
     primary_a.state = orbitsim::make_state(orbitsim::Vec3(-10'000'000.0, 0.0, 0.0), orbitsim::Vec3(0.0));
-    request.massive_bodies.push_back(primary_a);
+    request.world.massive_bodies.push_back(primary_a);
 
     orbitsim::MassiveBody primary_b{};
     primary_b.id = 2;
     primary_b.mass_kg = 5.0e24;
     primary_b.state = orbitsim::make_state(orbitsim::Vec3(10'000'000.0, 0.0, 0.0), orbitsim::Vec3(0.0));
-    request.massive_bodies.push_back(primary_b);
+    request.world.massive_bodies.push_back(primary_b);
 
     const Game::OrbitPredictionService::PredictionChunkPlan chunk{
             .chunk_id = 0u,
@@ -369,19 +369,19 @@ TEST(OrbitPredictionPlannerTests, ActivityClassifierSplitsNearAndExactAtDominant
 
     Game::OrbitPredictionService::Request request =
             make_request(0.0, 20.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
-    request.preferred_primary_body_id = 1;
+    request.subject.preferred_primary_body_id = 1;
 
     orbitsim::MassiveBody primary_a{};
     primary_a.id = 1;
     primary_a.mass_kg = 5.0e24;
     primary_a.state = orbitsim::make_state(orbitsim::Vec3(-100'000'000.0, 0.0, 0.0), orbitsim::Vec3(0.0));
-    request.massive_bodies.push_back(primary_a);
+    request.world.massive_bodies.push_back(primary_a);
 
     orbitsim::MassiveBody primary_b{};
     primary_b.id = 2;
     primary_b.mass_kg = 5.0e24;
     primary_b.state = orbitsim::make_state(orbitsim::Vec3(100'000'000.0, 0.0, 0.0), orbitsim::Vec3(0.0));
-    request.massive_bodies.push_back(primary_b);
+    request.world.massive_bodies.push_back(primary_b);
 
     const std::vector<orbitsim::TrajectorySegment> baseline{
             make_activity_segment(0.0,
