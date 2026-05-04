@@ -27,9 +27,32 @@ namespace Game
         using namespace ManeuverUtil;
     } // namespace
 
-    void ManeuverUiController::update_ui_config(GameplayState &state, GameStateContext &ctx)
+    ManeuverUiControllerContext GameplayState::build_maneuver_ui_context(GameStateContext &ctx)
     {
-        auto &_maneuver = state._maneuver;
+        return ManeuverUiControllerContext{
+            .ctx = ctx,
+            .maneuver = _maneuver,
+            .prediction = *_prediction,
+            .show_nodes_panel = _show_maneuver_nodes_panel,
+            .debug_draw_enabled = _debug_draw_enabled,
+            .prediction_access = build_prediction_access(),
+            .maneuver_prediction = build_maneuver_prediction_context(),
+            .apply_maneuver_command = [this](const ManeuverCommand &command) {
+                return apply_maneuver_command(command);
+            },
+            .refresh_maneuver_node_runtime_cache = [this](GameStateContext &refresh_ctx) {
+                refresh_maneuver_node_runtime_cache(refresh_ctx);
+            },
+            .current_sim_time_s = [this]() {
+                return current_sim_time_s();
+            },
+        };
+    }
+
+    void ManeuverUiController::update_ui_config(Context &context)
+    {
+        GameStateContext &ctx = context.ctx;
+        auto &_maneuver = context.maneuver;
 
         if (!ctx.renderer)
         {
@@ -50,10 +73,11 @@ namespace Game
         _maneuver.settings().ui_config.effective_scale = std::clamp(_maneuver.settings().ui_config.effective_scale, 0.5f, 4.0f);
     }
 
-    void ManeuverUiController::open_nodes_panel_from_orbit_pick_release(GameplayState &state, GameStateContext &ctx)
+    void ManeuverUiController::open_nodes_panel_from_orbit_pick_release(Context &context)
     {
-        auto &_maneuver = state._maneuver;
-        auto &_show_maneuver_nodes_panel = state._show_maneuver_nodes_panel;
+        GameStateContext &ctx = context.ctx;
+        auto &_maneuver = context.maneuver;
+        bool &_show_maneuver_nodes_panel = context.show_nodes_panel;
 
         const auto is_maneuver_orbit_pick = [&](const PickingSystem::PickInfo &pick) -> bool {
             const bool allow_base_pick = _maneuver.plan().nodes.empty();
@@ -73,7 +97,7 @@ namespace Game
             ManeuverGizmoViewContext view{};
             glm::vec2 pick_screen{0.0f, 0.0f};
             double pick_depth_m = 0.0;
-            if (!build_gizmo_view_context(state, ctx, view) ||
+            if (!build_gizmo_view_context(context, view) ||
                 !Gizmo::project_maneuver_gizmo_point(view, pick.worldPos, pick_screen, pick_depth_m))
             {
                 return false;
@@ -103,7 +127,7 @@ namespace Game
         }
     }
 
-    void ManeuverUiController::draw_gizmo_markers(const GameplayState &state,
+    void ManeuverUiController::draw_gizmo_markers(const Context &context,
                                                   ImDrawList *draw_list,
                                                   const std::vector<ManeuverHubMarker> &hubs,
                                                   const std::vector<ManeuverAxisMarker> &handles,
@@ -112,7 +136,7 @@ namespace Game
                                                   const float hub_hit_px,
                                                   const float axis_hit_px)
     {
-        const auto &_maneuver = state._maneuver;
+        const auto &_maneuver = context.maneuver;
 
         // Visual state is entirely screen-space here; the world-space solve already happened during marker generation.
         if (!draw_list)
@@ -177,11 +201,11 @@ namespace Game
         }
     }
 
-    void ManeuverUiController::draw_gizmo_hover_tooltip(const GameplayState &state,
+    void ManeuverUiController::draw_gizmo_hover_tooltip(const Context &context,
                                                         const std::vector<ManeuverAxisMarker> &handles,
                                                         const int hovered_handle_idx)
     {
-        const auto &_maneuver = state._maneuver;
+        const auto &_maneuver = context.maneuver;
 
         if (hovered_handle_idx < 0 || hovered_handle_idx >= static_cast<int>(handles.size()))
         {
@@ -209,11 +233,12 @@ namespace Game
         }
     }
 
-    void ManeuverUiController::draw_imgui_gizmo(GameplayState &state, GameStateContext &ctx)
+    void ManeuverUiController::draw_imgui_gizmo(Context &context)
     {
-        auto &_maneuver = state._maneuver;
-        auto &_show_maneuver_nodes_panel = state._show_maneuver_nodes_panel;
-        auto &_prediction = state._prediction;
+        GameStateContext &ctx = context.ctx;
+        auto &_maneuver = context.maneuver;
+        bool &_show_maneuver_nodes_panel = context.show_nodes_panel;
+        auto &_prediction = context.prediction;
         auto build_gizmo_markers = [&](const ManeuverGizmoViewContext &view,
                                        const float overlay_size_px,
                                        std::vector<ManeuverHubMarker> &out_hubs,
@@ -227,13 +252,13 @@ namespace Game
                                                    out_handles);
         };
         auto apply_maneuver_command = [&](const ManeuverCommand &command) {
-            return state.apply_maneuver_command(command);
+            return context.apply_maneuver_command(command);
         };
         auto refresh_maneuver_node_runtime_cache = [&](GameStateContext &refresh_ctx) {
-            state.refresh_maneuver_node_runtime_cache(refresh_ctx);
+            context.refresh_maneuver_node_runtime_cache(refresh_ctx);
         };
         auto current_sim_time_s = [&]() {
-            return state.current_sim_time_s();
+            return context.current_sim_time_s();
         };
 
         // Per-frame gizmo loop: reuse the runtime cache refreshed during on_update(),
@@ -248,10 +273,10 @@ namespace Game
             return;
         }
 
-        update_ui_config(state, ctx);
+        update_ui_config(context);
 
         ManeuverGizmoViewContext view{};
-        if (!build_gizmo_view_context(state, ctx, view))
+        if (!build_gizmo_view_context(context, view))
         {
             return;
         }
@@ -301,7 +326,7 @@ namespace Game
                 _show_maneuver_nodes_panel = true;
                 (void) apply_maneuver_command(ManeuverCommand::select_node(handles[hovered_handle_idx].node_id));
                 refresh_after_interaction =
-                        begin_axis_drag(state, ctx, handles[hovered_handle_idx].node_id, handles[hovered_handle_idx].axis);
+                        begin_axis_drag(context, handles[hovered_handle_idx].node_id, handles[hovered_handle_idx].axis);
             }
             else if (hovered_hub_idx >= 0)
             {
@@ -316,26 +341,26 @@ namespace Game
             ManeuverNode *node = _maneuver.plan().find_node(_maneuver.gizmo_interaction().node_id);
             if (!node || !node->gizmo_valid)
             {
-                if (PredictionTrackState *track = GameplayPredictionAdapter(state).active_prediction_track())
+                if (PredictionTrackState *track = GameplayPredictionAdapter(context.prediction_access).active_prediction_track())
                 {
                     PredictionDragDebugTelemetry &debug = track->drag_debug;
                     debug.drag_active = false;
                     debug.last_drag_end_tp = PredictionDragDebugTelemetry::Clock::now();
-                    _prediction->clear_unapplied_maneuver_drag_preview(*track);
+                    _prediction.clear_unapplied_maneuver_drag_preview(*track);
                 }
                 _maneuver.clear_gizmo_interaction();
             }
             else if (!ctx.input->mouse_down(MouseButton::Left))
             {
                 const bool changed = _maneuver.gizmo_interaction().applied_delta;
-                if (PredictionTrackState *track = GameplayPredictionAdapter(state).active_prediction_track())
+                if (PredictionTrackState *track = GameplayPredictionAdapter(context.prediction_access).active_prediction_track())
                 {
                     PredictionDragDebugTelemetry &debug = track->drag_debug;
                     debug.drag_active = false;
                     debug.last_drag_end_tp = PredictionDragDebugTelemetry::Clock::now();
                     if (!changed)
                     {
-                        _prediction->clear_unapplied_maneuver_drag_preview(*track);
+                        _prediction.clear_unapplied_maneuver_drag_preview(*track);
                     }
                 }
                 if (hovered_handle_idx >= 0)
@@ -352,9 +377,9 @@ namespace Game
 
                 if (changed)
                 {
-                    if (PredictionTrackState *track = GameplayPredictionAdapter(state).active_prediction_track())
+                    if (PredictionTrackState *track = GameplayPredictionAdapter(context.prediction_access).active_prediction_track())
                     {
-                        _prediction->await_maneuver_preview_full_refine(*track, current_sim_time_s());
+                        _prediction.await_maneuver_preview_full_refine(*track, current_sim_time_s());
                     }
                     (void) apply_maneuver_command(ManeuverCommand::mark_plan_dirty());
                 }
@@ -362,7 +387,7 @@ namespace Game
             }
             else
             {
-                apply_axis_drag(state, ctx, *node, mouse_pos);
+                apply_axis_drag(context, *node, mouse_pos);
                 refresh_after_interaction = true;
             }
         }
@@ -382,18 +407,19 @@ namespace Game
             return;
         }
 
-        draw_gizmo_markers(state, dl, hubs, handles, hovered_hub_idx, hovered_handle_idx, hub_hit_px, axis_hit_px);
+        draw_gizmo_markers(context, dl, hubs, handles, hovered_hub_idx, hovered_handle_idx, hub_hit_px, axis_hit_px);
 
         if (hovered_handle_idx >= 0 && _maneuver.gizmo_interaction().state != ManeuverGizmoInteraction::State::DragAxis)
         {
-            draw_gizmo_hover_tooltip(state, handles, hovered_handle_idx);
+            draw_gizmo_hover_tooltip(context, handles, hovered_handle_idx);
         }
     }
 
-    void ManeuverUiController::emit_node_debug_overlay(GameplayState &state, GameStateContext &ctx)
+    void ManeuverUiController::emit_node_debug_overlay(Context &context)
     {
-        auto &_maneuver = state._maneuver;
-        const bool _debug_draw_enabled = state._debug_draw_enabled;
+        GameStateContext &ctx = context.ctx;
+        auto &_maneuver = context.maneuver;
+        const bool _debug_draw_enabled = context.debug_draw_enabled;
 
         // World-space debug overlay mirrors the screen-space gizmo state for inspection and tuning.
         if (!_maneuver.settings().nodes_enabled || !_maneuver.settings().nodes_debug_draw)

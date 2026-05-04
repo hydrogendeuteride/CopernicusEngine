@@ -13,7 +13,8 @@ namespace Game
 {
     void GameplayState::refresh_maneuver_node_runtime_cache(GameStateContext &ctx)
     {
-        GameplayPredictionAdapter prediction(*this);
+        GameplayPredictionAdapter prediction(build_prediction_access());
+        ManeuverPredictionBridge::Context maneuver_prediction = build_maneuver_prediction_context();
         const PredictionTrackState *player_track = prediction.player_prediction_track();
         const bool interaction_idle =
                 _maneuver.gizmo_interaction().state != ManeuverGizmoInteraction::State::DragAxis;
@@ -68,8 +69,8 @@ namespace Game
             if (std::isfinite(now_s) && t1 > t0)
             {
                 display_time_s = std::clamp(now_s, t0, t1);
-                align_delta = ManeuverPredictionBridge::compute_align_delta(*this, ctx, *active_cache, traj_base);
-                frame_context = PredictionFrameContextBuilder(GameplayPredictionAdapter::build_context(*this))
+                align_delta = ManeuverPredictionBridge::compute_align_delta(maneuver_prediction, ctx, *active_cache, traj_base);
+                frame_context = PredictionFrameContextBuilder(build_prediction_context())
                                         .build_prediction_frame_resolver_context();
             }
             else
@@ -93,8 +94,8 @@ namespace Game
                 .align_delta = align_delta,
                 .active_preview_anchor_node_id = _maneuver.active_preview_anchor_node_id(),
                 .hold_cached_release_state = hold_cached_release_state,
-                .resolve_primary_body_id = [this](const ManeuverNode &node, const double query_time_s) {
-                    return ManeuverPredictionBridge::resolve_node_primary_body_id(*this, node, query_time_s);
+                .resolve_primary_body_id = [maneuver_prediction](const ManeuverNode &node, const double query_time_s) {
+                    return ManeuverPredictionBridge::resolve_node_primary_body_id(maneuver_prediction, node, query_time_s);
                 },
         };
         (void) ManeuverRuntimeCacheBuilder::rebuild(input);

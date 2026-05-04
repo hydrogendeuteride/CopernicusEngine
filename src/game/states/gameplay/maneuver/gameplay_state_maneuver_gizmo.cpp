@@ -81,10 +81,10 @@ namespace Game
         }
     } // namespace
 
-    bool ManeuverUiController::build_gizmo_view_context(const GameplayState &state,
-                                                        const GameStateContext &ctx,
+    bool ManeuverUiController::build_gizmo_view_context(const Context &context,
                                                         ManeuverGizmoViewContext &out_view)
     {
+        GameStateContext &ctx = context.ctx;
         // Gather the camera and render-space transforms needed to project world-space node markers into ImGui space.
         out_view = {};
 
@@ -137,14 +137,15 @@ namespace Game
             return false;
         }
 
-        const double analysis_time_s = state.current_sim_time_s();
-        const GameplayPredictionContext prediction_context = GameplayPredictionAdapter::build_context(state);
+        const double analysis_time_s = context.current_sim_time_s();
+        GameplayPredictionAdapter prediction(context.prediction_access);
+        const GameplayPredictionContext prediction_context = prediction.context();
         PredictionFrameContextBuilder prediction_frame(prediction_context);
         const PredictionTrackState *player_track = prediction_frame.player_prediction_track();
         const OrbitPredictionCache *player_cache = prediction_frame.effective_prediction_cache(player_track);
         const orbitsim::BodyId occluder_body_id =
-                (state._prediction->state().analysis_selection.spec.mode == PredictionAnalysisMode::FixedBodyBCI)
-                    ? state._prediction->state().analysis_selection.spec.fixed_body_id
+                (context.prediction.state().analysis_selection.spec.mode == PredictionAnalysisMode::FixedBodyBCI)
+                    ? context.prediction.state().analysis_selection.spec.fixed_body_id
                     : ((player_track && player_cache)
                                ? prediction_frame.resolve_prediction_analysis_body_id(*player_cache, player_track->key, analysis_time_s)
                                : orbitsim::kInvalidBodyId);
@@ -160,12 +161,14 @@ namespace Game
         return true;
     }
 
-    bool ManeuverUiController::begin_axis_drag(GameplayState &state,
-                                               GameStateContext &ctx,
+    bool ManeuverUiController::begin_axis_drag(Context &context,
                                                const int node_id,
                                                const ManeuverHandleAxis axis)
     {
-        ManeuverNode *node = state._maneuver.plan().find_node(node_id);
+        GameStateContext &ctx = context.ctx;
+        ManeuverSystem &maneuver = context.maneuver;
+        PredictionSystem &prediction = context.prediction;
+        ManeuverNode *node = maneuver.plan().find_node(node_id);
         if (!node || !node->gizmo_valid || axis == ManeuverHandleAxis::None || axis == ManeuverHandleAxis::Hub)
         {
             return false;
@@ -175,7 +178,7 @@ namespace Game
             return false;
         }
 
-        state._maneuver.cancel_edit_preview();
+        maneuver.cancel_edit_preview();
 
         const ImVec2 mouse_pos = ImGui::GetIO().MousePos;
         const glm::vec2 mouse_pos_window(mouse_pos.x, mouse_pos.y);
@@ -187,17 +190,17 @@ namespace Game
 
         const float alpha_f = std::clamp(ctx.interpolation_alpha(), 0.0f, 1.0f);
         const double interp_dt_s =
-                (state._orbital_physics.last_sim_step_dt_s() > 0.0)
-                    ? state._orbital_physics.last_sim_step_dt_s()
+                (context.maneuver_prediction.orbital_physics.last_sim_step_dt_s() > 0.0)
+                    ? context.maneuver_prediction.orbital_physics.last_sim_step_dt_s()
                     : static_cast<double>(ctx.fixed_delta_time());
         double drag_display_reference_time_s =
-                state._orbit.scenario_owner() ? state._orbit.scenario_owner()->sim.time_s() : 0.0;
+                context.maneuver_prediction.orbit.scenario_owner() ? context.maneuver_prediction.orbit.scenario_owner()->sim.time_s() : 0.0;
         if (std::isfinite(interp_dt_s) && interp_dt_s > 0.0)
         {
             drag_display_reference_time_s -= (1.0 - static_cast<double>(alpha_f)) * interp_dt_s;
         }
-        if (!ManeuverGizmoController::begin_axis_drag(state._maneuver.plan(),
-                                                      state._maneuver.gizmo_interaction(),
+        if (!ManeuverGizmoController::begin_axis_drag(maneuver.plan(),
+                                                      maneuver.gizmo_interaction(),
                                                       node_id,
                                                       axis,
                                                       ray,
@@ -206,10 +209,10 @@ namespace Game
         {
             return false;
         }
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = prediction.active_track())
         {
-            PredictionWindowContextBuilder(GameplayPredictionAdapter::build_context(state))
-                    .refresh_preview_anchor(*track, state.current_sim_time_s(), true);
+            PredictionWindowContextBuilder(context.prediction_access.build_context())
+                    .refresh_preview_anchor(*track, context.current_sim_time_s(), true);
 
             PredictionDragDebugTelemetry &debug = track->drag_debug;
             const auto now_tp = PredictionDragDebugTelemetry::Clock::now();
@@ -223,11 +226,13 @@ namespace Game
         return true;
     }
 
-    void ManeuverUiController::apply_axis_drag(GameplayState &state,
-                                               GameStateContext &ctx,
+    void ManeuverUiController::apply_axis_drag(Context &context,
                                                ManeuverNode &node,
                                                const glm::vec2 &mouse_pos_window)
     {
+        GameStateContext &ctx = context.ctx;
+        ManeuverSystem &maneuver = context.maneuver;
+        PredictionSystem &prediction = context.prediction;
         const auto drag_apply_start_tp = PredictionDragDebugTelemetry::Clock::now();
 
         ManeuverGizmoController::CameraRay ray{};
@@ -239,18 +244,18 @@ namespace Game
         const InputModifiers mods = ctx.input ? ctx.input->modifiers() : InputModifiers{};
         const ManeuverGizmoController::DragUpdateResult update =
                 ManeuverGizmoController::update_axis_drag(
-                        state._maneuver.gizmo_interaction(),
+                        maneuver.gizmo_interaction(),
                         node,
                         mouse_pos_window,
                         ray,
                         std::max(ImGui::GetIO().MouseDragThreshold,
-                                 state._maneuver.settings().ui_config.scaled(2.0f)),
-                        static_cast<double>(state._maneuver.settings().gizmo_style.drag_sensitivity_mps_per_m),
+                                 maneuver.settings().ui_config.scaled(2.0f)),
+                        static_cast<double>(maneuver.settings().gizmo_style.drag_sensitivity_mps_per_m),
                         mods.ctrl,
                         mods.shift);
         if (update.clear_interaction)
         {
-            state._maneuver.clear_gizmo_interaction();
+            maneuver.clear_gizmo_interaction();
             return;
         }
         if (!update.sampled)
@@ -260,18 +265,18 @@ namespace Game
 
         if (update.changed)
         {
-            (void) state.apply_maneuver_command(ManeuverCommand::set_node_dv(node.id, update.dv_rtn_mps, true));
+            (void) context.apply_maneuver_command(ManeuverCommand::set_node_dv(node.id, update.dv_rtn_mps, true));
             node.total_dv_mps = ManeuverUtil::safe_length(node.dv_rtn_mps);
-            state._maneuver.gizmo_interaction().applied_delta = true;
+            maneuver.gizmo_interaction().applied_delta = true;
 
-            if (PredictionTrackState *track = state._prediction->active_track())
+            if (PredictionTrackState *track = prediction.active_track())
             {
-                state._prediction->mark_maneuver_preview_dirty(*track);
-                state._prediction->sync_visible_dirty_flag(state._prediction->collect_visible_subjects());
+                prediction.mark_maneuver_preview_dirty(*track);
+                prediction.sync_visible_dirty_flag(prediction.collect_visible_subjects());
             }
         }
 
-        if (PredictionTrackState *track = state._prediction->active_track())
+        if (PredictionTrackState *track = prediction.active_track())
         {
             PredictionDragDebugTelemetry &debug = track->drag_debug;
             const auto drag_apply_end_tp = PredictionDragDebugTelemetry::Clock::now();

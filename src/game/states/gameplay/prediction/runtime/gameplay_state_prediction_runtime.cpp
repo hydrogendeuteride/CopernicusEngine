@@ -11,13 +11,13 @@ namespace Game
     {
         // Collapse only visible-track rebuild demand into one cheap UI-facing flag.
         const std::vector<PredictionSubjectKey> visible_subjects = collect_visible_prediction_subjects();
-        _state._prediction->sync_visible_dirty_flag(visible_subjects);
+        _access.prediction.sync_visible_dirty_flag(visible_subjects);
     }
 
     void GameplayState::mark_prediction_dirty()
     {
         // Force only the active/overlay-visible tracks to rebuild on the next prediction update.
-        GameplayPredictionAdapter prediction(*this);
+        GameplayPredictionAdapter prediction(build_prediction_access());
         const std::vector<PredictionSubjectKey> visible_subjects = prediction.collect_visible_prediction_subjects();
         _prediction->mark_visible_tracks_dirty(visible_subjects);
         prediction.sync_prediction_dirty_flag();
@@ -25,20 +25,20 @@ namespace Game
 
     void GameplayPredictionAdapter::mark_maneuver_plan_dirty()
     {
-        const uint64_t revision = _state._maneuver.increment_revision();
+        const uint64_t revision = _access.maneuver.increment_revision();
         Logger::debug("Maneuver plan dirty: revision={} selected_node={} node_count={}",
                       revision,
-                      _state._maneuver.plan().selected_node_id,
-                      _state._maneuver.plan().nodes.size());
+                      _access.maneuver.plan().selected_node_id,
+                      _access.maneuver.plan().nodes.size());
 
-        _state._prediction->invalidate_maneuver_plan_revision(revision);
+        _access.prediction.invalidate_maneuver_plan_revision(revision);
 
-        _state.mark_prediction_dirty();
+        _access.mark_prediction_dirty();
     }
 
     void GameplayPredictionAdapter::clear_maneuver_prediction_artifacts()
     {
-        _state._prediction->clear_maneuver_prediction_artifacts();
+        _access.prediction.clear_maneuver_prediction_artifacts();
     }
 
     void GameplayState::clear_prediction_runtime()
@@ -48,7 +48,7 @@ namespace Game
 
     void GameplayPredictionAdapter::clear_visible_prediction_runtime(const std::vector<PredictionSubjectKey> &visible_subjects)
     {
-        _state._prediction->clear_visible_runtime(visible_subjects);
+        _access.prediction.clear_visible_runtime(visible_subjects);
     }
 
 #if defined(VULKAN_ENGINE_GAMEPLAY_TEST_ACCESS)
@@ -126,12 +126,12 @@ namespace Game
                                                                     const bool thrusting,
                                                                     const bool with_maneuvers) const
     {
-        return _state._prediction->should_rebuild_track(PredictionHostContextBuilder(context()).build(),
-                                                        track,
-                                                        now_s,
-                                                        fixed_dt,
-                                                        thrusting,
-                                                        with_maneuvers);
+        return _access.prediction.should_rebuild_track(PredictionHostContextBuilder(context()).build(),
+                                                       track,
+                                                       now_s,
+                                                       fixed_dt,
+                                                       thrusting,
+                                                       with_maneuvers);
     }
 
     void GameplayState::update_prediction(GameStateContext &ctx, float fixed_dt)
@@ -139,10 +139,10 @@ namespace Game
         (void) ctx;
 
         // Keep frame metadata aligned before the prediction subsystem decides what to rebuild.
-        GameplayPredictionAdapter prediction(*this);
+        GameplayPredictionAdapter prediction(build_prediction_access());
         prediction.rebuild_prediction_frame_options();
         prediction.rebuild_prediction_analysis_options();
-        _prediction->update(PredictionHostContextBuilder(GameplayPredictionAdapter::build_context(*this)).build(&ctx),
+        _prediction->update(PredictionHostContextBuilder(build_prediction_context()).build(&ctx),
                             fixed_dt);
     }
 } // namespace Game

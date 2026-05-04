@@ -179,7 +179,8 @@ namespace Game
 
         // Draw orbit debug using the same interpolation alpha as rendering to avoid visual offset.
         draw_prediction(ctx);
-        ManeuverUiController::emit_node_debug_overlay(*this, ctx);
+        ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
+        ManeuverUiController::emit_node_debug_overlay(maneuver_ui);
     }
 
     void GameplayState::on_fixed_update(GameStateContext &ctx, float fixed_dt)

@@ -28,13 +28,14 @@ namespace Physics
 
 namespace Game
 {
-    class GameplayPredictionAdapter;
-    class ManeuverPredictionBridge;
-    class ManeuverUiController;
     class PredictionSystem;
+    struct GameplayPredictionAccess;
+    struct GameplayPredictionContext;
     struct GameplayPredictionState;
     struct ManeuverCommand;
     struct ManeuverCommandResult;
+    struct ManeuverPredictionBridgeContext;
+    struct ManeuverUiControllerContext;
 
     // ============================================================================
     // GameplayState: Main gameplay — orbital mechanics, combat, ship control
@@ -51,10 +52,6 @@ namespace Game
 
     class GameplayState : public IGameState
     {
-        friend class GameplayPredictionAdapter;
-        friend class ManeuverPredictionBridge;
-        friend class ManeuverUiController;
-
     public:
         GameplayState();
         explicit GameplayState(ScenarioConfig scenario_config);
@@ -104,12 +101,16 @@ namespace Game
         void sync_player_collision_callbacks();
 
         // Prediction entry points
+        GameplayPredictionContext build_prediction_context();
+        GameplayPredictionAccess build_prediction_access();
         void update_prediction(GameStateContext &ctx, float fixed_dt);
         void draw_prediction(GameStateContext &ctx);
         void mark_prediction_dirty();
         void clear_prediction_runtime();
 
         // Maneuver adapters
+        ManeuverPredictionBridgeContext build_maneuver_prediction_context();
+        ManeuverUiControllerContext build_maneuver_ui_context(GameStateContext &ctx);
         void draw_orbit_drag_debug_window(GameStateContext &ctx);
         void refresh_maneuver_node_runtime_cache(GameStateContext &ctx);
         void update_maneuver_nodes_time_warp(GameStateContext &ctx, float fixed_dt);
