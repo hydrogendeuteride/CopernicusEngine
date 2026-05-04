@@ -1,5 +1,6 @@
 #include "game/states/gameplay/prediction/prediction_system.h"
 
+#include "game/orbit/orbit_prediction_service.h"
 #include "game/states/gameplay/gameplay_state.h"
 #include "game/states/gameplay/orbit_helpers.h"
 #include "game/states/gameplay/prediction/runtime/prediction_invalidation_controller.h"
@@ -65,7 +66,7 @@ namespace Game
 
     void PredictionSystem::reset_solver_service()
     {
-        _state.service.reset();
+        _state.solver_service().reset();
     }
 
     void PredictionSystem::reset_derived_service()
@@ -311,7 +312,7 @@ namespace Game
     void PredictionSystem::invalidate_maneuver_plan_revision(const uint64_t maneuver_plan_revision)
     {
         PredictionInvalidationController::invalidate_maneuver_plan_revision(_state.tracks,
-                                                                           _state.service,
+                                                                           _state.solver_service(),
                                                                            _state.derived_service,
                                                                            maneuver_plan_revision);
     }
@@ -412,7 +413,7 @@ namespace Game
     }
 
     bool PredictionSystem::apply_completed_solver_result(const PredictionHostContext &host,
-                                                         OrbitPredictionService::Result result)
+                                                         OrbitPredictionResult result)
     {
         return PredictionRuntimeController::apply_completed_solver_result(_state,
                                                                          build_runtime_context(host),

@@ -15,26 +15,26 @@ namespace Game
 
         bool request_is_full_streaming_stage(const OrbitPredictionDerivedService::Request &request)
         {
-            return request.solver_result.envelope.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+            return request.solver_result.envelope.publish_stage == OrbitPredictionPublishStage::FullStreaming;
         }
 
         bool request_is_preview_streaming_stage(const OrbitPredictionDerivedService::Request &request)
         {
-            return request.solver_result.envelope.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+            return request.solver_result.envelope.publish_stage == OrbitPredictionPublishStage::PreviewStreaming;
         }
 
-        uint8_t derived_request_track_priority_rank(const OrbitPredictionService::RequestPriority priority)
+        uint8_t derived_request_track_priority_rank(const OrbitPredictionRequestPriority priority)
         {
             switch (priority)
             {
-                case OrbitPredictionService::RequestPriority::ActiveInteractiveTrack:
-                case OrbitPredictionService::RequestPriority::ActiveTrack:
+                case OrbitPredictionRequestPriority::ActiveInteractiveTrack:
+                case OrbitPredictionRequestPriority::ActiveTrack:
                     return 3u;
-                case OrbitPredictionService::RequestPriority::Overlay:
+                case OrbitPredictionRequestPriority::Overlay:
                     return 2u;
-                case OrbitPredictionService::RequestPriority::BackgroundOrbiter:
+                case OrbitPredictionRequestPriority::BackgroundOrbiter:
                     return 1u;
-                case OrbitPredictionService::RequestPriority::BackgroundCelestial:
+                case OrbitPredictionRequestPriority::BackgroundCelestial:
                     return 0u;
             }
             return 0u;
@@ -42,8 +42,8 @@ namespace Game
 
         bool derived_result_is_streaming(const OrbitPredictionDerivedService::Result &result)
         {
-            return result.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming ||
-                   result.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+            return result.publish_stage == OrbitPredictionPublishStage::PreviewStreaming ||
+                   result.publish_stage == OrbitPredictionPublishStage::FullStreaming;
         }
 
         bool should_drop_derived_completed_result_for_incoming(
@@ -65,8 +65,8 @@ namespace Game
                 return true;
             }
 
-            return incoming.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming &&
-                   queued.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+            return incoming.publish_stage == OrbitPredictionPublishStage::PreviewStreaming &&
+                   queued.publish_stage == OrbitPredictionPublishStage::PreviewStreaming;
         }
 
         void coalesce_derived_completed_results(
@@ -120,7 +120,7 @@ namespace Game
                                                        queued.generation_id < generation_id &&
                                                        !(preserve_fast_preview &&
                                                          queued.solve_quality ==
-                                                                 OrbitPredictionService::SolveQuality::FastPreview);
+                                                                 OrbitPredictionSolveQuality::FastPreview);
                                            }),
                             completed.end());
         }
@@ -178,7 +178,7 @@ namespace Game
         void populate_prediction_cache_identity(OrbitPredictionCache &cache,
                                                 const uint64_t generation_id,
                                                 const OrbitPredictionDerivedService::Request &request,
-                                                const OrbitPredictionService::Result &solver)
+                                                const OrbitPredictionResult &solver)
         {
             cache.identity.generation_id = generation_id;
             cache.identity.maneuver_plan_revision = request.maneuver_plan_revision;
@@ -190,7 +190,7 @@ namespace Game
         }
 
         void populate_prediction_cache_solver(OrbitPredictionCache &cache,
-                                              OrbitPredictionService::Result &solver)
+                                              OrbitPredictionResult &solver)
         {
             if (solver.has_shared_core_data())
             {
@@ -198,23 +198,23 @@ namespace Game
             }
             else
             {
-                cache.solver.shared_ephemeris = std::move(solver.core.shared_ephemeris);
-                cache.solver.massive_bodies = solver.take_massive_bodies();
-                cache.solver.trajectory_inertial = solver.take_trajectory_inertial();
-                cache.solver.trajectory_segments_inertial = solver.take_trajectory_segments_inertial();
+                cache.solver.core.shared_ephemeris = std::move(solver.core.shared_ephemeris);
+                cache.solver.core.massive_bodies = solver.take_massive_bodies();
+                cache.solver.base.trajectory_inertial = solver.take_trajectory_inertial();
+                cache.solver.base.trajectory_segments_inertial = solver.take_trajectory_segments_inertial();
             }
-            cache.solver.trajectory_inertial_planned = std::move(solver.planned.trajectory_inertial);
-            cache.solver.trajectory_segments_inertial_planned = std::move(solver.planned.trajectory_segments_inertial);
-            cache.solver.maneuver_previews = std::move(solver.planned.maneuver_previews);
+            cache.solver.planned.trajectory_inertial = std::move(solver.planned.trajectory_inertial);
+            cache.solver.planned.trajectory_segments_inertial = std::move(solver.planned.trajectory_segments_inertial);
+            cache.solver.planned.maneuver_previews = std::move(solver.planned.maneuver_previews);
             cache.identity.valid = true;
         }
 
         std::vector<double> finite_maneuver_preview_times(
-                const std::vector<OrbitPredictionService::ManeuverNodePreview> &previews)
+                const std::vector<OrbitPredictionManeuverNodePreview> &previews)
         {
             std::vector<double> node_times_s;
             node_times_s.reserve(previews.size());
-            for (const OrbitPredictionService::ManeuverNodePreview &preview : previews)
+            for (const OrbitPredictionManeuverNodePreview &preview : previews)
             {
                 if (std::isfinite(preview.t_s))
                 {
@@ -229,7 +229,7 @@ namespace Game
                 OrbitPredictionDerivedService::Result &out,
                 OrbitPredictionCache &cache,
                 const OrbitPredictionDerivedService::Request &request,
-                const OrbitPredictionService::Result &solver,
+                const OrbitPredictionResult &solver,
                 const uint64_t generation_id,
                 const bool preview_stage,
                 const bool full_streaming_stage,
@@ -271,7 +271,7 @@ namespace Game
                 return;
             }
 
-            const std::vector<double> node_times_s = finite_maneuver_preview_times(cache.solver.maneuver_previews);
+            const std::vector<double> node_times_s = finite_maneuver_preview_times(cache.solver.planned.maneuver_previews);
             PredictionChunkAssembly chunk_assembly{};
             if (StreamedChunkAssemblyBuilder::rebuild_from_published(chunk_assembly,
                                                                       cache.display,
@@ -302,14 +302,14 @@ namespace Game
             }
         }
 
-        void merge_published_chunks(std::vector<OrbitPredictionService::PublishedChunk> &dst,
-                                    const std::vector<OrbitPredictionService::PublishedChunk> &src)
+        void merge_published_chunks(std::vector<OrbitPredictionPublishedChunk> &dst,
+                                    const std::vector<OrbitPredictionPublishedChunk> &src)
         {
-            for (const OrbitPredictionService::PublishedChunk &chunk : src)
+            for (const OrbitPredictionPublishedChunk &chunk : src)
             {
                 auto existing = std::find_if(dst.begin(),
                                              dst.end(),
-                                             [&chunk](const OrbitPredictionService::PublishedChunk &candidate) {
+                                             [&chunk](const OrbitPredictionPublishedChunk &candidate) {
                                                  return candidate.chunk_id == chunk.chunk_id;
                                              });
                 if (existing != dst.end())
@@ -322,18 +322,18 @@ namespace Game
 
             std::sort(dst.begin(),
                       dst.end(),
-                      [](const OrbitPredictionService::PublishedChunk &a,
-                         const OrbitPredictionService::PublishedChunk &b) { return a.chunk_id < b.chunk_id; });
+                      [](const OrbitPredictionPublishedChunk &a,
+                         const OrbitPredictionPublishedChunk &b) { return a.chunk_id < b.chunk_id; });
         }
 
-        void merge_streamed_planned_chunks(std::vector<OrbitPredictionService::StreamedPlannedChunk> &dst,
-                                           const std::vector<OrbitPredictionService::StreamedPlannedChunk> &src)
+        void merge_streamed_planned_chunks(std::vector<OrbitPredictionStreamedPlannedChunk> &dst,
+                                           const std::vector<OrbitPredictionStreamedPlannedChunk> &src)
         {
-            for (const OrbitPredictionService::StreamedPlannedChunk &chunk : src)
+            for (const OrbitPredictionStreamedPlannedChunk &chunk : src)
             {
                 auto existing = std::find_if(dst.begin(),
                                              dst.end(),
-                                             [&chunk](const OrbitPredictionService::StreamedPlannedChunk &candidate) {
+                                             [&chunk](const OrbitPredictionStreamedPlannedChunk &candidate) {
                                                  return candidate.published_chunk.chunk_id ==
                                                         chunk.published_chunk.chunk_id;
                                              });
@@ -347,8 +347,8 @@ namespace Game
 
             std::sort(dst.begin(),
                       dst.end(),
-                      [](const OrbitPredictionService::StreamedPlannedChunk &a,
-                         const OrbitPredictionService::StreamedPlannedChunk &b) {
+                      [](const OrbitPredictionStreamedPlannedChunk &a,
+                         const OrbitPredictionStreamedPlannedChunk &b) {
                           return a.published_chunk.chunk_id < b.published_chunk.chunk_id;
                       });
         }
@@ -356,11 +356,11 @@ namespace Game
         void merge_pending_full_stream_request(OrbitPredictionDerivedService::Request &dst,
                                                OrbitPredictionDerivedService::Request src)
         {
-            std::vector<OrbitPredictionService::PublishedChunk> merged_published_chunks =
+            std::vector<OrbitPredictionPublishedChunk> merged_published_chunks =
                     dst.solver_result.publish.published_chunks;
             merge_published_chunks(merged_published_chunks, src.solver_result.publish.published_chunks);
 
-            std::vector<OrbitPredictionService::StreamedPlannedChunk> merged_streamed_chunks =
+            std::vector<OrbitPredictionStreamedPlannedChunk> merged_streamed_chunks =
                     dst.solver_result.publish.streamed_planned_chunks;
             merge_streamed_planned_chunks(merged_streamed_chunks, src.solver_result.publish.streamed_planned_chunks);
 
@@ -413,7 +413,7 @@ namespace Game
 
             const auto latest_it = _latest_requested_generation_by_track.find(request.track_id);
             const bool fast_preview_request =
-                    request.solver_result.envelope.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
+                    request.solver_result.envelope.solve_quality == OrbitPredictionSolveQuality::FastPreview;
             if (latest_it != _latest_requested_generation_by_track.end() &&
                 request.generation_id < latest_it->second &&
                 !fast_preview_request)
@@ -570,7 +570,7 @@ namespace Game
             const uint64_t generation_id,
             const uint64_t request_epoch,
             const uint64_t current_request_epoch,
-            const OrbitPredictionService::SolveQuality solve_quality,
+            const OrbitPredictionSolveQuality solve_quality,
             const std::unordered_map<uint64_t, uint64_t> &latest_requested_generation_by_track)
     {
         if (request_epoch != current_request_epoch)
@@ -581,14 +581,14 @@ namespace Game
         const auto latest_it = latest_requested_generation_by_track.find(track_id);
         return latest_it == latest_requested_generation_by_track.end() ||
                generation_id >= latest_it->second ||
-               solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
+               solve_quality == OrbitPredictionSolveQuality::FastPreview;
     }
 
     bool OrbitPredictionDerivedService::should_continue_job(const uint64_t track_id,
                                                             const uint64_t generation_id,
                                                             const uint64_t request_epoch,
                                                             const uint64_t maneuver_plan_revision,
-                                                            const OrbitPredictionService::SolveQuality solve_quality) const
+                                                            const OrbitPredictionSolveQuality solve_quality) const
     {
         std::lock_guard<std::mutex> lock(_mutex);
         if (!_running || request_epoch != _request_epoch)
@@ -599,7 +599,7 @@ namespace Game
         const auto latest_it = _latest_requested_generation_by_track.find(track_id);
         if (latest_it != _latest_requested_generation_by_track.end() &&
             generation_id < latest_it->second &&
-            solve_quality != OrbitPredictionService::SolveQuality::FastPreview)
+            solve_quality != OrbitPredictionSolveQuality::FastPreview)
         {
             return false;
         }
@@ -637,16 +637,16 @@ namespace Game
         };
 
         Request &request = job.request;
-        OrbitPredictionService::Result &solver = request.solver_result;
+        OrbitPredictionResult &solver = request.solver_result;
         out.solve_quality = solver.envelope.solve_quality;
         out.publish_stage = solver.envelope.publish_stage;
-        const bool preview_stage = solver.envelope.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
+        const bool preview_stage = solver.envelope.solve_quality == OrbitPredictionSolveQuality::FastPreview;
         const bool preview_streaming_stage =
                 preview_stage &&
-                solver.envelope.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+                solver.envelope.publish_stage == OrbitPredictionPublishStage::PreviewStreaming;
         const bool full_streaming_stage =
                 !preview_stage &&
-                solver.envelope.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+                solver.envelope.publish_stage == OrbitPredictionPublishStage::FullStreaming;
         const bool rebuild_metrics = !preview_stage && !full_streaming_stage;
         const bool build_planned_render_curve = !preview_streaming_stage && !full_streaming_stage;
         const bool build_chunk_render_curves = full_streaming_stage;

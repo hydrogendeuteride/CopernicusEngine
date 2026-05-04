@@ -2,7 +2,7 @@
 
 #include "core/picking/line_pick_segment.h"
 #include "core/world.h"
-#include "game/orbit/orbit_prediction_service.h"
+#include "game/orbit/prediction/orbit_prediction_types.h"
 #include "game/orbit/orbit_render_curve.h"
 #include "orbitsim/frame_spec.hpp"
 
@@ -134,8 +134,8 @@ namespace Game
         std::size_t frame_segment_count_planned{0};
         std::size_t frame_sample_count{0};
         std::size_t frame_sample_count_planned{0};
-        OrbitPredictionService::AdaptiveStageDiagnostics frame_base{};
-        OrbitPredictionService::AdaptiveStageDiagnostics frame_planned{};
+        OrbitPredictionAdaptiveStageDiagnostics frame_base{};
+        OrbitPredictionAdaptiveStageDiagnostics frame_planned{};
     };
 
     struct PredictionCacheIdentity
@@ -169,72 +169,112 @@ namespace Game
 
     struct PredictionSolverTrajectoryCache
     {
-        using ManeuverNodePreview = OrbitPredictionService::ManeuverNodePreview;
-        using SharedSolverCoreData = OrbitPredictionService::Result::SharedCoreData;
+        using ManeuverNodePreview = OrbitPredictionManeuverNodePreview;
+        using SharedSolverCoreData = OrbitPredictionResult::SharedCoreData;
 
-        SharedSolverCoreData shared_solver_core_data{};
-        OrbitPredictionService::SharedCelestialEphemeris shared_ephemeris{};
-        std::vector<orbitsim::MassiveBody> massive_bodies;
+        struct CorePayload
+        {
+            SharedSolverCoreData shared_solver_core_data{};
+            OrbitPredictionSharedCelestialEphemeris shared_ephemeris{};
+            std::vector<orbitsim::MassiveBody> massive_bodies;
 
-        // Canonical prediction output always stays in orbitsim's inertial frame.
-        std::vector<orbitsim::TrajectorySample> trajectory_inertial;
-        std::vector<orbitsim::TrajectorySample> trajectory_inertial_planned;
-        std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial;
-        std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial_planned;
-        std::vector<ManeuverNodePreview> maneuver_previews;
+            void clear()
+            {
+                shared_solver_core_data.reset();
+                shared_ephemeris.reset();
+                massive_bodies.clear();
+            }
+
+            void set_shared_solver_core_data(SharedSolverCoreData core_data)
+            {
+                shared_solver_core_data = std::move(core_data);
+                if (shared_solver_core_data)
+                {
+                    shared_ephemeris = shared_solver_core_data->shared_ephemeris;
+                }
+            }
+        };
+
+        struct BasePayload
+        {
+            // Canonical prediction output always stays in orbitsim's inertial frame.
+            std::vector<orbitsim::TrajectorySample> trajectory_inertial;
+            std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial;
+
+            void clear()
+            {
+                trajectory_inertial.clear();
+                trajectory_segments_inertial.clear();
+            }
+        };
+
+        struct PlannedPayload
+        {
+            std::vector<orbitsim::TrajectorySample> trajectory_inertial;
+            std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial;
+            std::vector<ManeuverNodePreview> maneuver_previews;
+
+            void clear()
+            {
+                trajectory_inertial.clear();
+                trajectory_segments_inertial.clear();
+                maneuver_previews.clear();
+            }
+
+            void copy_from(const PlannedPayload &src)
+            {
+                trajectory_inertial = src.trajectory_inertial;
+                trajectory_segments_inertial = src.trajectory_segments_inertial;
+                maneuver_previews = src.maneuver_previews;
+            }
+        };
+
+        CorePayload core{};
+        BasePayload base{};
+        PlannedPayload planned{};
 
         void clear()
         {
-            shared_solver_core_data.reset();
-            shared_ephemeris.reset();
-            massive_bodies.clear();
-            trajectory_inertial.clear();
-            trajectory_segments_inertial.clear();
+            core.clear();
+            base.clear();
             clear_planned();
         }
 
         void clear_planned()
         {
-            trajectory_inertial_planned.clear();
-            trajectory_segments_inertial_planned.clear();
-            maneuver_previews.clear();
+            planned.clear();
         }
 
         void copy_planned_from(const PredictionSolverTrajectoryCache &src)
         {
-            trajectory_inertial_planned = src.trajectory_inertial_planned;
-            trajectory_segments_inertial_planned = src.trajectory_segments_inertial_planned;
-            maneuver_previews = src.maneuver_previews;
+            planned.copy_from(src.planned);
         }
 
         void set_shared_solver_core_data(SharedSolverCoreData core_data)
         {
-            shared_solver_core_data = std::move(core_data);
-            if (shared_solver_core_data)
-            {
-                shared_ephemeris = shared_solver_core_data->shared_ephemeris;
-            }
+            core.set_shared_solver_core_data(std::move(core_data));
         }
 
-        [[nodiscard]] const OrbitPredictionService::SharedCelestialEphemeris &resolved_shared_ephemeris() const
+        [[nodiscard]] const OrbitPredictionSharedCelestialEphemeris &resolved_shared_ephemeris() const
         {
-            return shared_solver_core_data ? shared_solver_core_data->shared_ephemeris : shared_ephemeris;
+            return core.shared_solver_core_data ? core.shared_solver_core_data->shared_ephemeris : core.shared_ephemeris;
         }
 
         [[nodiscard]] const std::vector<orbitsim::MassiveBody> &resolved_massive_bodies() const
         {
-            return shared_solver_core_data ? shared_solver_core_data->massive_bodies : massive_bodies;
+            return core.shared_solver_core_data ? core.shared_solver_core_data->massive_bodies : core.massive_bodies;
         }
 
         [[nodiscard]] const std::vector<orbitsim::TrajectorySample> &resolved_trajectory_inertial() const
         {
-            return shared_solver_core_data ? shared_solver_core_data->trajectory_inertial : trajectory_inertial;
+            return core.shared_solver_core_data ? core.shared_solver_core_data->trajectory_inertial
+                                               : base.trajectory_inertial;
         }
 
         [[nodiscard]] const std::vector<orbitsim::TrajectorySegment> &resolved_trajectory_segments_inertial() const
         {
-            return shared_solver_core_data ? shared_solver_core_data->trajectory_segments_inertial
-                                           : trajectory_segments_inertial;
+            return core.shared_solver_core_data ? core.shared_solver_core_data->trajectory_segments_inertial
+                                               : base.trajectory_segments_inertial;
         }
     };
 
@@ -334,54 +374,12 @@ namespace Game
         PredictionDisplayFrameCache display{};
         PredictionAnalysisCache analysis{};
 
-        OrbitPredictionCache() = default;
-
-        OrbitPredictionCache(const OrbitPredictionCache &other)
-            : identity(other.identity),
-              solver(other.solver),
-              display(other.display),
-              analysis(other.analysis)
-        {
-        }
-
-        OrbitPredictionCache(OrbitPredictionCache &&other) noexcept
-            : identity(std::move(other.identity)),
-              solver(std::move(other.solver)),
-              display(std::move(other.display)),
-              analysis(std::move(other.analysis))
-        {
-        }
-
-        OrbitPredictionCache &operator=(const OrbitPredictionCache &other)
-        {
-            if (this != &other)
-            {
-                identity = other.identity;
-                solver = other.solver;
-                display = other.display;
-                analysis = other.analysis;
-            }
-            return *this;
-        }
-
-        OrbitPredictionCache &operator=(OrbitPredictionCache &&other) noexcept
-        {
-            if (this != &other)
-            {
-                identity = std::move(other.identity);
-                solver = std::move(other.solver);
-                display = std::move(other.display);
-                analysis = std::move(other.analysis);
-            }
-            return *this;
-        }
-
         void set_shared_solver_core_data(PredictionSolverTrajectoryCache::SharedSolverCoreData core_data)
         {
             solver.set_shared_solver_core_data(std::move(core_data));
         }
 
-        [[nodiscard]] const OrbitPredictionService::SharedCelestialEphemeris &resolved_shared_ephemeris() const
+        [[nodiscard]] const OrbitPredictionSharedCelestialEphemeris &resolved_shared_ephemeris() const
         {
             return solver.resolved_shared_ephemeris();
         }
@@ -435,8 +433,7 @@ namespace Game
     {
         uint32_t chunk_id{0};
         uint64_t generation_id{0};
-        OrbitPredictionService::ChunkQualityState quality_state{
-                OrbitPredictionService::ChunkQualityState::Final};
+        OrbitPredictionChunkQualityState quality_state{OrbitPredictionChunkQualityState::Final};
         double t0_s{std::numeric_limits<double>::quiet_NaN()};
         double t1_s{std::numeric_limits<double>::quiet_NaN()};
         std::vector<orbitsim::TrajectorySample> frame_samples{};
@@ -744,7 +741,7 @@ namespace Game
         std::size_t flattened_planned_segments_last{0};
         std::size_t flattened_planned_samples_last{0};
 
-        OrbitPredictionService::SolveQuality last_result_solve_quality{OrbitPredictionService::SolveQuality::Full};
+        OrbitPredictionSolveQuality last_result_solve_quality{OrbitPredictionSolveQuality::Full};
         bool drag_active{false};
 
         static bool has_time(const TimePoint &tp)
@@ -774,9 +771,8 @@ namespace Game
         uint64_t latest_requested_derived_display_frame_key{0};
         uint64_t latest_requested_derived_display_frame_revision{0};
         orbitsim::BodyId latest_requested_derived_analysis_body_id{orbitsim::kInvalidBodyId};
-        OrbitPredictionService::PublishStage latest_requested_derived_publish_stage{
-                OrbitPredictionService::PublishStage::Final};
-        OrbitPredictionService::SolveQuality pending_solve_quality{OrbitPredictionService::SolveQuality::Full};
+        OrbitPredictionPublishStage latest_requested_derived_publish_stage{OrbitPredictionPublishStage::Final};
+        OrbitPredictionSolveQuality pending_solve_quality{OrbitPredictionSolveQuality::Full};
         bool pending_solver_has_maneuver_plan{false};
         uint64_t pending_solver_plan_signature{0};
         bool pending_derived_has_maneuver_plan{false};
@@ -794,7 +790,7 @@ namespace Game
         double preview_last_anchor_refresh_at_s{std::numeric_limits<double>::quiet_NaN()};
         double preview_last_request_at_s{std::numeric_limits<double>::quiet_NaN()};
         double solver_ms_last{0.0};
-        OrbitPredictionService::Diagnostics solver_diagnostics{};
+        OrbitPredictionDiagnostics solver_diagnostics{};
         OrbitPredictionDerivedDiagnostics derived_diagnostics{};
 
         void clear_runtime()
@@ -811,8 +807,8 @@ namespace Game
             latest_requested_derived_display_frame_key = 0;
             latest_requested_derived_display_frame_revision = 0;
             latest_requested_derived_analysis_body_id = orbitsim::kInvalidBodyId;
-            latest_requested_derived_publish_stage = OrbitPredictionService::PublishStage::Final;
-            pending_solve_quality = OrbitPredictionService::SolveQuality::Full;
+            latest_requested_derived_publish_stage = OrbitPredictionPublishStage::Final;
+            pending_solve_quality = OrbitPredictionSolveQuality::Full;
             pending_solver_has_maneuver_plan = false;
             pending_solver_plan_signature = 0;
             pending_derived_has_maneuver_plan = false;

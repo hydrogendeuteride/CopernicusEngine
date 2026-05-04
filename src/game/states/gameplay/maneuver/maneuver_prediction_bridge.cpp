@@ -133,8 +133,8 @@ namespace Game
         {
             const OrbitPredictionCache &cache = *player_cache;
             const auto &traj =
-                    cache.solver.trajectory_inertial_planned.size() >= 2
-                            ? cache.solver.trajectory_inertial_planned
+                    cache.solver.planned.trajectory_inertial.size() >= 2
+                            ? cache.solver.planned.trajectory_inertial
                             : cache.solver.resolved_trajectory_inertial();
             const auto &bodies = cache.solver.resolved_massive_bodies();
 

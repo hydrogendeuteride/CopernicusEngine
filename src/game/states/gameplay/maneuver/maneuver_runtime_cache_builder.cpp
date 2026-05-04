@@ -146,21 +146,21 @@ namespace Game
             return finite3(out_tangent_world);
         }
 
-        using PreviewMap = std::unordered_map<int, const OrbitPredictionService::ManeuverNodePreview *>;
+        using PreviewMap = std::unordered_map<int, const OrbitPredictionManeuverNodePreview *>;
         constexpr double kNodePreviewTimeMatchEpsilonS = 1.0e-6;
 
         PreviewMap build_preview_map(const PredictionSolverTrajectoryCache &solver)
         {
             PreviewMap map;
-            map.reserve(solver.maneuver_previews.size());
-            for (const OrbitPredictionService::ManeuverNodePreview &p : solver.maneuver_previews)
+            map.reserve(solver.planned.maneuver_previews.size());
+            for (const OrbitPredictionManeuverNodePreview &p : solver.planned.maneuver_previews)
             {
                 map[p.node_id] = &p;
             }
             return map;
         }
 
-        bool preview_matches_node_time(const OrbitPredictionService::ManeuverNodePreview *preview,
+        bool preview_matches_node_time(const OrbitPredictionManeuverNodePreview *preview,
                                        const ManeuverNode &node)
         {
             return preview &&
@@ -410,8 +410,8 @@ namespace Game
                         ? &input.stable_cache->display.trajectory_frame_planned
                         : nullptr;
         const auto *stable_traj_node_inertial =
-                (input.stable_cache && input.stable_cache->solver.trajectory_inertial_planned.size() >= 2)
-                        ? &input.stable_cache->solver.trajectory_inertial_planned
+                (input.stable_cache && input.stable_cache->solver.planned.trajectory_inertial.size() >= 2)
+                        ? &input.stable_cache->solver.planned.trajectory_inertial
                         : nullptr;
         const bool allow_base_fallback = input.plan.nodes.size() <= 1;
         const bool stable_planned_prefix_available =
@@ -419,7 +419,7 @@ namespace Game
                 input.stable_cache != pred_cache &&
                 input.stable_cache->identity.valid &&
                 input.stable_cache->has_planned_frame_draw_data() &&
-                input.stable_cache->solver.trajectory_inertial_planned.size() >= 2;
+                input.stable_cache->solver.planned.trajectory_inertial.size() >= 2;
         double stable_prefix_cutoff_s =
                 input.player_track && input.player_track->preview_anchor.valid
                     ? input.player_track->preview_anchor.anchor_time_s
@@ -540,13 +540,13 @@ namespace Game
                             ? &pred_base_traj_inertial
                     : use_stable_prefix
                             ? stable_traj_node_inertial
-                            : (pred_cache->solver.trajectory_inertial_planned.size() >= 2
-                                       ? &pred_cache->solver.trajectory_inertial_planned
+                            : (pred_cache->solver.planned.trajectory_inertial.size() >= 2
+                                       ? &pred_cache->solver.planned.trajectory_inertial
                                        : (stable_traj_node_inertial
                                                   ? stable_traj_node_inertial
                                                   : (allow_base_fallback ? &pred_base_traj_inertial : nullptr)));
             auto preview_it = node_preview_map->find(node.id);
-            const OrbitPredictionService::ManeuverNodePreview *preview =
+            const OrbitPredictionManeuverNodePreview *preview =
                     (preview_it != node_preview_map->end()) ? preview_it->second : nullptr;
             bool preview_time_valid = preview_matches_node_time(preview, node);
             if (time_edit_uses_unplanned_source)

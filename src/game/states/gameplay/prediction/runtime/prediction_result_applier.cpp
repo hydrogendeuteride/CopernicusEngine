@@ -141,11 +141,11 @@ namespace Game
 
         bool cache_has_planned_data(const OrbitPredictionCache &cache)
         {
-            return !cache.solver.trajectory_inertial_planned.empty() ||
-                   !cache.solver.trajectory_segments_inertial_planned.empty() ||
+            return !cache.solver.planned.trajectory_inertial.empty() ||
+                   !cache.solver.planned.trajectory_segments_inertial.empty() ||
                    !cache.display.trajectory_frame_planned.empty() ||
                    !cache.display.trajectory_segments_frame_planned.empty() ||
-                   !cache.solver.maneuver_previews.empty();
+                   !cache.solver.planned.maneuver_previews.empty();
         }
 
         bool planned_cache_matches_current_plan(const OrbitPredictionCache &cache,
@@ -161,8 +161,8 @@ namespace Game
                 const PredictionTrackState &track,
                 const OrbitPredictionDerivedService::Result &result)
         {
-            return result.solve_quality == OrbitPredictionService::SolveQuality::Full &&
-                   result.publish_stage == OrbitPredictionService::PublishStage::FullStreaming &&
+            return result.solve_quality == OrbitPredictionSolveQuality::Full &&
+                   result.publish_stage == OrbitPredictionPublishStage::FullStreaming &&
                    track.authoritative_cache.identity.valid &&
                    track.authoritative_cache.identity.generation_id >= result.generation_id;
         }
@@ -198,7 +198,7 @@ namespace Game
 
         const bool live_fast_preview_result =
                 track.supports_maneuvers &&
-                result.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
+                result.solve_quality == OrbitPredictionSolveQuality::FastPreview &&
                 context.live_preview_active;
         if (track.latest_requested_generation_id != 0 &&
             result.generation_id < track.latest_requested_generation_id &&
@@ -331,7 +331,7 @@ namespace Game
                 solved_plan_signature != context.current_plan_signature;
         const bool stale_fast_preview_during_edit =
                 context.active_maneuver_edit &&
-                result.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
+                result.solve_quality == OrbitPredictionSolveQuality::FastPreview &&
                 result_plan_signature_mismatch;
         if (context.active_maneuver_edit && result_plan_signature_mismatch && !stale_fast_preview_during_edit)
         {
@@ -362,7 +362,7 @@ namespace Game
             }
         }
 
-        if (result.solve_quality == OrbitPredictionService::SolveQuality::FastPreview)
+        if (result.solve_quality == OrbitPredictionSolveQuality::FastPreview)
         {
             const bool accept_preview_publish =
                     !track.supports_maneuvers ||

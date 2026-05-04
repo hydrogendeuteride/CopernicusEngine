@@ -1,6 +1,7 @@
 #pragma once
 
-#include "game/states/gameplay/prediction/gameplay_prediction_context.h"
+#include "game/states/gameplay/prediction/gameplay_prediction_access.h"
+#include "game/states/gameplay/prediction/gameplay_prediction_derived_service.h"
 #include "game/states/gameplay/prediction/prediction_system.h"
 #include "game/states/gameplay/prediction/prediction_frame_controller.h"
 #include "game/states/gameplay/prediction/prediction_frame_resolver.h"
@@ -15,19 +16,11 @@
 
 namespace Game
 {
-    class ManeuverSystem;
     struct CelestialBodyInfo;
     struct GameStateContext;
+    struct GameplayPredictionState;
     struct OrbiterInfo;
-
-    struct GameplayPredictionAccess
-    {
-        std::function<GameplayPredictionContext()> build_context;
-        PredictionSystem &prediction;
-        ManeuverSystem &maneuver;
-        std::function<double()> current_sim_time_s;
-        std::function<void()> mark_prediction_dirty;
-    };
+    struct OrbitPlotBudgetSettings;
 
     namespace PredictionDrawDetail
     {
@@ -47,7 +40,7 @@ namespace Game
 
         void poll_completed_prediction_results();
         void clear_visible_prediction_runtime(const std::vector<PredictionSubjectKey> &visible_subjects);
-        void apply_completed_prediction_result(OrbitPredictionService::Result result);
+        void apply_completed_prediction_result(OrbitPredictionResult result);
         void apply_completed_prediction_derived_result(OrbitPredictionDerivedService::Result result);
         PredictionRuntimeContext build_prediction_runtime_context() const;
         bool should_rebuild_prediction_track(const PredictionTrackState &track,

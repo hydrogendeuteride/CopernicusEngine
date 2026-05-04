@@ -9,7 +9,7 @@ namespace Game
         bool built{false};
         bool interactive_request{false};
         bool preview_request_active{false};
-        OrbitPredictionService::Request request{};
+        OrbitPredictionRequest request{};
     };
 
     class PredictionRequestFactory
@@ -27,7 +27,7 @@ namespace Game
         static bool build_celestial_request(const PredictionRuntimeContext &context,
                                             const PredictionTrackState &track,
                                             double now_s,
-                                            OrbitPredictionService::Request &out_request);
+                                            OrbitPredictionRequest &out_request);
 
         static bool resolve_preview_anchor_state(const PredictionRuntimeContext &context,
                                                  const PredictionTrackState &track,

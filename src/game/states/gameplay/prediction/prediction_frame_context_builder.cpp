@@ -124,7 +124,7 @@ namespace Game
 
         const auto body_state_at = [&](const orbitsim::MassiveBody &massive_body) -> orbitsim::State {
             const auto &ephemeris = position_cache ? position_cache->resolved_shared_ephemeris()
-                                                   : OrbitPredictionService::SharedCelestialEphemeris{};
+                                                   : OrbitPredictionSharedCelestialEphemeris{};
             if (ephemeris && !ephemeris->empty())
             {
                 return ephemeris->body_state_at_by_id(massive_body.id, sample_time_s);
@@ -204,9 +204,9 @@ namespace Game
         }
 
         const std::vector<orbitsim::TrajectorySegment> *trajectory_segments = nullptr;
-        if (!player_cache->solver.trajectory_segments_inertial_planned.empty())
+        if (!player_cache->solver.planned.trajectory_segments_inertial.empty())
         {
-            trajectory_segments = &player_cache->solver.trajectory_segments_inertial_planned;
+            trajectory_segments = &player_cache->solver.planned.trajectory_segments_inertial;
         }
         else if (!player_cache->solver.resolved_trajectory_segments_inertial().empty())
         {

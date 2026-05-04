@@ -52,9 +52,9 @@ namespace Game
         if (resolved_frame_spec.type == orbitsim::TrajectoryFrameType::Inertial)
         {
             display.trajectory_frame = base_samples;
-            display.trajectory_frame_planned = solver.trajectory_inertial_planned;
+            display.trajectory_frame_planned = solver.planned.trajectory_inertial;
             display.trajectory_segments_frame = base_segments;
-            display.trajectory_segments_frame_planned = solver.trajectory_segments_inertial_planned;
+            display.trajectory_segments_frame_planned = solver.planned.trajectory_segments_inertial;
             if (!validate_trajectory_segment_continuity(display.trajectory_segments_frame))
             {
                 update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::ContinuityFailed);
@@ -73,7 +73,7 @@ namespace Game
                         prediction_segment_span_s(base_segments));
                 diagnostics->frame_planned = make_stage_diagnostics_from_segments(
                         display.trajectory_segments_frame_planned,
-                        prediction_segment_span_s(solver.trajectory_segments_inertial_planned));
+                        prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
             }
         }
         else
@@ -87,7 +87,7 @@ namespace Game
             const auto player_lookup = build_player_lookup(player_lookup_segments_inertial);
             const std::size_t base_sample_budget = std::max<std::size_t>(base_samples.size(), 2);
             const std::size_t planned_sample_budget =
-                    solver.trajectory_inertial_planned.size() >= 2 ? solver.trajectory_inertial_planned.size()
+                    solver.planned.trajectory_inertial.size() >= 2 ? solver.planned.trajectory_inertial.size()
                                                                    : base_sample_budget;
             const std::vector<double> node_times = collect_maneuver_node_times(solver);
 
@@ -136,16 +136,16 @@ namespace Game
                 return false;
             }
 
-            if (!solver.trajectory_segments_inertial_planned.empty())
+            if (!solver.planned.trajectory_segments_inertial.empty())
             {
                 const orbitsim::FrameSegmentTransformOptions planned_opt =
                         PredictionCacheInternal::build_frame_segment_transform_options(
                                 resolved_frame_spec,
-                                solver.trajectory_segments_inertial_planned,
+                                solver.planned.trajectory_segments_inertial,
                                 cancel_requested);
                 orbitsim::FrameSegmentTransformDiagnostics planned_frame_diag{};
                 display.trajectory_segments_frame_planned = orbitsim::transform_trajectory_segments_to_frame_spec(
-                        solver.trajectory_segments_inertial_planned,
+                        solver.planned.trajectory_segments_inertial,
                         *base_ephemeris,
                         base_bodies,
                         resolved_frame_spec,
@@ -168,7 +168,7 @@ namespace Game
                     {
                         diagnostics->frame_planned = make_stage_diagnostics_from_adaptive(
                                 planned_frame_diag,
-                                prediction_segment_span_s(solver.trajectory_segments_inertial_planned));
+                                prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
                         diagnostics->frame_planned.accepted_segments = display.trajectory_segments_frame_planned.size();
                         diagnostics->frame_planned.covered_duration_s =
                                 prediction_segment_span_s(display.trajectory_segments_frame_planned);
@@ -236,7 +236,7 @@ namespace Game
         display.resolved_frame_spec = {};
         display.resolved_frame_spec_valid = false;
 
-        if (solver.trajectory_segments_inertial_planned.empty())
+        if (solver.planned.trajectory_segments_inertial.empty())
         {
             display.resolved_frame_spec = resolved_frame_spec;
             display.resolved_frame_spec_valid = true;
@@ -249,13 +249,13 @@ namespace Game
         const auto &base_samples = solver.resolved_trajectory_inertial();
         const std::size_t base_sample_budget = std::max<std::size_t>(base_samples.size(), 2);
         const std::size_t planned_sample_budget =
-                solver.trajectory_inertial_planned.size() >= 2 ? solver.trajectory_inertial_planned.size()
+                solver.planned.trajectory_inertial.size() >= 2 ? solver.planned.trajectory_inertial.size()
                                                                : base_sample_budget;
         const std::vector<double> node_times = collect_maneuver_node_times(solver);
 
         if (resolved_frame_spec.type == orbitsim::TrajectoryFrameType::Inertial)
         {
-            display.trajectory_segments_frame_planned = solver.trajectory_segments_inertial_planned;
+            display.trajectory_segments_frame_planned = solver.planned.trajectory_segments_inertial;
             if (!validate_trajectory_segment_continuity(display.trajectory_segments_frame_planned))
             {
                 update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::ContinuityFailed);
@@ -263,8 +263,8 @@ namespace Game
             }
 
             display.trajectory_frame_planned =
-                    solver.trajectory_inertial_planned.size() >= 2
-                            ? solver.trajectory_inertial_planned
+                    solver.planned.trajectory_inertial.size() >= 2
+                            ? solver.planned.trajectory_inertial
                             : sample_prediction_segments(display.trajectory_segments_frame_planned,
                                                           planned_sample_budget,
                                                           node_times);
@@ -272,7 +272,7 @@ namespace Game
             {
                 diagnostics->frame_planned = make_stage_diagnostics_from_segments(
                         display.trajectory_segments_frame_planned,
-                        prediction_segment_span_s(solver.trajectory_segments_inertial_planned));
+                        prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
             }
         }
         else
@@ -287,11 +287,11 @@ namespace Game
             const orbitsim::FrameSegmentTransformOptions planned_opt =
                     PredictionCacheInternal::build_frame_segment_transform_options(
                             resolved_frame_spec,
-                            solver.trajectory_segments_inertial_planned,
+                            solver.planned.trajectory_segments_inertial,
                             cancel_requested);
             orbitsim::FrameSegmentTransformDiagnostics planned_frame_diag{};
             display.trajectory_segments_frame_planned = orbitsim::transform_trajectory_segments_to_frame_spec(
-                    solver.trajectory_segments_inertial_planned,
+                    solver.planned.trajectory_segments_inertial,
                     *base_ephemeris,
                     base_bodies,
                     resolved_frame_spec,
@@ -318,7 +318,7 @@ namespace Game
             {
                 diagnostics->frame_planned = make_stage_diagnostics_from_adaptive(
                         planned_frame_diag,
-                        prediction_segment_span_s(solver.trajectory_segments_inertial_planned));
+                        prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
                 diagnostics->frame_planned.accepted_segments = display.trajectory_segments_frame_planned.size();
                 diagnostics->frame_planned.covered_duration_s =
                         prediction_segment_span_s(display.trajectory_segments_frame_planned);

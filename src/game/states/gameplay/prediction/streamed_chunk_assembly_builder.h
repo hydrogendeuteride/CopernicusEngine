@@ -16,7 +16,7 @@ namespace Game
                 PredictionChunkAssembly &out_assembly,
                 const PredictionSolverTrajectoryCache &solver,
                 const PredictionDisplayFrameCache &display,
-                const std::vector<OrbitPredictionService::StreamedPlannedChunk> &streamed_chunks,
+                const std::vector<OrbitPredictionStreamedPlannedChunk> &streamed_chunks,
                 uint64_t generation_id,
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
@@ -28,7 +28,7 @@ namespace Game
         static bool rebuild_from_streamed(
                 PredictionChunkAssembly &out_assembly,
                 const OrbitPredictionCache &cache,
-                const std::vector<OrbitPredictionService::StreamedPlannedChunk> &streamed_chunks,
+                const std::vector<OrbitPredictionStreamedPlannedChunk> &streamed_chunks,
                 uint64_t generation_id,
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
@@ -40,7 +40,7 @@ namespace Game
         static bool rebuild_from_published(
                 PredictionChunkAssembly &out_assembly,
                 const PredictionDisplayFrameCache &display,
-                const std::vector<OrbitPredictionService::PublishedChunk> &published_chunks,
+                const std::vector<OrbitPredictionPublishedChunk> &published_chunks,
                 uint64_t generation_id,
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 uint64_t display_frame_key,
@@ -54,7 +54,7 @@ namespace Game
         static bool rebuild_from_published(
                 PredictionChunkAssembly &out_assembly,
                 const OrbitPredictionCache &cache,
-                const std::vector<OrbitPredictionService::PublishedChunk> &published_chunks,
+                const std::vector<OrbitPredictionPublishedChunk> &published_chunks,
                 uint64_t generation_id,
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 uint64_t display_frame_key,

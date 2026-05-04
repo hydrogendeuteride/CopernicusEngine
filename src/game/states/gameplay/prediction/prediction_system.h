@@ -61,7 +61,7 @@ namespace Game
         void clear_visible_runtime(const std::vector<PredictionSubjectKey> &visible_subjects);
         [[nodiscard]] bool poll_completed_results(const PredictionHostContext &host);
         [[nodiscard]] bool apply_completed_solver_result(const PredictionHostContext &host,
-                                                         OrbitPredictionService::Result result);
+                                                         OrbitPredictionResult result);
         [[nodiscard]] bool apply_completed_derived_result(const PredictionHostContext &host,
                                                           OrbitPredictionDerivedService::Result result);
         [[nodiscard]] bool should_rebuild_track(const PredictionHostContext &host,

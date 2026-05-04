@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/orbit/orbit_prediction_service.h"
+#include "game/orbit/prediction/orbit_prediction_types.h"
 #include "game/orbit/trajectory/trajectory_utils.h"
 
 #include <algorithm>
@@ -10,12 +10,12 @@
 namespace Game
 {
     template<typename AdaptiveDiag>
-    OrbitPredictionService::AdaptiveStageDiagnostics make_stage_diagnostics_from_adaptive(
+    OrbitPredictionAdaptiveStageDiagnostics make_stage_diagnostics_from_adaptive(
             const AdaptiveDiag &diag,
             const double requested_duration_s,
             const bool cache_reused = false)
     {
-        OrbitPredictionService::AdaptiveStageDiagnostics out{};
+        OrbitPredictionAdaptiveStageDiagnostics out{};
         out.requested_duration_s = std::max(0.0, requested_duration_s);
         out.covered_duration_s = std::max(0.0, diag.covered_duration_s);
         out.accepted_segments = diag.accepted_segments;
@@ -30,12 +30,12 @@ namespace Game
         return out;
     }
 
-    inline OrbitPredictionService::AdaptiveStageDiagnostics make_stage_diagnostics_from_segments(
+    inline OrbitPredictionAdaptiveStageDiagnostics make_stage_diagnostics_from_segments(
             const std::vector<orbitsim::TrajectorySegment> &segments,
             const double requested_duration_s,
             const bool cache_reused = false)
     {
-        OrbitPredictionService::AdaptiveStageDiagnostics out{};
+        OrbitPredictionAdaptiveStageDiagnostics out{};
         out.requested_duration_s = std::max(0.0, requested_duration_s);
         out.covered_duration_s = prediction_segment_span_s(segments);
         out.accepted_segments = segments.size();
@@ -83,12 +83,12 @@ namespace Game
         return out;
     }
 
-    inline OrbitPredictionService::AdaptiveStageDiagnostics make_stage_diagnostics_from_ephemeris(
-            const OrbitPredictionService::SharedCelestialEphemeris &ephemeris,
+    inline OrbitPredictionAdaptiveStageDiagnostics make_stage_diagnostics_from_ephemeris(
+            const OrbitPredictionSharedCelestialEphemeris &ephemeris,
             const double requested_duration_s,
             const bool cache_reused = false)
     {
-        OrbitPredictionService::AdaptiveStageDiagnostics out{};
+        OrbitPredictionAdaptiveStageDiagnostics out{};
         out.requested_duration_s = std::max(0.0, requested_duration_s);
         out.cache_reused = cache_reused;
         if (!ephemeris || ephemeris->empty())

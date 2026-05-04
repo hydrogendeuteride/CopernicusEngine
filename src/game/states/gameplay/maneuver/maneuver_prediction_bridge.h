@@ -2,7 +2,7 @@
 
 #include "core/world.h"
 #include "game/states/gameplay/maneuver/maneuver_system.h"
-#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
+#include "game/states/gameplay/prediction/gameplay_prediction_access.h"
 #include "orbitsim/types.hpp"
 
 #include <functional>

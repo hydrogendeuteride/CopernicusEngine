@@ -1,6 +1,5 @@
 #pragma once
 
-#include "game/orbit/orbit_prediction_service.h"
 #include "game/states/gameplay/maneuver/gameplay_state_maneuver_types.h"
 #include "game/states/gameplay/prediction/gameplay_state_prediction_types.h"
 #include "game/states/gameplay/prediction/runtime/prediction_track_lifecycle.h"
@@ -31,40 +30,40 @@ namespace Game::PredictionRuntimeDetail
         return state == ManeuverGizmoInteraction::State::DragAxis;
     }
 
-    inline OrbitPredictionService::RequestPriority classify_prediction_subject_priority(
+    inline OrbitPredictionRequestPriority classify_prediction_subject_priority(
             const PredictionSelectionState &selection,
             const PredictionSubjectKey key,
             const bool is_celestial)
     {
         if (selection.active_subject == key)
         {
-            return OrbitPredictionService::RequestPriority::ActiveTrack;
+            return OrbitPredictionRequestPriority::ActiveTrack;
         }
 
         for (const auto &overlay : selection.overlay_subjects)
         {
             if (overlay == key)
             {
-                return OrbitPredictionService::RequestPriority::Overlay;
+                return OrbitPredictionRequestPriority::Overlay;
             }
         }
 
         return is_celestial
-                       ? OrbitPredictionService::RequestPriority::BackgroundCelestial
-                       : OrbitPredictionService::RequestPriority::BackgroundOrbiter;
+                       ? OrbitPredictionRequestPriority::BackgroundCelestial
+                       : OrbitPredictionRequestPriority::BackgroundOrbiter;
     }
 
-    inline OrbitPredictionService::RequestPriority classify_prediction_request_priority(
+    inline OrbitPredictionRequestPriority classify_prediction_request_priority(
             const PredictionSelectionState &selection,
             const PredictionSubjectKey key,
             const bool is_celestial,
             const bool interactive)
     {
-        OrbitPredictionService::RequestPriority priority =
+        OrbitPredictionRequestPriority priority =
                 classify_prediction_subject_priority(selection, key, is_celestial);
-        if (interactive && priority == OrbitPredictionService::RequestPriority::ActiveTrack)
+        if (interactive && priority == OrbitPredictionRequestPriority::ActiveTrack)
         {
-            priority = OrbitPredictionService::RequestPriority::ActiveInteractiveTrack;
+            priority = OrbitPredictionRequestPriority::ActiveInteractiveTrack;
         }
         return priority;
     }
@@ -331,23 +330,23 @@ namespace Game::PredictionRuntimeDetail
                prediction_track_preview_overlay_draw_active(snapshot, preview_anchor_valid);
     }
 
-    inline bool prediction_track_is_preview_streaming_publish(const OrbitPredictionService::SolveQuality solve_quality,
-                                                              const OrbitPredictionService::PublishStage publish_stage)
+    inline bool prediction_track_is_preview_streaming_publish(const OrbitPredictionSolveQuality solve_quality,
+                                                              const OrbitPredictionPublishStage publish_stage)
     {
-        return solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
-               publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+        return solve_quality == OrbitPredictionSolveQuality::FastPreview &&
+               publish_stage == OrbitPredictionPublishStage::PreviewStreaming;
     }
 
-    inline bool prediction_track_is_full_streaming_publish(const OrbitPredictionService::SolveQuality solve_quality,
-                                                           const OrbitPredictionService::PublishStage publish_stage)
+    inline bool prediction_track_is_full_streaming_publish(const OrbitPredictionSolveQuality solve_quality,
+                                                           const OrbitPredictionPublishStage publish_stage)
     {
-        return solve_quality == OrbitPredictionService::SolveQuality::Full &&
-               publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+        return solve_quality == OrbitPredictionSolveQuality::Full &&
+               publish_stage == OrbitPredictionPublishStage::FullStreaming;
     }
 
     inline bool prediction_track_should_keep_request_pending_after_solver_publish(
-            const OrbitPredictionService::SolveQuality solve_quality,
-            const OrbitPredictionService::PublishStage publish_stage)
+            const OrbitPredictionSolveQuality solve_quality,
+            const OrbitPredictionPublishStage publish_stage)
     {
         return prediction_track_is_full_streaming_publish(solve_quality, publish_stage);
     }
@@ -365,10 +364,10 @@ namespace Game::PredictionRuntimeDetail
 
     inline PredictionPreviewRuntimeState prediction_track_preview_state_after_preview_publish(
             const PredictionTrackLifecycleSnapshot &snapshot,
-            const OrbitPredictionService::PublishStage publish_stage,
+            const OrbitPredictionPublishStage publish_stage,
             const bool live_preview_active_now)
     {
-        if (publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming)
+        if (publish_stage == OrbitPredictionPublishStage::PreviewStreaming)
         {
             return PredictionPreviewRuntimeState::PreviewStreaming;
         }

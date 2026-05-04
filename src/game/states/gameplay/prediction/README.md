@@ -124,7 +124,7 @@ Runtime orchestration split files. Not included outside the prediction module.
   Result polling: polls `OrbitPredictionService` and `OrbitPredictionDerivedService` for completed results, applies them to `PredictionTrackState` caches, and updates drag debug telemetry.
 
 - `gameplay_state_prediction_runtime_solver.cpp`
-  Solver request building: assembles `OrbitPredictionService::Request` structs with integrator config, maneuver nodes, and ephemeris state.
+  Solver request building: assembles `OrbitPredictionRequest` structs with integrator config, maneuver nodes, and ephemeris state.
 
 ## Pipeline Overview
 

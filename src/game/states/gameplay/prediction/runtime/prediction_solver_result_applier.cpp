@@ -36,7 +36,7 @@ namespace Game
         }
 
         bool base_trajectory_signature_matches(const OrbitPredictionCache &cache,
-                                               const OrbitPredictionService::Result &result)
+                                               const OrbitPredictionResult &result)
         {
             const std::vector<orbitsim::TrajectorySegment> &cache_segments =
                     cache.solver.resolved_trajectory_segments_inertial();
@@ -79,7 +79,7 @@ namespace Game
         }
 
         bool can_reuse_existing_base_frame_cache(const PredictionTrackState &track,
-                                                 const OrbitPredictionService::Result &result,
+                                                 const OrbitPredictionResult &result,
                                                  const orbitsim::TrajectoryFrameSpec &resolved_frame_spec)
         {
             return result.envelope.baseline_reused &&
@@ -94,7 +94,7 @@ namespace Game
         }
 
         void record_solver_result_debug(PredictionTrackState &track,
-                                        const OrbitPredictionService::Result &result,
+                                        const OrbitPredictionResult &result,
                                         const PredictionDragDebugTelemetry::TimePoint &solver_result_tp)
         {
             PredictionDragDebugTelemetry &debug = track.drag_debug;
@@ -133,7 +133,7 @@ namespace Game
 
         void collect_player_lookup_segments(const PredictionTrackState &track,
                                             const PredictionRuntimeContext &context,
-                                            const OrbitPredictionService::Result &result,
+                                            const OrbitPredictionResult &result,
                                             std::vector<orbitsim::TrajectorySegment> &out_segments)
         {
             out_segments.clear();
@@ -157,9 +157,9 @@ namespace Game
                 return;
             }
 
-            if (!player_cache->solver.trajectory_segments_inertial_planned.empty())
+            if (!player_cache->solver.planned.trajectory_segments_inertial.empty())
             {
-                out_segments = player_cache->solver.trajectory_segments_inertial_planned;
+                out_segments = player_cache->solver.planned.trajectory_segments_inertial;
             }
             else if (!player_cache->solver.resolved_trajectory_segments_inertial().empty())
             {
@@ -170,7 +170,7 @@ namespace Game
 
     PredictionSolverResultApplyResult PredictionSolverResultApplier::apply_solver_result(
             PredictionTrackState &track,
-            OrbitPredictionService::Result result,
+            OrbitPredictionResult result,
             const PredictionRuntimeContext &context)
     {
         PredictionSolverResultApplyResult out{};
@@ -179,7 +179,7 @@ namespace Game
                 PredictionRuntimeDetail::describe_prediction_track_lifecycle(track);
         const bool live_fast_preview_result =
                 track.supports_maneuvers &&
-                result.envelope.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
+                result.envelope.solve_quality == OrbitPredictionSolveQuality::FastPreview &&
                 context.maneuver_live_preview_available;
         if (track.supports_maneuvers &&
             track.latest_requested_generation_id != 0 &&
@@ -209,7 +209,7 @@ namespace Game
             return out;
         }
 
-        const OrbitPredictionService::AdaptiveStageDiagnostics previous_frame_base_diagnostics =
+        const OrbitPredictionAdaptiveStageDiagnostics previous_frame_base_diagnostics =
                 track.derived_diagnostics.frame_base;
         track.solver_ms_last = std::max(0.0, result.timing.compute_time_ms);
         track.solver_diagnostics = result.diagnostics;
@@ -224,7 +224,7 @@ namespace Game
         if (active_maneuver_edit &&
             result.envelope.maneuver_plan_signature_valid &&
             result.envelope.maneuver_plan_signature != current_plan_signature &&
-            result.envelope.solve_quality != OrbitPredictionService::SolveQuality::FastPreview)
+            result.envelope.solve_quality != OrbitPredictionSolveQuality::FastPreview)
         {
             PredictionLifecycleReducer::mark_solver_result_rejected_for_rebuild(track);
             return out;
@@ -252,10 +252,10 @@ namespace Game
         }
         else
         {
-            resolve_cache.solver.shared_ephemeris = result.resolved_shared_ephemeris();
-            resolve_cache.solver.massive_bodies = result.resolved_massive_bodies();
-            resolve_cache.solver.trajectory_segments_inertial = result.resolved_trajectory_segments_inertial();
-            resolve_cache.solver.trajectory_inertial = result.resolved_trajectory_inertial();
+            resolve_cache.solver.core.shared_ephemeris = result.resolved_shared_ephemeris();
+            resolve_cache.solver.core.massive_bodies = result.resolved_massive_bodies();
+            resolve_cache.solver.base.trajectory_segments_inertial = result.resolved_trajectory_segments_inertial();
+            resolve_cache.solver.base.trajectory_inertial = result.resolved_trajectory_inertial();
         }
         const double reference_time_s =
                 context.orbital_scenario ? context.orbital_scenario->sim.time_s() : result.timing.build_time_s;

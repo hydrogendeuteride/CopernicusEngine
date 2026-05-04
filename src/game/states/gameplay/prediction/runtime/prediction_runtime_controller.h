@@ -20,7 +20,7 @@ namespace Game
 
         static bool apply_completed_solver_result(GameplayPredictionState &prediction,
                                                   const PredictionRuntimeContext &context,
-                                                  OrbitPredictionService::Result result);
+                                                  OrbitPredictionResult result);
 
         static bool apply_completed_derived_result(GameplayPredictionState &prediction,
                                                    const PredictionRuntimeContext &context,

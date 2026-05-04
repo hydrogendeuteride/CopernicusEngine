@@ -41,17 +41,17 @@ namespace
                           const double t_mid_s,
                           const double t1_s)
     {
-        cache.solver.trajectory_inertial_planned = {
+        cache.solver.planned.trajectory_inertial = {
                 make_sample(t0_s, 7'000'000.0),
                 make_sample(t_mid_s, 7'200'000.0),
                 make_sample(t1_s, 7'400'000.0),
         };
-        cache.solver.trajectory_segments_inertial_planned = {
+        cache.solver.planned.trajectory_segments_inertial = {
                 make_segment(t0_s, t_mid_s, 7'000'000.0, 7'200'000.0),
                 make_segment(t_mid_s, t1_s, 7'200'000.0, 7'400'000.0),
         };
-        cache.display.trajectory_frame_planned = cache.solver.trajectory_inertial_planned;
-        cache.display.trajectory_segments_frame_planned = cache.solver.trajectory_segments_inertial_planned;
+        cache.display.trajectory_frame_planned = cache.solver.planned.trajectory_inertial;
+        cache.display.trajectory_segments_frame_planned = cache.solver.planned.trajectory_segments_inertial;
     }
 
     Game::PredictionDrawDetail::PredictionGlobalDrawContext make_draw_global_context(const double display_time_s)
@@ -74,8 +74,8 @@ TEST(GameplayPredictionManeuverTests, ClearPredictionRuntimeResetsTrackState)
     track.key = {Game::PredictionSubjectKind::Orbiter, 1};
     track.cache.identity.valid = true;
     track.cache.identity.build_time_s = 42.0;
-    track.cache.solver.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'100'000.0)};
-    track.cache.solver.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'100'000.0)};
+    track.cache.solver.base.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'100'000.0)};
+    track.cache.solver.base.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'100'000.0)};
     track.request_pending = true;
     track.derived_request_pending = true;
     track.dirty = true;
@@ -91,8 +91,8 @@ TEST(GameplayPredictionManeuverTests, ClearPredictionRuntimeResetsTrackState)
     ASSERT_EQ(state.prediction_for_test().tracks.size(), 1u);
     const Game::PredictionTrackState &cleared = state.prediction_for_test().tracks.front();
     EXPECT_FALSE(cleared.cache.identity.valid);
-    EXPECT_TRUE(cleared.cache.solver.trajectory_inertial.empty());
-    EXPECT_TRUE(cleared.cache.solver.trajectory_segments_inertial.empty());
+    EXPECT_TRUE(cleared.cache.solver.base.trajectory_inertial.empty());
+    EXPECT_TRUE(cleared.cache.solver.base.trajectory_segments_inertial.empty());
     EXPECT_FALSE(cleared.request_pending);
     EXPECT_FALSE(cleared.derived_request_pending);
     EXPECT_EQ(cleared.latest_requested_generation_id, 0u);
@@ -695,11 +695,11 @@ TEST(GameplayPredictionManeuverTests, FastPreviewRequestUsesSelectedNodePreviewF
     Game::PredictionTrackState track{};
     track.key = state.prediction_for_test().selection.active_subject;
     track.supports_maneuvers = true;
-    track.cache.solver.trajectory_inertial = {
+    track.cache.solver.base.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(240.0, 7'100'000.0),
     };
-    track.cache.solver.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
+    track.cache.solver.planned.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
             .node_id = selected.id,
             .t_s = selected.time_s,
             .valid = true,
@@ -750,23 +750,23 @@ TEST(GameplayPredictionManeuverTests, FullRequestEnablesPlannedSuffixRefineForPo
     track.key = state.prediction_for_test().selection.active_subject;
     track.supports_maneuvers = true;
     track.cache = make_prediction_cache(4u, 100.0, 360.0, 7'000'000.0, 7'260'000.0);
-    track.cache.solver.trajectory_segments_inertial_planned = {
+    track.cache.solver.planned.trajectory_segments_inertial = {
             make_segment(100.0, 150.0, 7'000'000.0, 7'050'000.0),
             make_segment(150.0, 240.0, 7'050'000.0, 7'140'000.0),
     };
-    track.cache.solver.trajectory_inertial_planned = {
+    track.cache.solver.planned.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(150.0, 7'050'000.0),
             make_sample(240.0, 7'140'000.0),
     };
-    track.cache.solver.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
+    track.cache.solver.planned.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
             .node_id = upstream.id,
             .t_s = upstream.time_s,
             .valid = true,
             .inertial_position_m = glm::dvec3(7'050'000.0, 0.0, 0.0),
             .inertial_velocity_mps = glm::dvec3(0.0, 7'500.0, 0.0),
     });
-    track.cache.solver.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
+    track.cache.solver.planned.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
             .node_id = selected.id,
             .t_s = selected.time_s,
             .valid = true,
@@ -823,7 +823,7 @@ TEST(GameplayPredictionManeuverTests, FastPreviewRequestFallsBackToInertialCache
     Game::PredictionTrackState track{};
     track.key = state.prediction_for_test().selection.active_subject;
     track.supports_maneuvers = true;
-    track.cache.solver.trajectory_inertial = {
+    track.cache.solver.base.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(240.0, 7'100'000.0),
     };
@@ -870,7 +870,7 @@ TEST(GameplayPredictionManeuverTests, TimeEditActivatesFastPreviewRequest)
     Game::PredictionTrackState track{};
     track.key = state.prediction_for_test().selection.active_subject;
     track.supports_maneuvers = true;
-    track.cache.solver.trajectory_inertial = {
+    track.cache.solver.base.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(selected.time_s, 7'200'000.0),
     };
@@ -917,15 +917,15 @@ TEST(GameplayPredictionManeuverTests, TimeEditUsesBaselineAnchorStateForMovedFir
     track.key = state.prediction_for_test().selection.active_subject;
     track.supports_maneuvers = true;
     track.cache.identity.valid = true;
-    track.cache.solver.trajectory_inertial = {
+    track.cache.solver.base.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(selected.time_s, 7'200'000.0),
     };
-    track.cache.solver.trajectory_inertial_planned = {
+    track.cache.solver.planned.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(selected.time_s, 9'000'000.0),
     };
-    track.cache.solver.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
+    track.cache.solver.planned.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
             .node_id = selected.id,
             .t_s = selected.time_s,
             .valid = true,
@@ -980,7 +980,7 @@ TEST(GameplayPredictionManeuverTests, TimeEditLeavesAnchorStateUnseededWhenPrior
     Game::PredictionTrackState track{};
     track.key = state.prediction_for_test().selection.active_subject;
     track.supports_maneuvers = true;
-    track.cache.solver.trajectory_inertial = {
+    track.cache.solver.base.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(selected.time_s, 7'200'000.0),
     };
@@ -1048,23 +1048,23 @@ TEST(GameplayPredictionManeuverTests, FinishedTimeEditDoesNotSeedAnchorFromStale
     track.preview_anchor.anchor_node_id = selected.id;
     track.preview_anchor.anchor_time_s = selected.time_s;
     track.cache.identity.valid = true;
-    track.cache.solver.trajectory_inertial = {
+    track.cache.solver.base.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(selected.time_s, 7'200'000.0),
     };
-    track.cache.solver.trajectory_segments_inertial = {
+    track.cache.solver.base.trajectory_segments_inertial = {
             make_segment(100.0, selected.time_s, 7'000'000.0, 7'200'000.0),
     };
-    track.cache.solver.trajectory_inertial_planned = {
+    track.cache.solver.planned.trajectory_inertial = {
             make_sample(100.0, 7'000'000.0),
             make_sample(240.0, 9'000'000.0),
             make_sample(selected.time_s, 9'500'000.0),
     };
-    track.cache.solver.trajectory_segments_inertial_planned = {
+    track.cache.solver.planned.trajectory_segments_inertial = {
             make_segment(100.0, 240.0, 7'000'000.0, 9'000'000.0),
             make_segment(240.0, selected.time_s, 9'000'000.0, 9'500'000.0),
     };
-    track.cache.solver.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
+    track.cache.solver.planned.maneuver_previews.push_back(Game::OrbitPredictionService::ManeuverNodePreview{
             .node_id = selected.id,
             .t_s = 240.0,
             .valid = true,
@@ -1795,8 +1795,8 @@ TEST(GameplayPredictionManeuverTests, ShouldRebuildPredictionTrackWhenCoverageFa
     track.key = {Game::PredictionSubjectKind::Orbiter, 1};
     track.cache.identity.valid = true;
     track.cache.identity.build_time_s = 0.0;
-    track.cache.solver.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'050'000.0)};
-    track.cache.solver.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'050'000.0)};
+    track.cache.solver.base.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'050'000.0)};
+    track.cache.solver.base.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'050'000.0)};
 
     EXPECT_TRUE(make_prediction_adapter(state).should_rebuild_prediction_track(track, 10.0, 0.016f, false, false));
 }
@@ -1818,8 +1818,8 @@ TEST(GameplayPredictionManeuverTests, ShouldRebuildPredictionTrackWhenManeuverCo
     track.key = {Game::PredictionSubjectKind::Orbiter, 1};
     track.cache.identity.valid = true;
     track.cache.identity.build_time_s = 0.0;
-    track.cache.solver.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'050'000.0)};
-    track.cache.solver.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'050'000.0)};
+    track.cache.solver.base.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'050'000.0)};
+    track.cache.solver.base.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'050'000.0)};
 
     EXPECT_TRUE(make_prediction_adapter(state).should_rebuild_prediction_track(track, 10.0, 0.016f, false, true));
 }
