@@ -113,6 +113,14 @@ namespace Game
         void refresh_prediction_derived_cache(PredictionTrackState &track,
                                               double display_time_s = std::numeric_limits<double>::quiet_NaN());
         void refresh_all_prediction_derived_caches();
+        GameplayPredictionState &prediction_draw_state();
+        const GameplayPredictionState &prediction_draw_state() const;
+        OrbitPlotBudgetSettings &prediction_draw_budget();
+        const OrbitPlotBudgetSettings &prediction_draw_budget() const;
+        bool prediction_subject_world_state(PredictionSubjectKey key,
+                                            WorldVec3 &out_pos_world,
+                                            glm::dvec3 &out_vel_world,
+                                            glm::vec3 &out_vel_local) const;
 
         bool build_orbit_prediction_global_draw_context(
                 GameStateContext &ctx,

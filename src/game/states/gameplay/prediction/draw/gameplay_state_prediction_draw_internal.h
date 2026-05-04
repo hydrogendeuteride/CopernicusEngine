@@ -7,6 +7,7 @@
 #include "core/picking/picking_system.h"
 #include "game/states/gameplay/maneuver/gameplay_state_maneuver_types.h"
 #include "game/states/gameplay/prediction/gameplay_state_prediction_types.h"
+#include "game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_internal.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -14,6 +15,12 @@
 #include <span>
 #include <utility>
 #include <vector>
+
+namespace Game
+{
+    class GameplayPredictionAdapter;
+    struct GameStateContext;
+} // namespace Game
 
 namespace Game::PredictionDrawDetail
 {
@@ -113,6 +120,59 @@ namespace Game::PredictionDrawDetail
         std::vector<orbitsim::TrajectorySegment> traj_base_segments_world_basis{};
         const PredictionDisplayFrameCache *traj_planned_segments_world_basis_source{nullptr};
         std::vector<orbitsim::TrajectorySegment> traj_stable_planned_segments_world_basis{};
+    };
+
+    struct PredictionTrackVisualPlan
+    {
+        PredictionTrackDrawContext track{};
+        PickWindow base_full_draw_window{};
+        PickWindow base_future_draw_window{};
+        PredictionRuntimeDetail::PredictionTrackLifecycleSnapshot lifecycle{};
+        PredictionRuntimeDetail::PredictionOverlayLayerState overlay_layers{};
+        PredictionChunkAssembly preview_assembly{};
+        PredictionChunkAssembly full_stream_assembly{};
+        bool preview_overlay_active{false};
+        bool full_stream_overlay_active{false};
+        bool planned_cache_pickable{false};
+        bool planned_pick_uses_adaptive_curve{false};
+        glm::vec4 preview_plan_color{1.0f};
+    };
+
+    class PredictionDrawPlanner
+    {
+    public:
+        explicit PredictionDrawPlanner(GameplayPredictionAdapter &adapter);
+
+        bool build_global(GameStateContext &ctx, PredictionGlobalDrawContext &out);
+        bool build_track(PredictionTrackState &track,
+                         const PredictionGlobalDrawContext &global_ctx,
+                         PredictionTrackVisualPlan &out);
+        void complete_visual_plan(PredictionTrackVisualPlan &plan);
+
+    private:
+        GameplayPredictionAdapter &_adapter;
+    };
+
+    class PredictionRenderEmitter
+    {
+    public:
+        explicit PredictionRenderEmitter(GameplayPredictionAdapter &adapter);
+
+        void emit(PredictionTrackVisualPlan &plan);
+
+    private:
+        GameplayPredictionAdapter &_adapter;
+    };
+
+    class PredictionPickEmitter
+    {
+    public:
+        explicit PredictionPickEmitter(GameplayPredictionAdapter &adapter);
+
+        void emit(const PredictionGlobalDrawContext &global_ctx, PredictionTrackVisualPlan &plan);
+
+    private:
+        GameplayPredictionAdapter &_adapter;
     };
 
     void reset_orbit_plot_state(PickingSystem *picking,

@@ -1310,6 +1310,246 @@ TEST(GameplayPredictionManeuverTests, DrawTrackUsesFullStreamOverlayForActiveMan
     GameplayTestHooks::clear_entities();
 }
 
+TEST(GameplayPredictionManeuverTests, DrawPlannerBuildsRenderAndPickWindowsBeforeEmission)
+{
+    Game::GameplayState state{};
+    state._orbit.scenario_owner() = make_reference_orbitsim(100.0);
+    ASSERT_TRUE(state._orbit.scenario_owner());
+    Game::Entity player_entity{Game::EntityId{1}, "player"};
+    register_player_draw_subject(state, player_entity);
+
+    Game::ManeuverNode node{};
+    node.id = 7;
+    node.time_s = 240.0;
+    node.dv_rtn_mps = glm::dvec3(0.0, 5.0, 0.0);
+    state._maneuver.plan().selected_node_id = node.id;
+    state._maneuver.plan().nodes.push_back(node);
+    const uint64_t plan_signature = Game::GameplayPredictionAdapter(state).current_maneuver_plan_signature();
+
+    Game::PredictionTrackState track{};
+    track.key = state.prediction_for_test().selection.active_subject;
+    track.supports_maneuvers = true;
+    track.cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
+    set_planned_path(track.cache, node.time_s, 320.0, 500.0);
+    track.cache.identity.maneuver_plan_signature_valid = true;
+    track.cache.identity.maneuver_plan_signature = plan_signature;
+
+    Game::GameplayPredictionAdapter adapter(state);
+    Game::PredictionDrawDetail::PredictionTrackVisualPlan plan{};
+    ASSERT_TRUE(Game::PredictionDrawDetail::PredictionDrawPlanner(adapter)
+                        .build_track(track, make_draw_global_context(100.0), plan));
+
+    EXPECT_TRUE(plan.base_future_draw_window.valid);
+    EXPECT_TRUE(plan.track.base_pick_window.valid);
+    EXPECT_TRUE(plan.track.planned_draw_window.valid);
+    EXPECT_TRUE(plan.track.planned_pick_window.valid);
+    EXPECT_GT(plan.track.planned_pick_window.t1_s, plan.track.planned_pick_window.t0_s);
+
+    GameplayTestHooks::clear_entities();
+}
+
+TEST(GameplayPredictionManeuverTests, DrawPlannerSnapshotsFullStreamOverlayForRenderAndPick)
+{
+    Game::GameplayState state{};
+    state._orbit.scenario_owner() = make_reference_orbitsim(100.0);
+    ASSERT_TRUE(state._orbit.scenario_owner());
+    Game::Entity player_entity{Game::EntityId{1}, "player"};
+    register_player_draw_subject(state, player_entity);
+
+    Game::ManeuverNode node{};
+    node.id = 7;
+    node.time_s = 240.0;
+    node.dv_rtn_mps = glm::dvec3(0.0, 5.0, 0.0);
+    state._maneuver.plan().selected_node_id = node.id;
+    state._maneuver.plan().nodes.push_back(node);
+    const uint64_t old_plan_signature = Game::GameplayPredictionAdapter(state).current_maneuver_plan_signature();
+    state._maneuver.plan().nodes.front().dv_rtn_mps = glm::dvec3(0.0, 12.0, 0.0);
+
+    Game::PredictionTrackState track{};
+    track.key = state.prediction_for_test().selection.active_subject;
+    track.supports_maneuvers = true;
+    track.preview_state = Game::PredictionPreviewRuntimeState::AwaitFullRefine;
+    track.preview_anchor.valid = true;
+    track.preview_anchor.anchor_node_id = node.id;
+    track.preview_anchor.anchor_time_s = node.time_s;
+    track.preview_anchor.visual_window_s = 120.0;
+    track.preview_anchor.exact_window_s = 60.0;
+    track.dirty = true;
+    track.cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
+    track.authoritative_cache = make_draw_ready_cache(state, 4u, 100.0, 500.0);
+    set_planned_path(track.authoritative_cache, 100.0, node.time_s, 500.0);
+    track.authoritative_cache.identity.maneuver_plan_signature_valid = true;
+    track.authoritative_cache.identity.maneuver_plan_signature = old_plan_signature;
+    track.full_stream_overlay.chunk_assembly.valid = true;
+    track.full_stream_overlay.chunk_assembly.generation_id = track.cache.identity.generation_id;
+    track.full_stream_overlay.display_frame_key = track.cache.display.display_frame_key;
+    track.full_stream_overlay.display_frame_revision = track.cache.display.display_frame_revision;
+    track.full_stream_overlay.chunk_assembly.chunks = {
+            make_chunk(0u, track.cache.identity.generation_id, node.time_s, node.time_s + 60.0, 7'200'000.0, 7'280'000.0),
+    };
+
+    OrbitPlotSystem plot{};
+    Game::PredictionDrawDetail::PredictionGlobalDrawContext global_ctx = make_draw_global_context(100.0);
+    global_ctx.orbit_plot = &plot;
+
+    Game::GameplayPredictionAdapter adapter(state);
+    Game::PredictionDrawDetail::PredictionTrackVisualPlan plan{};
+    ASSERT_TRUE(Game::PredictionDrawDetail::PredictionDrawPlanner(adapter).build_track(track, global_ctx, plan));
+    ASSERT_TRUE(plan.full_stream_overlay_active);
+    ASSERT_EQ(plan.full_stream_assembly.chunks.size(), 1u);
+
+    Game::PredictionDrawDetail::PredictionRenderEmitter(adapter).emit(plan);
+
+    EXPECT_EQ(state.prediction_for_test().orbit_plot_perf.planned_chunk_count, 1u);
+    EXPECT_EQ(state.prediction_for_test().orbit_plot_perf.planned_chunks_drawn, 1u);
+
+    GameplayTestHooks::clear_entities();
+}
+
+TEST(GameplayPredictionManeuverTests, PickCacheInvalidatesOnIdentityWindowBudgetAndAdaptiveChanges)
+{
+    Game::PredictionLinePickCache cache{};
+    const uint64_t generation_id = 5u;
+    const uint64_t frame_key = 11u;
+    const uint64_t frame_revision = 3u;
+    const WorldVec3 ref_body_world{1.0, 2.0, 3.0};
+    const WorldVec3 align_delta{4.0, 5.0, 6.0};
+    const glm::dmat3 frame_to_world{1.0};
+    const glm::dvec3 camera_world{7.0, 8.0, 9.0};
+    Game::OrbitRenderCurve::FrustumContext frustum{};
+    frustum.valid = true;
+    frustum.viewproj = glm::mat4(1.0f);
+    frustum.origin_world = WorldVec3(camera_world);
+
+    Game::PredictionDrawDetail::mark_pick_cache_valid(cache,
+                                                      generation_id,
+                                                      frame_key,
+                                                      frame_revision,
+                                                      ref_body_world,
+                                                      frame_to_world,
+                                                      align_delta,
+                                                      camera_world,
+                                                      1.0,
+                                                      720.0,
+                                                      0.75,
+                                                      frustum,
+                                                      0.05,
+                                                      100.0,
+                                                      200.0,
+                                                      128u,
+                                                      true,
+                                                      true);
+
+    EXPECT_FALSE(Game::PredictionDrawDetail::should_rebuild_pick_cache(cache,
+                                                                       generation_id,
+                                                                       frame_key,
+                                                                       frame_revision,
+                                                                       ref_body_world,
+                                                                       frame_to_world,
+                                                                       align_delta,
+                                                                       camera_world,
+                                                                       1.0,
+                                                                       720.0,
+                                                                       0.75,
+                                                                       frustum,
+                                                                       0.05,
+                                                                       100.0,
+                                                                       200.0,
+                                                                       128u,
+                                                                       true,
+                                                                       true));
+    EXPECT_TRUE(Game::PredictionDrawDetail::should_rebuild_pick_cache(cache,
+                                                                      generation_id + 1u,
+                                                                      frame_key,
+                                                                      frame_revision,
+                                                                      ref_body_world,
+                                                                      frame_to_world,
+                                                                      align_delta,
+                                                                      camera_world,
+                                                                      1.0,
+                                                                      720.0,
+                                                                      0.75,
+                                                                      frustum,
+                                                                      0.05,
+                                                                      100.0,
+                                                                      200.0,
+                                                                      128u,
+                                                                      true,
+                                                                      true));
+    EXPECT_TRUE(Game::PredictionDrawDetail::should_rebuild_pick_cache(cache,
+                                                                      generation_id,
+                                                                      frame_key,
+                                                                      frame_revision + 1u,
+                                                                      ref_body_world,
+                                                                      frame_to_world,
+                                                                      align_delta,
+                                                                      camera_world,
+                                                                      1.0,
+                                                                      720.0,
+                                                                      0.75,
+                                                                      frustum,
+                                                                      0.05,
+                                                                      100.0,
+                                                                      200.0,
+                                                                      128u,
+                                                                      true,
+                                                                      true));
+    EXPECT_TRUE(Game::PredictionDrawDetail::should_rebuild_pick_cache(cache,
+                                                                      generation_id,
+                                                                      frame_key,
+                                                                      frame_revision,
+                                                                      ref_body_world,
+                                                                      frame_to_world,
+                                                                      align_delta,
+                                                                      camera_world,
+                                                                      1.0,
+                                                                      720.0,
+                                                                      0.75,
+                                                                      frustum,
+                                                                      0.05,
+                                                                      100.0,
+                                                                      220.0,
+                                                                      128u,
+                                                                      true,
+                                                                      true));
+    EXPECT_TRUE(Game::PredictionDrawDetail::should_rebuild_pick_cache(cache,
+                                                                      generation_id,
+                                                                      frame_key,
+                                                                      frame_revision,
+                                                                      ref_body_world,
+                                                                      frame_to_world,
+                                                                      align_delta,
+                                                                      camera_world,
+                                                                      1.0,
+                                                                      720.0,
+                                                                      0.75,
+                                                                      frustum,
+                                                                      0.05,
+                                                                      100.0,
+                                                                      200.0,
+                                                                      256u,
+                                                                      true,
+                                                                      true));
+    EXPECT_TRUE(Game::PredictionDrawDetail::should_rebuild_pick_cache(cache,
+                                                                      generation_id,
+                                                                      frame_key,
+                                                                      frame_revision,
+                                                                      ref_body_world,
+                                                                      frame_to_world,
+                                                                      align_delta,
+                                                                      camera_world,
+                                                                      1.0,
+                                                                      720.0,
+                                                                      0.75,
+                                                                      frustum,
+                                                                      0.05,
+                                                                      100.0,
+                                                                      200.0,
+                                                                      128u,
+                                                                      false,
+                                                                      true));
+}
+
 TEST(GameplayPredictionManeuverTests, DrawTrackUsesStalePrefixWhenAwaitingFullRefineHasNoOverlay)
 {
     Game::GameplayState state{};

@@ -9,29 +9,34 @@ namespace Game
 {
     namespace Draw = PredictionDrawDetail;
 
-    bool GameplayPredictionAdapter::build_orbit_prediction_global_draw_context(
+    bool Draw::PredictionDrawPlanner::build_global(
             GameStateContext &ctx,
             Draw::PredictionGlobalDrawContext &out)
     {
         out.picking = (ctx.renderer != nullptr) ? ctx.renderer->picking() : nullptr;
         out.orbit_plot = (ctx.renderer && ctx.renderer->_context) ? ctx.renderer->_context->orbit_plot : nullptr;
-        Draw::reset_orbit_plot_state(out.picking, out.orbit_plot, _state._prediction->state().orbit_plot_perf, _state._prediction->state().enabled);
+        Draw::reset_orbit_plot_state(out.picking,
+                                     out.orbit_plot,
+                                     _adapter.prediction_draw_state().orbit_plot_perf,
+                                     _adapter.prediction_draw_state().enabled);
 
-        if (!_state._prediction->state().enabled || !ctx.api || !_state._orbit.scenario_owner())
+        const GameplayPredictionContext adapter_context = _adapter.context();
+        if (!_adapter.prediction_draw_state().enabled || !ctx.api || !adapter_context.orbit.scenario_owner())
         {
             return false;
         }
 
-        if (!active_prediction_track())
+        if (!_adapter.active_prediction_track())
         {
             return false;
         }
 
         out.alpha_f = std::clamp(ctx.interpolation_alpha(), 0.0f, 1.0f);
-        out.display_time_s = Draw::compute_prediction_display_time_s(_state._orbit.scenario_owner()->sim.time_s(),
-                                                                     _state._orbital_physics.last_sim_step_dt_s(),
-                                                                     ctx.fixed_delta_time(),
-                                                                     out.alpha_f);
+        out.display_time_s = Draw::compute_prediction_display_time_s(
+                adapter_context.orbit.scenario_owner()->sim.time_s(),
+                adapter_context.orbital_physics.last_sim_step_dt_s(),
+                ctx.fixed_delta_time(),
+                out.alpha_f);
         if (!std::isfinite(out.display_time_s))
         {
             return false;
@@ -40,9 +45,10 @@ namespace Game
         // DebugDrawSystem prunes commands during begin_frame, so keep velocity rays
         // alive slightly longer than the current dt.
         out.ttl_s = std::clamp(ctx.delta_time(), 0.0f, 0.1f) + 0.002f;
-        out.line_alpha_scale = std::clamp(_state._prediction->state().line_alpha_scale, 0.1f, 8.0f);
-        out.color_orbit_plan =
-                Draw::scale_line_color(_state._prediction->state().draw_config.palette.orbit_planned, out.line_alpha_scale);
+        out.line_alpha_scale = std::clamp(_adapter.prediction_draw_state().line_alpha_scale, 0.1f, 8.0f);
+        out.color_orbit_plan = Draw::scale_line_color(
+                _adapter.prediction_draw_state().draw_config.palette.orbit_planned,
+                out.line_alpha_scale);
 
         out.camera_world = ctx.api->get_camera_position_d();
         float camera_fov_deg = 70.0f;
@@ -71,8 +77,9 @@ namespace Game
         }
 
         out.render_error_px =
-                (std::isfinite(_state._prediction->budget().render_error_px) && _state._prediction->budget().render_error_px > 0.0)
-                        ? _state._prediction->budget().render_error_px
+                (std::isfinite(_adapter.prediction_draw_budget().render_error_px) &&
+                 _adapter.prediction_draw_budget().render_error_px > 0.0)
+                        ? _adapter.prediction_draw_budget().render_error_px
                         : 0.75;
         if (out.orbit_plot)
         {
@@ -80,6 +87,13 @@ namespace Game
         }
 
         return true;
+    }
+
+    bool GameplayPredictionAdapter::build_orbit_prediction_global_draw_context(
+            GameStateContext &ctx,
+            Draw::PredictionGlobalDrawContext &out)
+    {
+        return Draw::PredictionDrawPlanner(*this).build_global(ctx, out);
     }
 
     // Build per-frame orbit visuals, pick data, and debug overlays from the latest prediction cache.
@@ -92,7 +106,7 @@ namespace Game
         }
 
         std::vector<PredictionTrackState *> visible_tracks;
-        visible_tracks.reserve(1 + _state._prediction->state().selection.overlay_subjects.size());
+        visible_tracks.reserve(1 + prediction_draw_state().selection.overlay_subjects.size());
         for (PredictionSubjectKey key : collect_visible_prediction_subjects())
         {
             if (PredictionTrackState *track = find_prediction_track(key))
@@ -112,29 +126,29 @@ namespace Game
                 continue;
             }
 
-            Draw::PredictionTrackDrawContext track_ctx{};
-            if (!build_orbit_prediction_track_draw_context(*track, global_ctx, track_ctx))
+            Draw::PredictionTrackVisualPlan visual_plan{};
+            if (!Draw::PredictionDrawPlanner(*this).build_track(*track, global_ctx, visual_plan))
             {
                 continue;
             }
 
-            draw_orbit_prediction_track_windows(track_ctx);
+            Draw::PredictionRenderEmitter(*this).emit(visual_plan);
 
-            if (global_ctx.picking && track_ctx.active_player_track)
+            if (global_ctx.picking && visual_plan.track.active_player_track)
             {
-                emit_orbit_prediction_track_picks(global_ctx, track_ctx);
+                Draw::PredictionPickEmitter(*this).emit(global_ctx, visual_plan);
             }
 
-            if (track_ctx.is_active &&
-                _state._prediction->state().draw_velocity_ray &&
-                _state._debug_draw_enabled &&
-                track_ctx.track->key.kind == PredictionSubjectKind::Orbiter)
+            if (visual_plan.track.is_active &&
+                prediction_draw_state().draw_velocity_ray &&
+                context().debug_draw_enabled &&
+                visual_plan.track.track->key.kind == PredictionSubjectKind::Orbiter)
             {
                 Draw::emit_velocity_ray(ctx.api,
-                                        track_ctx.subject_pos_world,
-                                        track_ctx.subject_vel_world,
+                                        visual_plan.track.subject_pos_world,
+                                        visual_plan.track.subject_vel_world,
                                         global_ctx.ttl_s,
-                                        _state._prediction->state().draw_config.palette.velocity_ray);
+                                        prediction_draw_state().draw_config.palette.velocity_ray);
             }
         }
     }

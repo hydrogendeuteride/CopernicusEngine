@@ -38,6 +38,34 @@ namespace Game
         return build_context(_state);
     }
 
+    GameplayPredictionState &GameplayPredictionAdapter::prediction_draw_state()
+    {
+        return _state._prediction->state();
+    }
+
+    const GameplayPredictionState &GameplayPredictionAdapter::prediction_draw_state() const
+    {
+        return _state._prediction->state();
+    }
+
+    OrbitPlotBudgetSettings &GameplayPredictionAdapter::prediction_draw_budget()
+    {
+        return _state._prediction->budget();
+    }
+
+    const OrbitPlotBudgetSettings &GameplayPredictionAdapter::prediction_draw_budget() const
+    {
+        return _state._prediction->budget();
+    }
+
+    bool GameplayPredictionAdapter::prediction_subject_world_state(const PredictionSubjectKey key,
+                                                                   WorldVec3 &out_pos_world,
+                                                                   glm::dvec3 &out_vel_world,
+                                                                   glm::vec3 &out_vel_local) const
+    {
+        return get_prediction_subject_world_state(key, out_pos_world, out_vel_world, out_vel_local);
+    }
+
     PredictionSubjectKey GameplayPredictionAdapter::player_prediction_subject_key() const
     {
         return PredictionHostContextBuilder(context()).make_subject_state_provider().player_subject_key();
