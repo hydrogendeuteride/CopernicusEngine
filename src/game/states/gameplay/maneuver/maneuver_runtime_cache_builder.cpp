@@ -356,6 +356,64 @@ namespace Game
                    finite3(node.maneuver_basis_r_world) && finite3(node.maneuver_basis_t_world) &&
                    finite3(node.maneuver_basis_n_world);
         }
+
+        void set_rtn_display_basis(ManeuverNode &node)
+        {
+            node.basis_r_world = node.maneuver_basis_r_world;
+            node.basis_t_world = node.maneuver_basis_t_world;
+            node.basis_n_world = node.maneuver_basis_n_world;
+        }
+
+        void set_prograde_outward_normal_display_basis(ManeuverNode &node,
+                                                       const glm::dvec3 &prograde_candidate_world,
+                                                       const glm::dvec3 &normal_candidate_world)
+        {
+            const glm::dvec3 prograde_world =
+                    normalized_or(prograde_candidate_world, node.maneuver_basis_t_world);
+            glm::dvec3 normal_world =
+                    normalized_or(normal_candidate_world, node.maneuver_basis_n_world);
+            glm::dvec3 outward_world =
+                    normalized_or(glm::cross(prograde_world, normal_world), node.maneuver_basis_r_world);
+            if (glm::dot(outward_world, node.maneuver_basis_r_world) < 0.0)
+            {
+                outward_world = -outward_world;
+            }
+
+            normal_world = normalized_or(glm::cross(outward_world, prograde_world), node.maneuver_basis_n_world);
+            if (glm::dot(normal_world, node.maneuver_basis_n_world) < 0.0)
+            {
+                outward_world = -outward_world;
+                normal_world = -normal_world;
+            }
+
+            node.basis_r_world = outward_world;
+            node.basis_t_world = prograde_world;
+            node.basis_n_world = normal_world;
+        }
+
+        void set_display_basis(ManeuverNode &node,
+                               const ManeuverGizmoBasisMode basis_mode,
+                               const glm::dvec3 &prograde_candidate_world,
+                               const glm::dvec3 &normal_candidate_world)
+        {
+            if (basis_mode == ManeuverGizmoBasisMode::RTN)
+            {
+                set_rtn_display_basis(node);
+                return;
+            }
+
+            set_prograde_outward_normal_display_basis(node,
+                                                      prograde_candidate_world,
+                                                      normal_candidate_world);
+        }
+
+        void invalidate_runtime_nodes(ManeuverPlanState &plan)
+        {
+            for (ManeuverNode &node : plan.nodes)
+            {
+                node.gizmo_valid = false;
+            }
+        }
     } // namespace
 
     ManeuverRuntimeCacheResult ManeuverRuntimeCacheBuilder::rebuild(const ManeuverRuntimeCacheInput &input)
@@ -369,20 +427,24 @@ namespace Game
         for (ManeuverNode &node : input.plan.nodes)
         {
             node.total_dv_mps = safe_length(node.dv_rtn_mps);
-            if (!input.hold_cached_release_state)
-            {
-                node.gizmo_valid = false;
-            }
         }
 
         const OrbitPredictionCache *display_cache = input.active_cache;
         const OrbitPredictionCache *pred_cache = display_cache;
         if (!display_cache || !display_cache->identity.valid || display_cache->display.trajectory_frame.size() < 2)
         {
+            if (!input.hold_cached_release_state)
+            {
+                invalidate_runtime_nodes(input.plan);
+            }
             return result;
         }
         if (!pred_cache || !pred_cache->identity.valid)
         {
+            if (!input.hold_cached_release_state)
+            {
+                invalidate_runtime_nodes(input.plan);
+            }
             return result;
         }
 
@@ -392,6 +454,10 @@ namespace Game
         const double t1 = traj_base.back().t_s;
         if (!std::isfinite(input.display_time_s) || !(t1 > t0))
         {
+            if (!input.hold_cached_release_state)
+            {
+                invalidate_runtime_nodes(input.plan);
+            }
             return result;
         }
 
@@ -449,6 +515,15 @@ namespace Game
 
         for (ManeuverNode &node : input.plan.nodes)
         {
+            const bool cached_node_state_valid = node.gizmo_valid && node_runtime_state_valid(node);
+            const glm::dvec3 cached_mbasis_r = node.maneuver_basis_r_world;
+            const glm::dvec3 cached_mbasis_t = node.maneuver_basis_t_world;
+            const glm::dvec3 cached_mbasis_n = node.maneuver_basis_n_world;
+            if (!input.hold_cached_release_state)
+            {
+                node.gizmo_valid = false;
+            }
+
             if (!std::isfinite(node.time_s) || node.time_s < t0 || node.time_s > t1)
             {
                 continue;
@@ -461,15 +536,8 @@ namespace Game
                     drag_snapshots_available
                         ? find_display_snapshot(input.gizmo_interaction.drag_display_snapshots, node.id)
                         : nullptr;
-            const bool cached_node_state_valid = node_runtime_state_valid(node);
             const bool can_fallback_drag = active_drag_node && cached_drag_snapshot != nullptr;
             const bool can_fallback_release = input.hold_cached_release_state && cached_node_state_valid;
-            const glm::dvec3 cached_basis_r = node.basis_r_world;
-            const glm::dvec3 cached_basis_t = node.basis_t_world;
-            const glm::dvec3 cached_basis_n = node.basis_n_world;
-            const glm::dvec3 cached_mbasis_r = node.maneuver_basis_r_world;
-            const glm::dvec3 cached_mbasis_t = node.maneuver_basis_t_world;
-            const glm::dvec3 cached_mbasis_n = node.maneuver_basis_n_world;
 
             const bool release_refine_in_flight =
                     interaction_idle &&
@@ -490,12 +558,13 @@ namespace Game
                     (node.id == input.plan.selected_node_id || release_anchor_node);
             if (freeze_release_node)
             {
-                node.basis_r_world = cached_basis_r;
-                node.basis_t_world = cached_basis_t;
-                node.basis_n_world = cached_basis_n;
                 node.maneuver_basis_r_world = cached_mbasis_r;
                 node.maneuver_basis_t_world = cached_mbasis_t;
                 node.maneuver_basis_n_world = cached_mbasis_n;
+                set_display_basis(node,
+                                  input.basis_mode,
+                                  node.maneuver_basis_t_world,
+                                  node.maneuver_basis_n_world);
 
                 const glm::dvec3 dv_world = compose_basis_vector(node.dv_rtn_mps,
                                                                  node.maneuver_basis_r_world,
@@ -545,6 +614,25 @@ namespace Game
                                        : (stable_traj_node_inertial
                                                   ? stable_traj_node_inertial
                                                   : (allow_base_fallback ? &pred_base_traj_inertial : nullptr)));
+            const bool selected_uncached_node =
+                    node.id == input.plan.selected_node_id &&
+                    !cached_node_state_valid;
+            const bool planned_unavailable =
+                    !node_traj_world ||
+                    !node_traj_inertial ||
+                    node_traj_world->size() < 2 ||
+                    node_traj_inertial->size() < 2;
+            if (selected_uncached_node &&
+                planned_unavailable &&
+                traj_base.size() >= 2 &&
+                pred_base_traj_inertial.size() >= 2)
+            {
+                node_pred_cache = pred_cache;
+                node_disp_cache = display_cache;
+                node_traj_world = &traj_base;
+                node_traj_inertial = &pred_base_traj_inertial;
+                node_preview_map = &preview_by_node_id;
+            }
             auto preview_it = node_preview_map->find(node.id);
             const OrbitPredictionManeuverNodePreview *preview =
                     (preview_it != node_preview_map->end()) ? preview_it->second : nullptr;
@@ -713,9 +801,10 @@ namespace Game
                 node.maneuver_basis_r_world = cached_mbasis_r;
                 node.maneuver_basis_t_world = cached_mbasis_t;
                 node.maneuver_basis_n_world = cached_mbasis_n;
-                node.basis_r_world = cached_basis_r;
-                node.basis_t_world = cached_basis_t;
-                node.basis_n_world = cached_basis_n;
+                set_display_basis(node,
+                                  input.basis_mode,
+                                  node.maneuver_basis_t_world,
+                                  node.maneuver_basis_n_world);
             }
             else
             {
@@ -724,18 +813,14 @@ namespace Game
                 node.maneuver_basis_t_world = normalized_or(glm::dvec3(sf.T.x, sf.T.y, sf.T.z), glm::dvec3(0, 1, 0));
                 node.maneuver_basis_n_world = normalized_or(glm::dvec3(sf.N.x, sf.N.y, sf.N.z), glm::dvec3(0, 0, 1));
 
-                if (input.basis_mode == ManeuverGizmoBasisMode::RTN)
-                {
-                    node.basis_r_world = node.maneuver_basis_r_world;
-                    node.basis_t_world = node.maneuver_basis_t_world;
-                    node.basis_n_world = node.maneuver_basis_n_world;
-                }
-                else
+                glm::dvec3 prograde_world = node.maneuver_basis_t_world;
+                glm::dvec3 normal_world = node.maneuver_basis_n_world;
+                if (input.basis_mode == ManeuverGizmoBasisMode::ProgradeOutwardNormal)
                 {
                     const glm::dvec3 fallback_rtn_t(sf.T.x, sf.T.y, sf.T.z);
                     glm::dvec3 prograde_inertial = normalized_or(v_rel_mps, fallback_rtn_t);
                     glm::dvec3 normal_inertial = normalized_or(glm::dvec3(sf.N.x, sf.N.y, sf.N.z), glm::dvec3(0, 0, 1));
-                    glm::dvec3 prograde_world = normalized_or(prograde_inertial, node.maneuver_basis_t_world);
+                    prograde_world = normalized_or(prograde_inertial, node.maneuver_basis_t_world);
 
                     glm::dvec3 tangent_world{0.0, 0.0, 0.0};
                     if (preview_time_valid &&
@@ -765,26 +850,9 @@ namespace Game
                         }
                     }
 
-                    glm::dvec3 normal_world = normalized_or(
-                            normalized_or(normal_inertial, node.maneuver_basis_n_world),
-                            node.maneuver_basis_n_world);
-                    glm::dvec3 outward_world =
-                            normalized_or(glm::cross(prograde_world, normal_world), node.maneuver_basis_r_world);
-                    if (glm::dot(outward_world, node.maneuver_basis_r_world) < 0.0)
-                    {
-                        outward_world = -outward_world;
-                    }
-                    normal_world = normalized_or(glm::cross(outward_world, prograde_world), node.maneuver_basis_n_world);
-                    if (glm::dot(normal_world, node.maneuver_basis_n_world) < 0.0)
-                    {
-                        outward_world = -outward_world;
-                        normal_world = -normal_world;
-                    }
-
-                    node.basis_r_world = outward_world;
-                    node.basis_t_world = prograde_world;
-                    node.basis_n_world = normal_world;
+                    normal_world = normalized_or(normal_inertial, node.maneuver_basis_n_world);
                 }
+                set_display_basis(node, input.basis_mode, prograde_world, normal_world);
             }
 
             const bool freeze_active_snap =

@@ -265,14 +265,34 @@ namespace Game
 
         if (update.changed)
         {
+            const glm::dvec3 previous_dv_rtn_mps = node.dv_rtn_mps;
             (void) context.apply_maneuver_command(ManeuverCommand::set_node_dv(node.id, update.dv_rtn_mps, true));
             node.total_dv_mps = ManeuverUtil::safe_length(node.dv_rtn_mps);
             maneuver.gizmo_interaction().applied_delta = true;
 
             if (PredictionTrackState *track = prediction.active_track())
             {
-                prediction.mark_maneuver_preview_dirty(*track);
-                prediction.sync_visible_dirty_flag(prediction.collect_visible_subjects());
+                constexpr double kDragPreviewDirtyMinIntervalS = 1.0 / 30.0;
+                constexpr double kDragPreviewDirtyDeltaMps = 0.05;
+
+                PredictionDragDebugTelemetry &debug = track->drag_debug;
+                const auto now_tp = PredictionDragDebugTelemetry::Clock::now();
+                const bool first_dirty =
+                        !PredictionDragDebugTelemetry::has_time(debug.last_preview_dirty_tp);
+                const bool interval_elapsed =
+                        first_dirty ||
+                        std::chrono::duration<double>(now_tp - debug.last_preview_dirty_tp).count() >=
+                                kDragPreviewDirtyMinIntervalS;
+                const bool big_delta =
+                        ManeuverUtil::safe_length(update.dv_rtn_mps - previous_dv_rtn_mps) >=
+                        kDragPreviewDirtyDeltaMps;
+
+                if (interval_elapsed || big_delta)
+                {
+                    prediction.mark_maneuver_preview_dirty(*track);
+                    prediction.sync_visible_dirty_flag(prediction.collect_visible_subjects());
+                    debug.last_preview_dirty_tp = now_tp;
+                }
             }
         }
 

@@ -188,9 +188,11 @@ namespace Game
                 !adapter_context.maneuver.plan().nodes.empty();
         out.active_maneuver_track = with_maneuver_live_preview;
         const bool live_preview_active = adapter_context.maneuver.live_preview_active(with_maneuver_live_preview);
-        out.maneuver_drag_active =
+        const bool actual_maneuver_drag_active =
                 out.active_player_track &&
-                live_preview_active;
+                adapter_context.maneuver.gizmo_interaction().state == ManeuverGizmoInteraction::State::DragAxis;
+        out.maneuver_drag_active =
+                actual_maneuver_drag_active;
         const PredictionRuntimeDetail::PredictionTrackLifecycleSnapshot lifecycle =
                 PredictionRuntimeDetail::describe_prediction_track_lifecycle(track);
         const bool keep_stale_planned_visible =
@@ -351,9 +353,15 @@ namespace Game
         out.draw_ctx.camera_world = global_ctx.camera_world;
         out.draw_ctx.tan_half_fov = global_ctx.tan_half_fov;
         out.draw_ctx.viewport_height_px = std::max(1.0, static_cast<double>(global_ctx.viewport_height_px));
-        out.draw_ctx.render_error_px = global_ctx.render_error_px;
-        out.draw_ctx.render_max_segments =
+        out.draw_ctx.render_error_px = actual_maneuver_drag_active
+                                               ? std::max(global_ctx.render_error_px, 2.0)
+                                               : global_ctx.render_error_px;
+        const std::size_t render_segment_budget =
                 static_cast<std::size_t>(std::max(1, _adapter.prediction_draw_budget().render_max_segments_cpu));
+        out.draw_ctx.render_max_segments =
+                actual_maneuver_drag_active
+                        ? std::min<std::size_t>(render_segment_budget, 1500u)
+                        : render_segment_budget;
         out.draw_ctx.line_overlay_boost = out.maneuver_drag_active
                                                   ? 0.0f
                                                   : std::clamp(_adapter.prediction_draw_state().line_overlay_boost, 0.0f, 1.0f);
@@ -369,10 +377,11 @@ namespace Game
                 out.planned_cache_drawable &&
                 out.planned_cache &&
                 !out.planned_cache->display.render_curve_frame_planned.empty();
+        const bool planned_curve_drawable =
+                current_planned_curve_drawable || stale_planned_curve_drawable;
         out.use_planned_adaptive_curve =
-                !out.maneuver_drag_active &&
-                (!planned_preview_like || stale_planned_curve_drawable) &&
-                (current_planned_curve_drawable || stale_planned_curve_drawable);
+                planned_curve_drawable &&
+                (!planned_preview_like || stale_planned_curve_drawable || actual_maneuver_drag_active);
 
         out.world_basis_draw_ctx = out.draw_ctx;
         if (!out.identity_frame_transform)

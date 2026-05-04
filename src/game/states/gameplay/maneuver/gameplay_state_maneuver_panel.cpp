@@ -228,7 +228,7 @@ namespace Game
             // no-op
         }
 
-        auto add_maneuver_node_at_time = [&](const double time_s) {
+        auto add_maneuver_node_at_time = [&](const double time_s) -> ManeuverCommandResult {
             ManeuverNode n{};
             n.id = -1;
             n.time_s = time_s;
@@ -236,13 +236,19 @@ namespace Game
             n.primary_body_id = default_node_primary_body_id();
             n.primary_body_auto = true;
             n.total_dv_mps = 0.0;
-            (void) apply_maneuver_command(ManeuverCommand::add_node(n));
+            ManeuverCommandResult result = apply_maneuver_command(ManeuverCommand::add_node(n));
+            if (result.applied)
+            {
+                _maneuver.clear_gizmo_interaction();
+                context.refresh_maneuver_node_runtime_cache(ctx);
+            }
+            return result;
         };
 
         ImGui::SameLine();
         if (ImGui::Button("+Node"))
         {
-            add_maneuver_node_at_time(from_t_plus_s(60.0));
+            (void) add_maneuver_node_at_time(from_t_plus_s(60.0));
         }
 
         ImGui::SameLine();
@@ -421,8 +427,13 @@ namespace Game
 
                 if (ImGui::Button(label, ImVec2(btn_w, btn_h)))
                 {
-                    _maneuver.settings().gizmo_basis_mode = ManeuverColors::kBasisModes[bi];
-                    _maneuver.clear_gizmo_interaction();
+                    const ManeuverGizmoBasisMode new_mode = ManeuverColors::kBasisModes[bi];
+                    if (_maneuver.settings().gizmo_basis_mode != new_mode)
+                    {
+                        _maneuver.settings().gizmo_basis_mode = new_mode;
+                        _maneuver.clear_gizmo_interaction();
+                        context.refresh_maneuver_node_runtime_cache(ctx);
+                    }
                 }
                 ImGui::PopStyleColor(3);
 
@@ -632,7 +643,7 @@ namespace Game
             ImGui::BeginDisabled(!can_add);
             if (ImGui::Button("Add Node @ Pick"))
             {
-                add_maneuver_node_at_time(orbit_pick->time_s);
+                (void) add_maneuver_node_at_time(orbit_pick->time_s);
             }
             ImGui::EndDisabled();
         }

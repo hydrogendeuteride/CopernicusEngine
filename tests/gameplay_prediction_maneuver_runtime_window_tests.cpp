@@ -1,5 +1,7 @@
 #include "gameplay_prediction_maneuver_test_common.h"
+#include "game/orbit/orbit_prediction_math.h"
 #include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
+#include "game/states/gameplay/maneuver/maneuver_runtime_cache_builder.h"
 #include "game/states/gameplay/prediction/draw/gameplay_state_prediction_draw_internal.h"
 
 namespace
@@ -1332,6 +1334,8 @@ TEST(GameplayPredictionManeuverTests, DrawPlannerBuildsRenderAndPickWindowsBefor
     track.supports_maneuvers = true;
     track.cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
     set_planned_path(track.cache, node.time_s, 320.0, 500.0);
+    track.cache.display.render_curve_frame_planned =
+            Game::OrbitRenderCurve::build(track.cache.display.trajectory_segments_frame_planned);
     track.cache.identity.maneuver_plan_signature_valid = true;
     track.cache.identity.maneuver_plan_signature = plan_signature;
 
@@ -1341,6 +1345,8 @@ TEST(GameplayPredictionManeuverTests, DrawPlannerBuildsRenderAndPickWindowsBefor
                         .build_track(track, make_draw_global_context(100.0), plan));
 
     EXPECT_TRUE(plan.base_future_draw_window.valid);
+    EXPECT_FALSE(plan.track.maneuver_drag_active);
+    EXPECT_TRUE(plan.track.use_planned_adaptive_curve);
     EXPECT_TRUE(plan.track.base_pick_window.valid);
     EXPECT_TRUE(plan.track.planned_draw_window.valid);
     EXPECT_TRUE(plan.track.planned_pick_window.valid);
@@ -1396,6 +1402,7 @@ TEST(GameplayPredictionManeuverTests, DrawPlannerSnapshotsFullStreamOverlayForRe
     Game::GameplayPredictionAdapter adapter = make_prediction_adapter(state);
     Game::PredictionDrawDetail::PredictionTrackVisualPlan plan{};
     ASSERT_TRUE(Game::PredictionDrawDetail::PredictionDrawPlanner(adapter).build_track(track, global_ctx, plan));
+    EXPECT_FALSE(plan.track.maneuver_drag_active);
     ASSERT_TRUE(plan.full_stream_overlay_active);
     ASSERT_EQ(plan.full_stream_assembly.chunks.size(), 1u);
 
@@ -1403,6 +1410,61 @@ TEST(GameplayPredictionManeuverTests, DrawPlannerSnapshotsFullStreamOverlayForRe
 
     EXPECT_EQ(state.prediction_for_test().orbit_plot_perf.planned_chunk_count, 1u);
     EXPECT_EQ(state.prediction_for_test().orbit_plot_perf.planned_chunks_drawn, 1u);
+
+    GameplayTestHooks::clear_entities();
+}
+
+TEST(GameplayPredictionManeuverTests, DrawPlannerHidesFullStreamOverlayOnlyDuringActualManeuverDrag)
+{
+    Game::GameplayState state{};
+    state._orbit.scenario_owner() = make_reference_orbitsim(100.0);
+    ASSERT_TRUE(state._orbit.scenario_owner());
+    Game::Entity player_entity{Game::EntityId{1}, "player"};
+    register_player_draw_subject(state, player_entity);
+
+    Game::ManeuverNode node{};
+    node.id = 7;
+    node.time_s = 240.0;
+    node.dv_rtn_mps = glm::dvec3(0.0, 5.0, 0.0);
+    state._maneuver.plan().selected_node_id = node.id;
+    state._maneuver.plan().nodes.push_back(node);
+    const uint64_t old_plan_signature = make_prediction_adapter(state).current_maneuver_plan_signature();
+    state._maneuver.plan().nodes.front().dv_rtn_mps = glm::dvec3(0.0, 12.0, 0.0);
+    state._maneuver.gizmo_interaction().state = Game::ManeuverGizmoInteraction::State::DragAxis;
+    state._maneuver.gizmo_interaction().node_id = node.id;
+
+    Game::PredictionTrackState track{};
+    track.key = state.prediction_for_test().selection.active_subject;
+    track.supports_maneuvers = true;
+    track.preview_state = Game::PredictionPreviewRuntimeState::AwaitFullRefine;
+    track.preview_anchor.valid = true;
+    track.preview_anchor.anchor_node_id = node.id;
+    track.preview_anchor.anchor_time_s = node.time_s;
+    track.preview_anchor.visual_window_s = 120.0;
+    track.preview_anchor.exact_window_s = 60.0;
+    track.dirty = true;
+    track.cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
+    track.authoritative_cache = make_draw_ready_cache(state, 4u, 100.0, 500.0);
+    set_planned_path(track.authoritative_cache, 100.0, node.time_s, 500.0);
+    track.authoritative_cache.identity.maneuver_plan_signature_valid = true;
+    track.authoritative_cache.identity.maneuver_plan_signature = old_plan_signature;
+    track.full_stream_overlay.chunk_assembly.valid = true;
+    track.full_stream_overlay.chunk_assembly.generation_id = track.cache.identity.generation_id;
+    track.full_stream_overlay.display_frame_key = track.cache.display.display_frame_key;
+    track.full_stream_overlay.display_frame_revision = track.cache.display.display_frame_revision;
+    track.full_stream_overlay.chunk_assembly.chunks = {
+            make_chunk(0u, track.cache.identity.generation_id, node.time_s, node.time_s + 60.0, 7'200'000.0, 7'280'000.0),
+    };
+
+    Game::GameplayPredictionAdapter adapter = make_prediction_adapter(state);
+    Game::PredictionDrawDetail::PredictionTrackVisualPlan plan{};
+    ASSERT_TRUE(Game::PredictionDrawDetail::PredictionDrawPlanner(adapter).build_track(
+            track,
+            make_draw_global_context(100.0),
+            plan));
+
+    EXPECT_TRUE(plan.track.maneuver_drag_active);
+    EXPECT_FALSE(plan.full_stream_overlay_active);
 
     GameplayTestHooks::clear_entities();
 }
@@ -1654,6 +1716,117 @@ TEST(GameplayPredictionManeuverTests, RuntimeCacheKeepsCachedNodeGizmoAfterEditR
     EXPECT_DOUBLE_EQ(state._maneuver.plan().nodes.front().position_world.y, node.position_world.y);
 
     GameplayTestHooks::clear_entities();
+}
+
+TEST(GameplayPredictionManeuverTests, RuntimeCacheShowsSelectedNewNodeBeforePlannedTrajectoryIsReady)
+{
+    Game::GameplayState state{};
+    Game::OrbitPredictionCache cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
+
+    orbitsim::MassiveBody primary{};
+    primary.id = 1;
+    primary.mass_kg = 5.972e24;
+    primary.radius_m = 6'371'000.0;
+    primary.state = orbitsim::make_state(glm::dvec3(0.0), glm::dvec3(0.0));
+    cache.solver.core.massive_bodies.push_back(primary);
+
+    Game::ManeuverPlanState plan{};
+    Game::ManeuverNode first{};
+    first.id = 7;
+    first.time_s = 180.0;
+    first.primary_body_auto = false;
+    first.primary_body_id = primary.id;
+    plan.nodes.push_back(first);
+
+    Game::ManeuverNode selected{};
+    selected.id = 8;
+    selected.time_s = 240.0;
+    selected.primary_body_auto = false;
+    selected.primary_body_id = primary.id;
+    plan.selected_node_id = selected.id;
+    plan.nodes.push_back(selected);
+
+    Game::ManeuverGizmoInteraction interaction{};
+    Game::ManeuverNodeEditPreview edit_preview{};
+    const Game::ManeuverRuntimeCacheInput input{
+            .plan = plan,
+            .active_cache = &cache,
+            .gizmo_interaction = interaction,
+            .edit_preview = edit_preview,
+            .basis_mode = Game::ManeuverGizmoBasisMode::RTN,
+            .display_time_s = 100.0,
+            .current_sim_time_s = 100.0,
+            .resolve_primary_body_id = [primary](const Game::ManeuverNode &, double) {
+                return primary.id;
+            },
+    };
+
+    const Game::ManeuverRuntimeCacheResult result = Game::ManeuverRuntimeCacheBuilder::rebuild(input);
+
+    EXPECT_TRUE(result.active_prediction_cache_valid);
+    EXPECT_EQ(result.valid_node_count, 1u);
+    const Game::ManeuverNode *refreshed = plan.find_node(selected.id);
+    ASSERT_NE(refreshed, nullptr);
+    EXPECT_TRUE(refreshed->gizmo_valid);
+    const glm::dvec3 expected_position = Game::OrbitPredictionMath::sample_pair_position_m(
+            cache.display.trajectory_frame.front(),
+            cache.display.trajectory_frame.back(),
+            selected.time_s);
+    EXPECT_NEAR(refreshed->position_world.x, expected_position.x, 1.0);
+    EXPECT_NEAR(refreshed->position_world.y, expected_position.y, 1.0);
+}
+
+TEST(GameplayPredictionManeuverTests, RuntimeCacheRebuildsDisplayBasisDuringCachedReleaseHold)
+{
+    Game::GameplayState state{};
+    Game::OrbitPredictionCache cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
+
+    Game::ManeuverPlanState plan{};
+    Game::ManeuverNode node{};
+    node.id = 7;
+    node.time_s = 240.0;
+    node.dv_rtn_mps = glm::dvec3(0.0, 12.0, 0.0);
+    node.position_world = WorldVec3(7'240'000.0, 11.0, 0.0);
+    node.maneuver_basis_r_world = glm::dvec3(1.0, 0.0, 0.0);
+    node.maneuver_basis_t_world = glm::dvec3(0.0, 1.0, 0.0);
+    node.maneuver_basis_n_world = glm::dvec3(0.0, 0.0, 1.0);
+    node.basis_r_world = glm::dvec3(0.0, 1.0, 0.0);
+    node.basis_t_world = glm::dvec3(1.0, 0.0, 0.0);
+    node.basis_n_world = glm::dvec3(0.0, 0.0, 1.0);
+    node.gizmo_valid = true;
+    plan.selected_node_id = node.id;
+    plan.nodes.push_back(node);
+
+    Game::PredictionRuntimeDetail::PredictionTrackLifecycleSnapshot lifecycle{};
+    lifecycle.preview_state = Game::PredictionPreviewRuntimeState::AwaitFullRefine;
+    Game::ManeuverGizmoInteraction interaction{};
+    Game::ManeuverNodeEditPreview edit_preview{};
+    const Game::ManeuverRuntimeCacheInput input{
+            .plan = plan,
+            .active_cache = &cache,
+            .lifecycle = lifecycle,
+            .gizmo_interaction = interaction,
+            .edit_preview = edit_preview,
+            .basis_mode = Game::ManeuverGizmoBasisMode::RTN,
+            .display_time_s = 100.0,
+            .current_sim_time_s = 100.0,
+            .hold_cached_release_state = true,
+    };
+
+    const Game::ManeuverRuntimeCacheResult result = Game::ManeuverRuntimeCacheBuilder::rebuild(input);
+
+    ASSERT_EQ(result.valid_node_count, 1u);
+    ASSERT_EQ(plan.nodes.size(), 1u);
+    EXPECT_TRUE(plan.nodes.front().gizmo_valid);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_r_world.x, plan.nodes.front().maneuver_basis_r_world.x);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_r_world.y, plan.nodes.front().maneuver_basis_r_world.y);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_r_world.z, plan.nodes.front().maneuver_basis_r_world.z);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_t_world.x, plan.nodes.front().maneuver_basis_t_world.x);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_t_world.y, plan.nodes.front().maneuver_basis_t_world.y);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_t_world.z, plan.nodes.front().maneuver_basis_t_world.z);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_n_world.x, plan.nodes.front().maneuver_basis_n_world.x);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_n_world.y, plan.nodes.front().maneuver_basis_n_world.y);
+    EXPECT_DOUBLE_EQ(plan.nodes.front().basis_n_world.z, plan.nodes.front().maneuver_basis_n_world.z);
 }
 
 TEST(GameplayPredictionManeuverTests, FullRequestKeepsFullStreamPublishDisabledForStableActivePlayerWithManeuvers)

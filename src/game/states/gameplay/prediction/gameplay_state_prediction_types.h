@@ -716,6 +716,7 @@ namespace Game
         TimePoint drag_started_tp{};
         TimePoint last_drag_update_tp{};
         TimePoint last_drag_end_tp{};
+        TimePoint last_preview_dirty_tp{};
         TimePoint last_request_tp{};
         TimePoint last_solver_result_tp{};
         TimePoint last_derived_result_tp{};
