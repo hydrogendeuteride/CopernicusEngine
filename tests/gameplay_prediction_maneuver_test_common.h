@@ -6,8 +6,12 @@
 #define VULKAN_ENGINE_GAMEPLAY_TEST_ACCESS 1
 #endif
 #include "game/states/gameplay/gameplay_state.h"
+#include "game/orbit/orbit_prediction_service.h"
 #include "game/orbit/orbit_prediction_tuning.h"
+#include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
+#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
 #include "game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_internal.h"
+#include "game/states/gameplay/prediction/runtime/prediction_request_factory.h"
 
 #include <gtest/gtest.h>
 
@@ -24,6 +28,16 @@ namespace GameplayTestHooks
 
 namespace
 {
+    Game::GameplayPredictionAdapter make_prediction_adapter(Game::GameplayState &state)
+    {
+        return Game::GameplayPredictionAdapter(state.build_prediction_access());
+    }
+
+    Game::ManeuverPredictionBridge::Context make_maneuver_prediction_context(Game::GameplayState &state)
+    {
+        return state.build_maneuver_prediction_context();
+    }
+
     std::unique_ptr<Game::OrbitalScenario> make_reference_orbitsim(const double time_s,
                                                                    const double reference_mass_kg = 5.972e24)
     {
@@ -78,6 +92,47 @@ namespace
         return segment;
     }
 
+    bool build_orbiter_prediction_request(Game::GameplayState &state,
+                                          Game::PredictionTrackState &track,
+                                          const WorldVec3 &subject_pos_world,
+                                          const glm::dvec3 &subject_vel_world,
+                                          const double now_s,
+                                          const bool thrusting,
+                                          const bool with_maneuvers,
+                                          Game::OrbitPredictionService::Request &out_request,
+                                          bool *out_interactive_request = nullptr,
+                                          bool *out_preview_request_active = nullptr)
+    {
+        const Game::PredictionOrbiterRequestBuildResult result =
+                Game::PredictionRequestFactory::build_orbiter_request(make_prediction_adapter(state).build_prediction_runtime_context(),
+                                                                      track,
+                                                                      subject_pos_world,
+                                                                      subject_vel_world,
+                                                                      now_s,
+                                                                      thrusting,
+                                                                      with_maneuvers);
+        out_request = result.request;
+        if (out_interactive_request)
+        {
+            *out_interactive_request = result.interactive_request;
+        }
+        if (out_preview_request_active)
+        {
+            *out_preview_request_active = result.preview_request_active;
+        }
+        return result.built;
+    }
+
+    bool resolve_prediction_preview_anchor_state(Game::GameplayState &state,
+                                                 const Game::PredictionTrackState &track,
+                                                 orbitsim::State &out_state)
+    {
+        return Game::PredictionRequestFactory::resolve_preview_anchor_state(
+                make_prediction_adapter(state).build_prediction_runtime_context(),
+                track,
+                out_state);
+    }
+
     Game::OrbitChunk make_chunk(const uint32_t chunk_id,
                                 const uint64_t generation_id,
                                 const double t0_s,
@@ -105,18 +160,18 @@ namespace
                                                      const double x1_m)
     {
         Game::OrbitPredictionCache cache{};
-        cache.valid = true;
-        cache.generation_id = generation_id;
-        cache.build_time_s = t0_s;
-        cache.trajectory_inertial = {
+        cache.identity.valid = true;
+        cache.identity.generation_id = generation_id;
+        cache.identity.build_time_s = t0_s;
+        cache.solver.base.trajectory_inertial = {
                 make_sample(t0_s, x0_m),
                 make_sample(t1_s, x1_m),
         };
-        cache.trajectory_segments_inertial = {
+        cache.solver.base.trajectory_segments_inertial = {
                 make_segment(t0_s, t1_s, x0_m, x1_m),
         };
-        cache.trajectory_frame = cache.trajectory_inertial;
-        cache.trajectory_segments_frame = cache.trajectory_segments_inertial;
+        cache.display.trajectory_frame = cache.solver.base.trajectory_inertial;
+        cache.display.trajectory_segments_frame = cache.solver.base.trajectory_segments_inertial;
         return cache;
     }
 
@@ -124,22 +179,22 @@ namespace
                                                                   const double future_window_s = 120.0)
     {
         Game::OrbitPredictionService::Request request{};
-        request.track_id = 7;
-        request.sim_time_s = time_s;
-        request.sim_config.enable_events = false;
-        request.sim_config.spacecraft_integrator.adaptive = true;
-        request.sim_config.spacecraft_integrator.max_substeps = 256;
-        request.ship_bary_position_m = orbitsim::Vec3{7'000'000.0, 0.0, 0.0};
-        request.ship_bary_velocity_mps = orbitsim::Vec3{0.0, 7'500.0, 0.0};
-        request.future_window_s = future_window_s;
-        request.preferred_primary_body_id = 1;
+        request.envelope.track_id = 7;
+        request.world.sim_time_s = time_s;
+        request.world.sim_config.enable_events = false;
+        request.world.sim_config.spacecraft_integrator.adaptive = true;
+        request.world.sim_config.spacecraft_integrator.max_substeps = 256;
+        request.subject.ship_bary_position_m = orbitsim::Vec3{7'000'000.0, 0.0, 0.0};
+        request.subject.ship_bary_velocity_mps = orbitsim::Vec3{0.0, 7'500.0, 0.0};
+        request.options.future_window_s = future_window_s;
+        request.subject.preferred_primary_body_id = 1;
 
         orbitsim::MassiveBody ref{};
         ref.id = 1;
         ref.mass_kg = 5.972e24;
         ref.radius_m = 6'371'000.0;
         ref.state = orbitsim::make_state(glm::dvec3(0.0), glm::dvec3(0.0));
-        request.massive_bodies.push_back(ref);
+        request.world.massive_bodies.push_back(ref);
         return request;
     }
 
@@ -147,21 +202,21 @@ namespace
                                                                             const double future_window_s = 120.0)
     {
         Game::OrbitPredictionService::Request request{};
-        request.kind = Game::OrbitPredictionService::RequestKind::Celestial;
-        request.track_id = 9;
-        request.sim_time_s = time_s;
-        request.sim_config.enable_events = false;
-        request.sim_config.spacecraft_integrator.adaptive = true;
-        request.sim_config.spacecraft_integrator.max_substeps = 256;
-        request.future_window_s = future_window_s;
-        request.subject_body_id = 2;
+        request.envelope.kind = Game::OrbitPredictionService::RequestKind::Celestial;
+        request.envelope.track_id = 9;
+        request.world.sim_time_s = time_s;
+        request.world.sim_config.enable_events = false;
+        request.world.sim_config.spacecraft_integrator.adaptive = true;
+        request.world.sim_config.spacecraft_integrator.max_substeps = 256;
+        request.options.future_window_s = future_window_s;
+        request.subject.subject_body_id = 2;
 
         orbitsim::MassiveBody earth{};
         earth.id = 1;
         earth.mass_kg = 5.972e24;
         earth.radius_m = 6'371'000.0;
         earth.state = orbitsim::make_state(glm::dvec3(0.0), glm::dvec3(0.0));
-        request.massive_bodies.push_back(earth);
+        request.world.massive_bodies.push_back(earth);
 
         orbitsim::MassiveBody moon{};
         moon.id = 2;
@@ -169,9 +224,58 @@ namespace
         moon.radius_m = 1'737'400.0;
         moon.state = orbitsim::make_state(glm::dvec3(384'400'000.0, 0.0, 0.0),
                                           glm::dvec3(0.0, 1'022.0, 0.0));
-        request.massive_bodies.push_back(moon);
+        request.world.massive_bodies.push_back(moon);
 
         return request;
+    }
+
+    Game::OrbitPredictionService::ManeuverImpulse make_maneuver_impulse(
+            const int node_id,
+            const double time_s,
+            const glm::dvec3 &dv_rtn_mps,
+            const orbitsim::BodyId primary_body_id = 1)
+    {
+        Game::OrbitPredictionService::ManeuverImpulse impulse{};
+        impulse.node_id = node_id;
+        impulse.t_s = time_s;
+        impulse.primary_body_id = primary_body_id;
+        impulse.dv_rtn_mps = dv_rtn_mps;
+        return impulse;
+    }
+
+    Game::OrbitPredictionService::ManeuverImpulse &add_maneuver_impulse(
+            Game::OrbitPredictionService::Request &request,
+            const int node_id,
+            const double time_s,
+            const glm::dvec3 &dv_rtn_mps,
+            const orbitsim::BodyId primary_body_id = 1)
+    {
+        request.maneuver.maneuver_impulses.push_back(
+                make_maneuver_impulse(node_id, time_s, dv_rtn_mps, primary_body_id));
+        return request.maneuver.maneuver_impulses.back();
+    }
+
+    const Game::OrbitPredictionService::ManeuverNodePreview *find_maneuver_preview(
+            const Game::OrbitPredictionService::Result &result,
+            const int node_id)
+    {
+        for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : result.planned.maneuver_previews)
+        {
+            if (preview.node_id == node_id)
+            {
+                return &preview;
+            }
+        }
+        return nullptr;
+    }
+
+    const Game::OrbitPredictionService::ManeuverNodePreview *find_valid_maneuver_preview(
+            const Game::OrbitPredictionService::Result &result,
+            const int node_id)
+    {
+        const Game::OrbitPredictionService::ManeuverNodePreview *preview =
+                find_maneuver_preview(result, node_id);
+        return preview && preview->valid ? preview : nullptr;
     }
 
     std::vector<Game::OrbitPredictionService::Result> run_prediction_results(
@@ -183,7 +287,7 @@ namespace
         service._completed.clear();
 
         Game::OrbitPredictionService::PendingJob job{};
-        job.track_id = request.track_id;
+        job.track_id = request.envelope.track_id;
         job.request_epoch = request_epoch;
         job.generation_id = generation_id;
         job.request = std::move(request);
@@ -212,24 +316,24 @@ namespace
         job.request.resolved_frame_spec = orbitsim::TrajectoryFrameSpec::inertial();
 
         Game::OrbitPredictionService::Result &solver = job.request.solver_result;
-        solver.valid = true;
-        solver.solve_quality = solve_quality;
-        solver.publish_stage = publish_stage;
-        solver.trajectory_inertial = {
+        solver.envelope.valid = true;
+        solver.envelope.solve_quality = solve_quality;
+        solver.envelope.publish_stage = publish_stage;
+        solver.core.trajectory_inertial = {
                 make_sample(0.0, 7'000'000.0),
                 make_sample(10.0, 7'100'000.0),
                 make_sample(20.0, 7'200'000.0),
         };
-        solver.trajectory_segments_inertial = {
+        solver.core.trajectory_segments_inertial = {
                 make_segment(0.0, 10.0, 7'000'000.0, 7'100'000.0),
                 make_segment(10.0, 20.0, 7'100'000.0, 7'200'000.0),
         };
-        solver.trajectory_inertial_planned = {
+        solver.planned.trajectory_inertial = {
                 make_sample(0.0, 7'000'000.0),
                 make_sample(10.0, 7'150'000.0),
                 make_sample(20.0, 7'300'000.0),
         };
-        solver.trajectory_segments_inertial_planned = {
+        solver.planned.trajectory_segments_inertial = {
                 make_segment(0.0, 10.0, 7'000'000.0, 7'150'000.0),
                 make_segment(10.0, 20.0, 7'150'000.0, 7'300'000.0),
         };

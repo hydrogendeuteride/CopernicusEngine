@@ -1,28 +1,15 @@
 #pragma once
 
-#include "game/states/gameplay/gameplay_state.h"
+#include "game/states/gameplay/maneuver/gameplay_state_maneuver_types.h"
+#include "game/states/gameplay/prediction/gameplay_state_prediction_types.h"
+#include "game/states/gameplay/prediction/runtime/prediction_track_lifecycle.h"
 
 #include <algorithm>
 #include <chrono>
+#include <vector>
 
 namespace Game::PredictionRuntimeDetail
 {
-    struct PredictionTrackLifecycleSnapshot
-    {
-        PredictionTrackLifecycleState state{PredictionTrackLifecycleState::Idle};
-        PredictionPreviewRuntimeState preview_state{PredictionPreviewRuntimeState::Idle};
-        bool visible_cache_valid{false};
-        bool authoritative_cache_valid{false};
-        bool preview_overlay_active{false};
-        bool full_stream_overlay_active{false};
-        bool dirty{false};
-        bool invalidated_while_pending{false};
-        bool request_pending{false};
-        bool derived_request_pending{false};
-        bool awaiting_authoritative_publish{false};
-        bool needs_rebuild{false};
-    };
-
     struct PredictionOverlayLayerState
     {
         bool active_maneuver_track{false};
@@ -43,40 +30,40 @@ namespace Game::PredictionRuntimeDetail
         return state == ManeuverGizmoInteraction::State::DragAxis;
     }
 
-    inline OrbitPredictionService::RequestPriority classify_prediction_subject_priority(
+    inline OrbitPredictionRequestPriority classify_prediction_subject_priority(
             const PredictionSelectionState &selection,
             const PredictionSubjectKey key,
             const bool is_celestial)
     {
         if (selection.active_subject == key)
         {
-            return OrbitPredictionService::RequestPriority::ActiveTrack;
+            return OrbitPredictionRequestPriority::ActiveTrack;
         }
 
         for (const auto &overlay : selection.overlay_subjects)
         {
             if (overlay == key)
             {
-                return OrbitPredictionService::RequestPriority::Overlay;
+                return OrbitPredictionRequestPriority::Overlay;
             }
         }
 
         return is_celestial
-                       ? OrbitPredictionService::RequestPriority::BackgroundCelestial
-                       : OrbitPredictionService::RequestPriority::BackgroundOrbiter;
+                       ? OrbitPredictionRequestPriority::BackgroundCelestial
+                       : OrbitPredictionRequestPriority::BackgroundOrbiter;
     }
 
-    inline OrbitPredictionService::RequestPriority classify_prediction_request_priority(
+    inline OrbitPredictionRequestPriority classify_prediction_request_priority(
             const PredictionSelectionState &selection,
             const PredictionSubjectKey key,
             const bool is_celestial,
             const bool interactive)
     {
-        OrbitPredictionService::RequestPriority priority =
+        OrbitPredictionRequestPriority priority =
                 classify_prediction_subject_priority(selection, key, is_celestial);
-        if (interactive && priority == OrbitPredictionService::RequestPriority::ActiveTrack)
+        if (interactive && priority == OrbitPredictionRequestPriority::ActiveTrack)
         {
-            priority = OrbitPredictionService::RequestPriority::ActiveInteractiveTrack;
+            priority = OrbitPredictionRequestPriority::ActiveInteractiveTrack;
         }
         return priority;
     }
@@ -95,12 +82,12 @@ namespace Game::PredictionRuntimeDetail
 
     inline uint64_t visible_generation_id(const PredictionTrackState &track)
     {
-        return track.cache.valid ? track.cache.generation_id : 0u;
+        return track.cache.identity.valid ? track.cache.identity.generation_id : 0u;
     }
 
     inline uint64_t authoritative_generation_id(const PredictionTrackState &track)
     {
-        return track.authoritative_cache.valid ? track.authoritative_cache.generation_id : 0u;
+        return track.authoritative_cache.identity.valid ? track.authoritative_cache.identity.generation_id : 0u;
     }
 
     inline bool latest_solver_generation_published(const PredictionTrackState &track)
@@ -117,8 +104,8 @@ namespace Game::PredictionRuntimeDetail
     {
         PredictionTrackLifecycleSnapshot out{};
         out.preview_state = track.preview_state;
-        out.visible_cache_valid = track.cache.valid;
-        out.authoritative_cache_valid = track.authoritative_cache.valid;
+        out.visible_cache_valid = track.cache.identity.valid;
+        out.authoritative_cache_valid = track.authoritative_cache.identity.valid;
         out.preview_overlay_active = prediction_chunk_assembly_active(track.preview_overlay.chunk_assembly);
         out.full_stream_overlay_active = prediction_chunk_assembly_active(track.full_stream_overlay.chunk_assembly);
         out.dirty = track.dirty;
@@ -323,13 +310,14 @@ namespace Game::PredictionRuntimeDetail
 
     inline PredictionChunkAssembly prediction_full_stream_overlay_snapshot_for_draw(
             const PredictionTrackState &track,
-            const OrbitPredictionCache &planned_cache,
+            const PredictionCacheIdentity &planned_identity,
+            const PredictionDisplayFrameCache &planned_display,
             const PredictionOverlayLayerState &layers)
     {
         return layers.full_stream_overlay_draw_active &&
-                       track.full_stream_overlay.ready_for_draw(planned_cache.generation_id,
-                                                                planned_cache.display_frame_key,
-                                                                planned_cache.display_frame_revision)
+                       track.full_stream_overlay.ready_for_draw(planned_identity.generation_id,
+                                                                 planned_display.display_frame_key,
+                                                                 planned_display.display_frame_revision)
                        ? track.full_stream_overlay.chunk_assembly
                        : PredictionChunkAssembly{};
     }
@@ -342,23 +330,23 @@ namespace Game::PredictionRuntimeDetail
                prediction_track_preview_overlay_draw_active(snapshot, preview_anchor_valid);
     }
 
-    inline bool prediction_track_is_preview_streaming_publish(const OrbitPredictionService::SolveQuality solve_quality,
-                                                              const OrbitPredictionService::PublishStage publish_stage)
+    inline bool prediction_track_is_preview_streaming_publish(const OrbitPredictionSolveQuality solve_quality,
+                                                              const OrbitPredictionPublishStage publish_stage)
     {
-        return solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
-               publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+        return solve_quality == OrbitPredictionSolveQuality::FastPreview &&
+               publish_stage == OrbitPredictionPublishStage::PreviewStreaming;
     }
 
-    inline bool prediction_track_is_full_streaming_publish(const OrbitPredictionService::SolveQuality solve_quality,
-                                                           const OrbitPredictionService::PublishStage publish_stage)
+    inline bool prediction_track_is_full_streaming_publish(const OrbitPredictionSolveQuality solve_quality,
+                                                           const OrbitPredictionPublishStage publish_stage)
     {
-        return solve_quality == OrbitPredictionService::SolveQuality::Full &&
-               publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+        return solve_quality == OrbitPredictionSolveQuality::Full &&
+               publish_stage == OrbitPredictionPublishStage::FullStreaming;
     }
 
     inline bool prediction_track_should_keep_request_pending_after_solver_publish(
-            const OrbitPredictionService::SolveQuality solve_quality,
-            const OrbitPredictionService::PublishStage publish_stage)
+            const OrbitPredictionSolveQuality solve_quality,
+            const OrbitPredictionPublishStage publish_stage)
     {
         return prediction_track_is_full_streaming_publish(solve_quality, publish_stage);
     }
@@ -376,10 +364,10 @@ namespace Game::PredictionRuntimeDetail
 
     inline PredictionPreviewRuntimeState prediction_track_preview_state_after_preview_publish(
             const PredictionTrackLifecycleSnapshot &snapshot,
-            const OrbitPredictionService::PublishStage publish_stage,
+            const OrbitPredictionPublishStage publish_stage,
             const bool live_preview_active_now)
     {
-        if (publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming)
+        if (publish_stage == OrbitPredictionPublishStage::PreviewStreaming)
         {
             return PredictionPreviewRuntimeState::PreviewStreaming;
         }

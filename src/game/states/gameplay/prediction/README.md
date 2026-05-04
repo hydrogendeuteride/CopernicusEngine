@@ -7,9 +7,15 @@ This folder contains the orbit prediction display pipeline used by `GameplayStat
 ```
 prediction/
   gameplay_state_prediction_types.h              # shared types, caches, draw config, telemetry
-  gameplay_prediction_cache_internal.h           # inline helpers for cache building (Hermite sampling, frame transforms, metrics)
+  gameplay_prediction_cache_internal.h / .cpp    # low-level cache helper functions shared by builders
+  prediction_trajectory_sampler.h / .cpp         # public sampling, player lookup, and segment-slice helpers
+  prediction_frame_cache_builder.h / .cpp        # display-frame cache rebuild entry point
+  prediction_metrics_builder.h / .cpp            # orbital metrics/analysis cache rebuild entry point
+  streamed_chunk_assembly_builder.h / .cpp       # streamed/published chunk assembly entry point
   gameplay_prediction_derived_service.h / .cpp   # background-threaded derived cache builder
-  gameplay_state_prediction.cpp                  # world-state resolution for prediction subjects
+  prediction_system.h / .cpp                     # facade over runtime, invalidation, solver, and derived services
+  prediction_subject_state_provider.h / .cpp     # world-state resolution for prediction subjects
+  gameplay_state_prediction.cpp                  # GameplayState adapter glue for prediction host context
   gameplay_state_prediction_frames.cpp           # display-frame selection, frame rebuild, analysis spec
   draw/
     gameplay_state_prediction_draw_internal.h     # shared draw/pick context structs
@@ -36,28 +42,42 @@ prediction/
   All shared data types for the prediction subsystem: `PredictionSubjectKey`, `OrbitPredictionCache` (inertial + display-frame trajectory data, render curves, orbital metrics), `PredictionLinePickCache`, `PredictionTrackState`, `PredictionFrameSelectionState`, `PredictionAnalysisSelectionState`, `PredictionDragDebugTelemetry`, `OrbitPredictionDrawConfig`, `OrbitPredictionDrawPalette`, `OrbitPlotPerfStats`, and `PredictionGroup`/`PredictionSelectionState` for multi-track overlays.
 
 - `gameplay_prediction_cache_internal.h`
-  Inline helpers used by the derived service and frame rebuild code:
-  - Hermite interpolation: `sample_prediction_inertial_state` (both sample-array and segment-array overloads)
-  - Player lookup lambda builders: `build_player_lookup` (for spacecraft state callbacks during frame transforms)
-  - Frame cache rebuild: `rebuild_prediction_frame_cache`, `rebuild_prediction_planned_frame_cache`
-  - Metrics rebuild: `rebuild_prediction_metrics`, `clear_prediction_metrics`
+  Low-level helpers used by the derived cache builders and frame rebuild code:
   - Frame transform options: `build_frame_segment_transform_options`
   - Diagnostics: `update_derived_diagnostics`
   - Utilities: `collect_maneuver_node_times`, `sample_prediction_segments`
 
+- `prediction_trajectory_sampler.h`
+  `PredictionTrajectorySampler` -- public entry point for trajectory sampling, player lookup lambda creation, and cursor-based segment slicing used by gameplay runtime code.
+
+- `prediction_frame_cache_builder.h`
+  `PredictionFrameCacheBuilder` -- named entry point for transforming solver-frame trajectory data into the selected display frame. Wraps full-frame and planned-only rebuild paths.
+
+- `prediction_metrics_builder.h`
+  `PredictionMetricsBuilder` -- named entry point for rebuilding analysis samples and orbital HUD metrics from solver/display cache data.
+
+- `streamed_chunk_assembly_builder.h`
+  `StreamedChunkAssemblyBuilder` -- named entry point for turning solver published/streamed chunk metadata into display-frame chunk overlays and flattened planned display caches.
+
 - `gameplay_prediction_derived_service.h`
   `OrbitPredictionDerivedService` -- a background-threaded worker that takes solver results from `OrbitPredictionService` and builds display-frame caches (frame transforms, resampling, render curves, orbital metrics). Supports per-track generation-based staleness detection and request coalescing, similar to the solver service.
+
+- `prediction_system.h`
+  `PredictionSystem` -- a thin facade owned by `GameplayState` that keeps prediction runtime orchestration, invalidation, and solver/derived service access behind one boundary while `GameplayPredictionState` remains the compatibility state container.
+
+- `prediction_subject_state_provider.h`
+  `PredictionSubjectStateProvider` -- explicit read-only provider for prediction subjects. Resolves subject lists, player detection, render positions, thrust activity, and live world positions/velocities from `OrbitalRuntimeSystem`, `GameWorld`, physics, and scenario config without going through `GameplayState` private adapter access.
 
 ### Implementation Files
 
 - `gameplay_state_prediction.cpp`
-  World-state resolution: `get_player_world_state`, `get_orbiter_world_state`, `get_prediction_subject_world_state`. Resolves live entity positions/velocities from either the orbit sim (on-rails) or the physics body (off-rails).
+  Gameplay prediction adapter glue: builds `PredictionHostContext`, forwards compatibility world-state helper calls to `PredictionSubjectStateProvider`, and keeps prediction subject synchronization behind `PredictionSystem`.
 
 - `gameplay_state_prediction_frames.cpp`
-  Display-frame management: frame-spec selection, display-frame option building, frame rebuild triggers, analysis body resolution, and helper functions like `find_celestial_body_info` and `find_massive_body`. Drives `rebuild_prediction_frame_cache` when the user switches display frames.
+  Display-frame management: frame-spec selection, display-frame option building, frame rebuild triggers, analysis body resolution, and helper functions like `find_celestial_body_info` and `find_massive_body`. Drives `PredictionFrameCacheBuilder` when the user switches display frames.
 
 - `gameplay_prediction_derived_service.cpp`
-  `OrbitPredictionDerivedService` lifecycle (constructor spawns 1-2 worker threads, destructor joins), `request()` with per-track coalescing, `poll_completed()`, `reset()`, `build_cache()` (the actual work function), and `worker_loop`.
+  `OrbitPredictionDerivedService` lifecycle (constructor spawns 1-2 worker threads, destructor joins), `request()` with per-track coalescing, `poll_completed()`, `reset()`, `build_cache()` orchestration, and `worker_loop`. Actual frame, metrics, and chunk cache work is delegated to the named builder entry points.
 
 ### `draw/` Subfolder
 
@@ -104,7 +124,7 @@ Runtime orchestration split files. Not included outside the prediction module.
   Result polling: polls `OrbitPredictionService` and `OrbitPredictionDerivedService` for completed results, applies them to `PredictionTrackState` caches, and updates drag debug telemetry.
 
 - `gameplay_state_prediction_runtime_solver.cpp`
-  Solver request building: assembles `OrbitPredictionService::Request` structs with integrator config, maneuver nodes, and ephemeris state.
+  Solver request building: assembles `OrbitPredictionRequest` structs with integrator config, maneuver nodes, and ephemeris state.
 
 ## Pipeline Overview
 
@@ -139,7 +159,7 @@ The feature is driven from `GameplayState` like this:
   Start in `gameplay_state_prediction_types.h`.
 
 - Hermite sampling, frame cache rebuild logic, or orbital metrics computation:
-  Start in `gameplay_prediction_cache_internal.h`.
+  Start in `prediction_frame_cache_builder.h/.cpp`, `prediction_metrics_builder.h/.cpp`, or `streamed_chunk_assembly_builder.h/.cpp`. Drop to `gameplay_prediction_cache_internal.h/.cpp` for the low-level sampling and transform helpers.
 
 - Derived service threading, request coalescing, or cache build workflow:
   Start in `gameplay_prediction_derived_service.h/.cpp`.

@@ -13,33 +13,33 @@ namespace Game
 
         bool prediction_result_is_streaming(const OrbitPredictionService::Result &result)
         {
-            return result.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming ||
-                   result.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+            return result.envelope.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming ||
+                   result.envelope.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
         }
 
         bool should_drop_completed_result_for_incoming(
                 const OrbitPredictionService::Result &queued,
                 const OrbitPredictionService::Result &incoming)
         {
-            if (queued.track_id != incoming.track_id || !prediction_result_is_streaming(queued))
+            if (queued.envelope.track_id != incoming.envelope.track_id || !prediction_result_is_streaming(queued))
             {
                 return false;
             }
 
             if (!prediction_result_is_streaming(incoming))
             {
-                return incoming.generation_id > queued.generation_id;
+                return incoming.envelope.generation_id > queued.envelope.generation_id;
             }
 
-            if (incoming.generation_id > queued.generation_id)
+            if (incoming.envelope.generation_id > queued.envelope.generation_id)
             {
                 return true;
             }
 
             // Preview publishes are visual snapshots. Keep only the newest queued
             // preview for a track, while preserving full-stream chunk batches.
-            return incoming.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming &&
-                   queued.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+            return incoming.envelope.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming &&
+                   queued.envelope.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
         }
 
         void coalesce_completed_results(
@@ -89,11 +89,11 @@ namespace Game
                                            completed.end(),
                                            [track_id, generation_id, preserve_fast_preview](
                                                    const OrbitPredictionService::Result &queued) {
-                                                return queued.track_id == track_id &&
-                                                       queued.generation_id < generation_id &&
-                                                       !(preserve_fast_preview &&
-                                                         queued.solve_quality ==
-                                                                 OrbitPredictionService::SolveQuality::FastPreview);
+                                                 return queued.envelope.track_id == track_id &&
+                                                        queued.envelope.generation_id < generation_id &&
+                                                        !(preserve_fast_preview &&
+                                                          queued.envelope.solve_quality ==
+                                                                  OrbitPredictionService::SolveQuality::FastPreview);
                                            }),
                             completed.end());
         }
@@ -106,8 +106,8 @@ namespace Game
             completed.erase(std::remove_if(completed.begin(),
                                            completed.end(),
                                            [track_id, maneuver_plan_revision](const OrbitPredictionService::Result &queued) {
-                                               return queued.track_id == track_id &&
-                                                      queued.maneuver_plan_revision < maneuver_plan_revision;
+                                                return queued.envelope.track_id == track_id &&
+                                                       queued.envelope.maneuver_plan_revision < maneuver_plan_revision;
                                            }),
                             completed.end());
         }
@@ -190,17 +190,17 @@ namespace Game
         {
             std::lock_guard<std::mutex> lock(_mutex);
             generation_id = _next_generation_id++;
-            const uint64_t track_id = request.track_id;
+            const uint64_t track_id = request.envelope.track_id;
             const uint64_t request_epoch = _request_epoch;
             _latest_requested_generation_by_track[track_id] = generation_id;
             _latest_maneuver_plan_revision_by_track[track_id] =
                     std::max(_latest_maneuver_plan_revision_by_track[track_id],
-                             request.maneuver_plan_revision);
+                             request.envelope.maneuver_plan_revision);
             discard_completed_results_before_generation(
                     _completed,
                     track_id,
                     generation_id,
-                    request.solve_quality == OrbitPredictionService::SolveQuality::FastPreview);
+                    request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview);
             discard_stale_maneuver_completed_results(_completed,
                                                      track_id,
                                                      _latest_maneuver_plan_revision_by_track[track_id]);
@@ -225,8 +225,8 @@ namespace Game
                     _pending_jobs.begin(),
                     _pending_jobs.end(),
                     [&job](const PendingJob &queued) {
-                        return static_cast<uint8_t>(job.request.priority) >
-                               static_cast<uint8_t>(queued.request.priority);
+                        return static_cast<uint8_t>(job.request.envelope.priority) >
+                               static_cast<uint8_t>(queued.request.envelope.priority);
                     });
             _pending_jobs.insert(insert_it, std::move(job));
         }
@@ -453,31 +453,33 @@ namespace Game
     OrbitPredictionService::EphemerisSamplingSpec OrbitPredictionService::build_ephemeris_sampling_spec(const Request &request)
     {
         EphemerisSamplingSpec out{};
-        if (!std::isfinite(request.sim_time_s) || request.massive_bodies.empty())
+        if (!std::isfinite(request.world.sim_time_s) || request.world.massive_bodies.empty())
         {
             return out;
         }
 
         const std::size_t primary_index = select_primary_index_with_hysteresis(
-                request.massive_bodies,
-                request.ship_bary_position_m,
-                [&request](const std::size_t i) -> orbitsim::Vec3 { return request.massive_bodies[i].state.position_m; },
-                request.sim_config.softening_length_m,
-                request.preferred_primary_body_id);
-        if (primary_index >= request.massive_bodies.size())
+                request.world.massive_bodies,
+                request.subject.ship_bary_position_m,
+                [&request](const std::size_t i) -> orbitsim::Vec3 { return request.world.massive_bodies[i].state.position_m; },
+                request.world.sim_config.softening_length_m,
+                request.subject.preferred_primary_body_id);
+        if (primary_index >= request.world.massive_bodies.size())
         {
             return out;
         }
 
-        const orbitsim::MassiveBody &primary_body = request.massive_bodies[primary_index];
-        const double mu_ref_m3_s2 = request.sim_config.gravitational_constant * primary_body.mass_kg;
+        const orbitsim::MassiveBody &primary_body = request.world.massive_bodies[primary_index];
+        const double mu_ref_m3_s2 = request.world.sim_config.gravitational_constant * primary_body.mass_kg;
         if (!(mu_ref_m3_s2 > 0.0) || !std::isfinite(mu_ref_m3_s2))
         {
             return out;
         }
 
-        const glm::dvec3 ship_rel_pos_m = request.ship_bary_position_m - glm::dvec3(primary_body.state.position_m);
-        const glm::dvec3 ship_rel_vel_mps = request.ship_bary_velocity_mps - glm::dvec3(primary_body.state.velocity_mps);
+        const glm::dvec3 ship_rel_pos_m =
+                request.subject.ship_bary_position_m - glm::dvec3(primary_body.state.position_m);
+        const glm::dvec3 ship_rel_vel_mps =
+                request.subject.ship_bary_velocity_mps - glm::dvec3(primary_body.state.velocity_mps);
         if (!finite_vec3(ship_rel_pos_m) || !finite_vec3(ship_rel_vel_mps))
         {
             return out;
@@ -488,10 +490,10 @@ namespace Game
 
         double horizon_s = std::max(OrbitPredictionTuning::kMinHorizonS, horizon_s_auto);
         const double requested_window_s =
-                std::isfinite(request.future_window_s) ? std::max(0.0, request.future_window_s) : 0.0;
+                std::isfinite(request.options.future_window_s) ? std::max(0.0, request.options.future_window_s) : 0.0;
         horizon_s = std::max(horizon_s, std::max(1.0, requested_window_s));
 
-        if (request.thrusting)
+        if (request.options.thrusting)
         {
             const double thrust_horizon_cap_s =
                     std::clamp(std::max(OrbitPredictionTuning::kThrustHorizonMinS,
@@ -522,7 +524,7 @@ namespace Game
         const auto latest_it = latest_requested_generation_by_track.find(job.track_id);
         return latest_it == latest_requested_generation_by_track.end() ||
                job.generation_id >= latest_it->second ||
-               job.request.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
+               job.request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
     }
 
     bool OrbitPredictionService::should_continue_job(const uint64_t track_id,
@@ -568,7 +570,7 @@ namespace Game
             return false;
         }
         if (!maneuver_revision_is_current(job.track_id,
-                                          job.request.maneuver_plan_revision,
+                                          job.request.envelope.maneuver_plan_revision,
                                           _latest_maneuver_plan_revision_by_track))
         {
             return false;
@@ -606,8 +608,8 @@ namespace Game
             if (!should_continue_job(job.track_id,
                                      job.generation_id,
                                      job.request_epoch,
-                                     job.request.maneuver_plan_revision,
-                                     job.request.solve_quality))
+                                      job.request.envelope.maneuver_plan_revision,
+                                      job.request.options.solve_quality))
             {
                 continue;
             }

@@ -1,15 +1,16 @@
 // gameplay_state_test_stubs.cpp
 //
 // Minimal stub implementations of GameplayState lifecycle methods, GameAPI::Engine
-// debug-draw overloads, and PickingSystem that are not compiled into this test target
-// but are required for linkage.
+// debug-draw overloads that are not compiled into this test target but are required for linkage.
 
 #include "game/states/gameplay/gameplay_state.h"
+#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
 #include "core/game_api.h"
-#include "core/picking/picking_system.h"
 #include "core/input/input_system.h"
 #include "game/component/ship_controller.h"
 #include "game/entity_manager.h"
+#include "physics/physics_context.h"
+#include "physics/physics_world.h"
 
 namespace Game
 {
@@ -21,6 +22,9 @@ namespace Game
     GameplayState::GameplayState()  = default;
     GameplayState::~GameplayState() = default;
 
+    OrbitPredictionDerivedService::OrbitPredictionDerivedService() = default;
+    OrbitPredictionDerivedService::~OrbitPredictionDerivedService() = default;
+
     void GameplayState::on_enter(GameStateContext &ctx) { (void) ctx; }
     void GameplayState::on_exit(GameStateContext &ctx) { (void) ctx; }
     void GameplayState::on_update(GameStateContext &ctx, float dt) { (void) ctx; (void) dt; }
@@ -29,20 +33,20 @@ namespace Game
 
     void GameplayState::setup_scene(GameStateContext &ctx) { (void) ctx; }
     void GameplayState::setup_environment(GameStateContext &ctx) { (void) ctx; }
-    void GameplayState::init_orbitsim(WorldVec3 &player_pos_world, glm::dvec3 &player_vel_world)
-    {
-        (void) player_pos_world;
-        (void) player_vel_world;
-    }
 
     void GameplayState::reset_time_warp_state()
     {
         _time_warp.warp_level = 0;
         _time_warp.mode       = TimeWarpState::Mode::Realtime;
-        _rails_warp_active    = false;
+        _orbital_physics.reset();
     }
 
     void GameplayState::handle_time_warp_input(GameStateContext &ctx) { (void) ctx; }
+    bool GameplayState::ui_capture_keyboard(const GameStateContext &ctx) const
+    {
+        (void) ctx;
+        return false;
+    }
 
     ComponentContext GameplayState::build_component_context(GameStateContext &ctx, float alpha)
     {
@@ -56,55 +60,22 @@ namespace Game
         return comp_ctx;
     }
 
-    const OrbiterInfo *GameplayState::find_player_orbiter() const
+    bool GameplayPredictionAdapter::get_orbiter_world_state(const OrbiterInfo &orbiter,
+                                                            WorldVec3 &out_pos_world,
+                                                            glm::dvec3 &out_vel_world,
+                                                            glm::vec3 &out_vel_local) const
     {
-        for (const auto &o : _orbiters)
-        {
-            if (o.is_player)
-            {
-                return &o;
-            }
-        }
-        return nullptr;
-    }
-
-    EntityId GameplayState::player_entity() const
-    {
-        const OrbiterInfo *p = find_player_orbiter();
-        return p ? p->entity : EntityId{};
-    }
-
-    EntityId GameplayState::select_rebase_anchor_entity() const
-    {
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.is_rebase_anchor && orbiter.entity.is_valid())
-            {
-                return orbiter.entity;
-            }
-        }
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.is_player && orbiter.entity.is_valid())
-            {
-                return orbiter.entity;
-            }
-        }
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.entity.is_valid())
-            {
-                return orbiter.entity;
-            }
-        }
-        return EntityId{};
+        (void) orbiter;
+        out_pos_world = WorldVec3(0.0, 0.0, 0.0);
+        out_vel_world = glm::dvec3(0.0, 0.0, 0.0);
+        out_vel_local = glm::vec3(0.0f, 0.0f, 0.0f);
+        return false;
     }
 
     void GameplayState::update_rebase_anchor() {}
 
     void GameplayState::mark_prediction_dirty()
     {
-        _prediction_dirty = true;
     }
 
     void GameStateContext::quit() {}
@@ -132,6 +103,20 @@ namespace Game
     {
         (void) id;
         return nullptr;
+    }
+
+    bool GameWorld::bind_physics(EntityId id,
+                                 uint32_t body_value,
+                                 bool use_interpolation,
+                                 bool override_user_data,
+                                 const glm::vec3 &origin_offset_local)
+    {
+        (void) id;
+        (void) body_value;
+        (void) use_interpolation;
+        (void) override_user_data;
+        (void) origin_offset_local;
+        return true;
     }
 } // namespace Game
 
@@ -230,20 +215,3 @@ namespace GameAPI
     }
 
 } // namespace GameAPI
-
-void PickingSystem::clear_line_picks() {}
-
-uint32_t PickingSystem::add_line_pick_group(std::string owner_name)
-{
-    (void) owner_name;
-    return 0;
-}
-
-void PickingSystem::add_line_pick_segment(const uint32_t group_id,
-                                          const WorldVec3 &a_world,
-                                          const WorldVec3 &b_world,
-                                          const double a_time_s,
-                                          const double b_time_s)
-{
-    (void) group_id; (void) a_world; (void) b_world; (void) a_time_s; (void) b_time_s;
-}

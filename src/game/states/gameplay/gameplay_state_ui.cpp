@@ -2,12 +2,18 @@
 #include "orbit_helpers.h"
 #include "game/orbit/orbit_prediction_tuning.h"
 #include "game/states/gameplay/gameplay_settings.h"
+#include "game/states/gameplay/maneuver/gameplay_state_maneuver_gizmo_helpers.h"
+#include "game/states/gameplay/maneuver/maneuver_ui_controller.h"
+#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
+#include "game/states/gameplay/prediction/prediction_host_context_builder.h"
 #include "game/states/gameplay/scenario/scenario_loader.h"
 #include "game/component/ship_controller.h"
 #include "core/engine.h"
 #include "core/game_api.h"
 #include "core/orbit_plot/orbit_plot.h"
 #include "core/util/logger.h"
+#include "physics/physics_context.h"
+#include "physics/physics_world.h"
 
 #include "imgui.h"
 
@@ -19,33 +25,35 @@
 
 namespace Game
 {
+    namespace Gizmo = ManeuverGizmoHelpers;
+
     using detail::contact_event_type_name;
 
     namespace
     {
-        const char *prediction_solver_status_label(const OrbitPredictionService::Status status)
+        const char *prediction_solver_status_label(const OrbitPredictionStatus status)
         {
             switch (status)
             {
-                case OrbitPredictionService::Status::None:
+                case OrbitPredictionStatus::None:
                     return "None";
-                case OrbitPredictionService::Status::Success:
+                case OrbitPredictionStatus::Success:
                     return "Success";
-                case OrbitPredictionService::Status::InvalidInput:
+                case OrbitPredictionStatus::InvalidInput:
                     return "Invalid input";
-                case OrbitPredictionService::Status::InvalidSubject:
+                case OrbitPredictionStatus::InvalidSubject:
                     return "Invalid subject";
-                case OrbitPredictionService::Status::InvalidSamplingSpec:
+                case OrbitPredictionStatus::InvalidSamplingSpec:
                     return "Invalid sampling spec";
-                case OrbitPredictionService::Status::EphemerisUnavailable:
+                case OrbitPredictionStatus::EphemerisUnavailable:
                     return "Ephemeris unavailable";
-                case OrbitPredictionService::Status::TrajectorySegmentsUnavailable:
+                case OrbitPredictionStatus::TrajectorySegmentsUnavailable:
                     return "Segments unavailable";
-                case OrbitPredictionService::Status::TrajectorySamplesUnavailable:
+                case OrbitPredictionStatus::TrajectorySamplesUnavailable:
                     return "Samples unavailable";
-                case OrbitPredictionService::Status::ContinuityFailed:
+                case OrbitPredictionStatus::ContinuityFailed:
                     return "Continuity failed";
-                case OrbitPredictionService::Status::Cancelled:
+                case OrbitPredictionStatus::Cancelled:
                     return "Cancelled";
             }
 
@@ -77,13 +85,13 @@ namespace Game
             return "Unknown";
         }
 
-        const char *prediction_solve_quality_label(const OrbitPredictionService::SolveQuality quality)
+        const char *prediction_solve_quality_label(const OrbitPredictionSolveQuality quality)
         {
             switch (quality)
             {
-                case OrbitPredictionService::SolveQuality::Full:
+                case OrbitPredictionSolveQuality::Full:
                     return "Full";
-                case OrbitPredictionService::SolveQuality::FastPreview:
+                case OrbitPredictionSolveQuality::FastPreview:
                     return "FastPreview";
             }
 
@@ -113,7 +121,7 @@ namespace Game
         }
 
         void draw_prediction_stage_diag(const char *label,
-                                        const OrbitPredictionService::AdaptiveStageDiagnostics &diag,
+                                        const OrbitPredictionAdaptiveStageDiagnostics &diag,
                                         const std::size_t sample_count)
         {
             std::string extra{};
@@ -176,21 +184,21 @@ namespace Game
     GameplaySettings GameplayState::extract_settings() const
     {
         GameplaySettings s{};
-        s.prediction_draw_full_orbit = _prediction_draw_full_orbit;
-        s.prediction_draw_future_segment = _prediction_draw_future_segment;
-        s.prediction_draw_velocity_ray = _prediction_draw_velocity_ray;
-        s.prediction_line_alpha_scale = _prediction_line_alpha_scale;
-        s.prediction_line_overlay_boost = _prediction_line_overlay_boost;
-        s.prediction_periodic_refresh_s = _prediction_periodic_refresh_s;
-        s.prediction_thrust_refresh_s = _prediction_thrust_refresh_s;
-        s.prediction_sampling_policy = _prediction_sampling_policy;
-        s.maneuver_plan_horizon = _maneuver_plan_horizon;
-        s.maneuver_plan_windows = _maneuver_plan_windows;
-        s.maneuver_plan_live_preview_active = _maneuver_plan_live_preview_active;
-        s.orbit_plot_budget = _orbit_plot_budget;
+        s.prediction_draw_full_orbit = _prediction->state().draw_full_orbit;
+        s.prediction_draw_future_segment = _prediction->state().draw_future_segment;
+        s.prediction_draw_velocity_ray = _prediction->state().draw_velocity_ray;
+        s.prediction_line_alpha_scale = _prediction->state().line_alpha_scale;
+        s.prediction_line_overlay_boost = _prediction->state().line_overlay_boost;
+        s.prediction_periodic_refresh_s = _prediction->state().periodic_refresh_s;
+        s.prediction_thrust_refresh_s = _prediction->state().thrust_refresh_s;
+        s.prediction_sampling_policy = _prediction->state().sampling_policy;
+        s.maneuver_plan_horizon = _maneuver.settings().plan_horizon;
+        s.maneuver_plan_windows = _maneuver.settings().plan_windows;
+        s.maneuver_plan_live_preview_active = _maneuver.settings().live_preview_active;
+        s.orbit_plot_budget = _prediction->budget();
         s.debug_draw_enabled = _debug_draw_enabled;
-        s.runtime_orbiter_rails_enabled = _runtime_orbiter_rails_enabled;
-        s.runtime_orbiter_rails_distance_m = _runtime_orbiter_rails_distance_m;
+        s.runtime_orbiter_rails_enabled = _orbit.runtime_orbiter_rails_enabled();
+        s.runtime_orbiter_rails_distance_m = _orbit.runtime_orbiter_rails_distance_m();
         s.contact_log_enabled = _contact_log_enabled;
         s.contact_log_print_console = _contact_log_print_console;
         return s;
@@ -198,21 +206,21 @@ namespace Game
 
     void GameplayState::apply_settings(const GameplaySettings &s)
     {
-        _prediction_draw_full_orbit = s.prediction_draw_full_orbit;
-        _prediction_draw_future_segment = s.prediction_draw_future_segment;
-        _prediction_draw_velocity_ray = s.prediction_draw_velocity_ray;
-        _prediction_line_alpha_scale = s.prediction_line_alpha_scale;
-        _prediction_line_overlay_boost = s.prediction_line_overlay_boost;
-        _prediction_periodic_refresh_s = s.prediction_periodic_refresh_s;
-        _prediction_thrust_refresh_s = s.prediction_thrust_refresh_s;
-        _prediction_sampling_policy = s.prediction_sampling_policy;
-        _maneuver_plan_horizon = s.maneuver_plan_horizon;
-        _maneuver_plan_windows = s.maneuver_plan_windows;
-        _maneuver_plan_live_preview_active = s.maneuver_plan_live_preview_active;
-        _orbit_plot_budget = s.orbit_plot_budget;
+        _prediction->state().draw_full_orbit = s.prediction_draw_full_orbit;
+        _prediction->state().draw_future_segment = s.prediction_draw_future_segment;
+        _prediction->state().draw_velocity_ray = s.prediction_draw_velocity_ray;
+        _prediction->state().line_alpha_scale = s.prediction_line_alpha_scale;
+        _prediction->state().line_overlay_boost = s.prediction_line_overlay_boost;
+        _prediction->state().periodic_refresh_s = s.prediction_periodic_refresh_s;
+        _prediction->state().thrust_refresh_s = s.prediction_thrust_refresh_s;
+        _prediction->state().sampling_policy = s.prediction_sampling_policy;
+        _maneuver.settings().plan_horizon = s.maneuver_plan_horizon;
+        _maneuver.settings().plan_windows = s.maneuver_plan_windows;
+        _maneuver.settings().live_preview_active = s.maneuver_plan_live_preview_active;
+        _prediction->budget() = s.orbit_plot_budget;
         _debug_draw_enabled = s.debug_draw_enabled;
-        _runtime_orbiter_rails_enabled = s.runtime_orbiter_rails_enabled;
-        _runtime_orbiter_rails_distance_m = s.runtime_orbiter_rails_distance_m;
+        _orbit.runtime_orbiter_rails_enabled() = s.runtime_orbiter_rails_enabled;
+        _orbit.runtime_orbiter_rails_distance_m() = s.runtime_orbiter_rails_distance_m;
         _contact_log_enabled = s.contact_log_enabled;
         _contact_log_print_console = s.contact_log_print_console;
         mark_prediction_dirty();
@@ -220,6 +228,10 @@ namespace Game
 
     void GameplayState::on_draw_ui(GameStateContext &ctx)
     {
+        GameplayPredictionAdapter prediction(build_prediction_access());
+        PredictionSubjectStateProvider prediction_subjects =
+                PredictionHostContextBuilder(prediction.context()).make_subject_state_provider();
+
         if (ImGui::BeginMainMenuBar())
         {
             if (ImGui::BeginMenu("View"))
@@ -246,7 +258,7 @@ namespace Game
                 // ----------------------------------------------------------------
                 // Player HUD: sim time, warp, vessel, controls
                 // ----------------------------------------------------------------
-                const double sim_time_s = _orbitsim ? _orbitsim->sim.time_s() : _fixed_time_s;
+                const double sim_time_s = _orbit.scenario_owner() ? _orbit.scenario_owner()->sim.time_s() : _fixed_time_s;
                 const int sim_hours = static_cast<int>(std::floor(sim_time_s / 3600.0));
                 const int sim_minutes = static_cast<int>(std::floor(std::fmod(sim_time_s, 3600.0) / 60.0));
                 const double sim_seconds = std::fmod(sim_time_s, 60.0);
@@ -267,7 +279,7 @@ namespace Game
 
                 ImGui::Text("Sim: %dh %dm %.1fs", sim_hours, sim_minutes, sim_seconds);
                 const char *controlled_vessel = "None";
-                if (const OrbiterInfo *player_orbiter = find_player_orbiter())
+                if (const OrbiterInfo *player_orbiter = _orbit.find_player_orbiter())
                 {
                     controlled_vessel = player_orbiter->name.c_str();
                 }
@@ -407,11 +419,13 @@ namespace Game
                     }
                 }
 
-                if (ImGui::Checkbox("Runtime orbiter rails", &_runtime_orbiter_rails_enabled))
+                bool runtime_rails_enabled = _orbit.runtime_orbiter_rails_enabled();
+                if (ImGui::Checkbox("Runtime orbiter rails", &runtime_rails_enabled))
                 {
+                    _orbit.runtime_orbiter_rails_enabled() = runtime_rails_enabled;
                     mark_prediction_dirty();
                 }
-                double runtime_rails_distance_m = _runtime_orbiter_rails_distance_m;
+                double runtime_rails_distance_m = _orbit.runtime_orbiter_rails_distance_m();
                 if (ImGui::DragScalar("Runtime rails distance (m)",
                                       ImGuiDataType_Double,
                                       &runtime_rails_distance_m,
@@ -420,7 +434,7 @@ namespace Game
                                       nullptr,
                                       "%.0f"))
                 {
-                    _runtime_orbiter_rails_distance_m = std::max(0.0, runtime_rails_distance_m);
+                    _orbit.runtime_orbiter_rails_distance_m() = std::max(0.0, runtime_rails_distance_m);
                 }
 
                 // ----------------------------------------------------------------
@@ -448,7 +462,7 @@ namespace Game
                 // ----------------------------------------------------------------
 #if defined(VULKAN_ENGINE_USE_JOLT) && VULKAN_ENGINE_USE_JOLT
                 {
-                    const EntityId player_eid = player_entity();
+                    const EntityId player_eid = _orbit.player_entity();
                     if (player_eid.is_valid())
                     {
                         Entity *player = _world.entities().find(player_eid);
@@ -458,19 +472,25 @@ namespace Game
                             if (sc)
                             {
                                 ImGui::Separator();
-                                const bool rails_warp = _rails_warp_active && _time_warp.mode == TimeWarpState::Mode::RailsWarp;
-                                const glm::vec3 td = rails_warp ? _rails_last_thrust_dir_local : sc->last_thrust_dir();
+                                const bool rails_warp =
+                                        _orbital_physics.rails_warp_active() &&
+                                        _time_warp.mode == TimeWarpState::Mode::RailsWarp;
+                                const glm::vec3 td = rails_warp
+                                                             ? _orbital_physics.rails_last_thrust_dir_local()
+                                                             : sc->last_thrust_dir();
                                 ImGui::Text("SAS: %s  [T] toggle", sc->sas_enabled() ? "ON " : "OFF");
                                 ImGui::Text("Thrust input: (%.1f, %.1f, %.1f)%s",
                                             td.x, td.y, td.z,
-                                            (rails_warp && _rails_thrust_applied_this_tick) ? " [applied]" : "");
+                                            (rails_warp && _orbital_physics.rails_thrust_applied_this_tick()) ? " [applied]" : "");
 
                                 if (rails_warp)
                                 {
                                     WorldVec3 ship_pos_world{0.0, 0.0, 0.0};
                                     glm::dvec3 ship_vel_world(0.0);
                                     glm::vec3 ship_vel_local_f(0.0f);
-                                    if (get_player_world_state(ship_pos_world, ship_vel_world, ship_vel_local_f))
+                                    if (prediction_subjects.get_player_world_state(ship_pos_world,
+                                                                                   ship_vel_world,
+                                                                                   ship_vel_local_f))
                                     {
                                         ImGui::Text("Speed(world): %.2f m/s", glm::length(ship_vel_world));
                                     }
@@ -521,7 +541,7 @@ namespace Game
 #endif
 
                 {
-                    const EntityId player_eid = player_entity();
+                    const EntityId player_eid = _orbit.player_entity();
                     if (player_eid.is_valid())
                     {
                         const Entity *player = _world.entities().find(player_eid);
@@ -550,37 +570,37 @@ namespace Game
                 {
                     OrbitPlotSystem *orbit_plot =
                             (ctx.renderer && ctx.renderer->_context) ? ctx.renderer->_context->orbit_plot : nullptr;
-                    rebuild_prediction_subjects();
-                    rebuild_prediction_frame_options();
-                    rebuild_prediction_analysis_options();
+                    prediction.rebuild_prediction_subjects();
+                    prediction.rebuild_prediction_frame_options();
+                    prediction.rebuild_prediction_analysis_options();
 
                     // --- Key orbital info (always visible) ---
-                    const PredictionTrackState *active_prediction = active_prediction_track();
+                    const PredictionTrackState *active_prediction = prediction.active_prediction_track();
                     std::string active_prediction_label = active_prediction
-                                                                ? prediction_subject_label(active_prediction->key)
+                                                                ? prediction.prediction_subject_label(active_prediction->key)
                                                                 : std::string("None");
                     ImGui::Text("Focused subject: %s", active_prediction_label.c_str());
 
                     // Display frame / Analysis frame combos
-                    const char *frame_label = (_prediction_frame_selection.selected_index >= 0 &&
-                                               _prediction_frame_selection.selected_index <
-                                                       static_cast<int>(_prediction_frame_selection.options.size()))
-                                                  ? _prediction_frame_selection.options[static_cast<size_t>(
-                                                            _prediction_frame_selection.selected_index)].label.c_str()
+                    const char *frame_label = (_prediction->state().frame_selection.selected_index >= 0 &&
+                                               _prediction->state().frame_selection.selected_index <
+                                                       static_cast<int>(_prediction->state().frame_selection.options.size()))
+                                                  ? _prediction->state().frame_selection.options[static_cast<size_t>(
+                                                            _prediction->state().frame_selection.selected_index)].label.c_str()
                                                   : "Unknown";
                     if (ImGui::BeginCombo("Display frame", frame_label))
                     {
-                        for (std::size_t i = 0; i < _prediction_frame_selection.options.size(); ++i)
+                        for (std::size_t i = 0; i < _prediction->state().frame_selection.options.size(); ++i)
                         {
-                            const PredictionFrameOption &option = _prediction_frame_selection.options[i];
+                            const PredictionFrameOption &option = _prediction->state().frame_selection.options[i];
                             const bool selected =
-                                    option.spec.type == _prediction_frame_selection.spec.type &&
-                                    option.spec.primary_body_id == _prediction_frame_selection.spec.primary_body_id &&
-                                    option.spec.secondary_body_id == _prediction_frame_selection.spec.secondary_body_id &&
-                                    option.spec.target_spacecraft_id == _prediction_frame_selection.spec.target_spacecraft_id;
+                                    option.spec.type == _prediction->state().frame_selection.spec.type &&
+                                    option.spec.primary_body_id == _prediction->state().frame_selection.spec.primary_body_id &&
+                                    option.spec.secondary_body_id == _prediction->state().frame_selection.spec.secondary_body_id &&
+                                    option.spec.target_spacecraft_id == _prediction->state().frame_selection.spec.target_spacecraft_id;
                             if (ImGui::Selectable(option.label.c_str(), selected))
                             {
-                                (void) set_prediction_frame_spec(option.spec);
+                                (void) prediction.set_prediction_frame_spec(option.spec);
                             }
                             if (selected)
                             {
@@ -591,24 +611,24 @@ namespace Game
                     }
 
                     const char *analysis_label =
-                            (_prediction_analysis_selection.selected_index >= 0 &&
-                             _prediction_analysis_selection.selected_index <
-                                     static_cast<int>(_prediction_analysis_selection.options.size()))
-                                ? _prediction_analysis_selection
-                                          .options[static_cast<size_t>(_prediction_analysis_selection.selected_index)]
+                            (_prediction->state().analysis_selection.selected_index >= 0 &&
+                             _prediction->state().analysis_selection.selected_index <
+                                     static_cast<int>(_prediction->state().analysis_selection.options.size()))
+                                ? _prediction->state().analysis_selection
+                                          .options[static_cast<size_t>(_prediction->state().analysis_selection.selected_index)]
                                           .label.c_str()
                                 : "Unknown";
                     if (ImGui::BeginCombo("Analysis frame", analysis_label))
                     {
-                        for (std::size_t i = 0; i < _prediction_analysis_selection.options.size(); ++i)
+                        for (std::size_t i = 0; i < _prediction->state().analysis_selection.options.size(); ++i)
                         {
-                            const PredictionAnalysisOption &option = _prediction_analysis_selection.options[i];
+                            const PredictionAnalysisOption &option = _prediction->state().analysis_selection.options[i];
                             const bool selected =
-                                    option.spec.mode == _prediction_analysis_selection.spec.mode &&
-                                    option.spec.fixed_body_id == _prediction_analysis_selection.spec.fixed_body_id;
+                                    option.spec.mode == _prediction->state().analysis_selection.spec.mode &&
+                                    option.spec.fixed_body_id == _prediction->state().analysis_selection.spec.fixed_body_id;
                             if (ImGui::Selectable(option.label.c_str(), selected))
                             {
-                                (void) set_prediction_analysis_spec(option.spec);
+                                (void) prediction.set_prediction_analysis_spec(option.spec);
                             }
                             if (selected)
                             {
@@ -623,58 +643,64 @@ namespace Game
                     glm::dvec3 subject_vel_world(0.0);
                     glm::vec3 subject_vel_local_f(0.0f);
 
-                    active_prediction = active_prediction_track();
+                    active_prediction = prediction.active_prediction_track();
                     active_prediction_label = active_prediction
-                                                  ? prediction_subject_label(active_prediction->key)
+                                                  ? prediction.prediction_subject_label(active_prediction->key)
                                                   : std::string("None");
                     const bool have_subject =
                             active_prediction &&
-                            get_prediction_subject_world_state(active_prediction->key,
-                                                               subject_pos_world,
-                                                               subject_vel_world,
-                                                               subject_vel_local_f);
+                            prediction_subjects.get_subject_world_state(active_prediction->key,
+                                                                        subject_pos_world,
+                                                                        subject_vel_world,
+                                                                        subject_vel_local_f);
                     if (!have_subject)
                     {
                         ImGui::TextUnformatted("Prediction subject state unavailable.");
                     }
                     else
                     {
-                        if (active_prediction && active_prediction->cache.valid)
+                        if (active_prediction && active_prediction->cache.identity.valid)
                         {
-                            if (!active_prediction->cache.altitude_km.empty())
+                            if (!active_prediction->cache.analysis.altitude_km.empty())
                             {
-                                ImGui::Text("Altitude: %.0f m", static_cast<double>(active_prediction->cache.altitude_km.front()) * 1000.0);
+                                ImGui::Text("Altitude: %.0f m",
+                                            static_cast<double>(active_prediction->cache.analysis.altitude_km.front()) *
+                                                    1000.0);
                             }
-                            if (!active_prediction->cache.speed_kmps.empty())
+                            if (!active_prediction->cache.analysis.speed_kmps.empty())
                             {
-                                ImGui::Text("Speed:    %.3f km/s", static_cast<double>(active_prediction->cache.speed_kmps.front()));
+                                ImGui::Text("Speed:    %.3f km/s",
+                                            static_cast<double>(active_prediction->cache.analysis.speed_kmps.front()));
                             }
 
                             if (!active_prediction->is_celestial)
                             {
-                                ImGui::Text("Predicted Pe: %.1f km", active_prediction->cache.periapsis_alt_km);
-                                if (std::isfinite(active_prediction->cache.apoapsis_alt_km))
+                                ImGui::Text("Predicted Pe: %.1f km",
+                                            active_prediction->cache.analysis.periapsis_alt_km);
+                                if (std::isfinite(active_prediction->cache.analysis.apoapsis_alt_km))
                                 {
-                                    ImGui::Text("Predicted Ap: %.1f km", active_prediction->cache.apoapsis_alt_km);
+                                    ImGui::Text("Predicted Ap: %.1f km",
+                                                active_prediction->cache.analysis.apoapsis_alt_km);
                                 }
                                 else
                                 {
                                     ImGui::TextUnformatted("Predicted Ap: escape");
                                 }
 
-                                if (active_prediction->cache.orbital_period_s > 0.0 &&
-                                    std::isfinite(active_prediction->cache.orbital_period_s))
+                                if (active_prediction->cache.analysis.orbital_period_s > 0.0 &&
+                                    std::isfinite(active_prediction->cache.analysis.orbital_period_s))
                                 {
-                                    ImGui::Text("Predicted Period: %.2f min", active_prediction->cache.orbital_period_s / 60.0);
+                                    ImGui::Text("Predicted Period: %.2f min",
+                                                active_prediction->cache.analysis.orbital_period_s / 60.0);
                                 }
                             }
                         }
 
 #if defined(VULKAN_ENGINE_USE_JOLT) && VULKAN_ENGINE_USE_JOLT
-                        const EntityId player_eid = player_entity();
+                        const EntityId player_eid = _orbit.player_entity();
                         if (_physics && _physics_context && player_eid.is_valid() &&
                             active_prediction &&
-                            prediction_subject_is_player(active_prediction->key))
+                            prediction.prediction_subject_is_player(active_prediction->key))
                         {
                             const glm::dvec3 v_origin_world = _physics_context->velocity_origin_world();
                             ImGui::Text("v_origin: %.1f, %.1f, %.1f m/s", v_origin_world.x, v_origin_world.y,
@@ -700,11 +726,11 @@ namespace Game
                     // --- Orbit View (collapsed by default) ---
                     if (ImGui::CollapsingHeader("Orbit View"))
                     {
-                    ImGui::Checkbox("Prediction full orbit", &_prediction_draw_full_orbit);
-                    ImGui::Checkbox("Prediction future segment", &_prediction_draw_future_segment);
-                    ImGui::Checkbox("Prediction velocity ray", &_prediction_draw_velocity_ray);
+                    ImGui::Checkbox("Prediction full orbit", &_prediction->state().draw_full_orbit);
+                    ImGui::Checkbox("Prediction future segment", &_prediction->state().draw_future_segment);
+                    ImGui::Checkbox("Prediction velocity ray", &_prediction->state().draw_velocity_ray);
 
-                    float prediction_alpha_scale = _prediction_line_alpha_scale;
+                    float prediction_alpha_scale = _prediction->state().line_alpha_scale;
                     if (ImGui::DragFloat("Prediction line alpha scale",
                                          &prediction_alpha_scale,
                                          0.05f,
@@ -712,10 +738,10 @@ namespace Game
                                          8.0f,
                                          "%.2f"))
                     {
-                        _prediction_line_alpha_scale = std::clamp(prediction_alpha_scale, 0.1f, 8.0f);
+                        _prediction->state().line_alpha_scale = std::clamp(prediction_alpha_scale, 0.1f, 8.0f);
                     }
 
-                    float prediction_overlay_boost = _prediction_line_overlay_boost;
+                    float prediction_overlay_boost = _prediction->state().line_overlay_boost;
                     if (ImGui::DragFloat("Prediction line overlay boost",
                                          &prediction_overlay_boost,
                                          0.01f,
@@ -723,7 +749,7 @@ namespace Game
                                          1.0f,
                                          "%.2f"))
                     {
-                        _prediction_line_overlay_boost = std::clamp(prediction_overlay_boost, 0.0f, 1.0f);
+                        _prediction->state().line_overlay_boost = std::clamp(prediction_overlay_boost, 0.0f, 1.0f);
                     }
                     ImGui::SameLine();
                     ImGui::TextUnformatted("(0 = depth-only)");
@@ -734,15 +760,15 @@ namespace Game
                     {
                         ImGui::TextUnformatted("Plan horizon lives in Maneuver Nodes.");
 
-                        float refresh_s = static_cast<float>(_prediction_periodic_refresh_s);
+                        float refresh_s = static_cast<float>(_prediction->state().periodic_refresh_s);
                         if (ImGui::DragFloat("Prediction refresh (s)", &refresh_s, 1.0f, 0.0f, 36000.0f, "%.1f"))
                         {
-                            _prediction_periodic_refresh_s = static_cast<double>(std::max(0.0f, refresh_s));
+                            _prediction->state().periodic_refresh_s = static_cast<double>(std::max(0.0f, refresh_s));
                         }
                         ImGui::SameLine();
                         ImGui::TextUnformatted("(0 = never)");
 
-                        float thrust_refresh_s = static_cast<float>(_prediction_thrust_refresh_s);
+                        float thrust_refresh_s = static_cast<float>(_prediction->state().thrust_refresh_s);
                         if (ImGui::DragFloat("Prediction thrust refresh (s)",
                                              &thrust_refresh_s,
                                              0.01f,
@@ -750,14 +776,14 @@ namespace Game
                                              2.0f,
                                              "%.2f"))
                         {
-                            _prediction_thrust_refresh_s = static_cast<double>(std::max(0.0f, thrust_refresh_s));
+                            _prediction->state().thrust_refresh_s = static_cast<double>(std::max(0.0f, thrust_refresh_s));
                         }
                     ImGui::SameLine();
                     ImGui::TextUnformatted("(0 = every fixed tick)");
 
                     ImGui::SeparatorText("Prediction Policy");
 
-                    float orbiter_min_window_s = static_cast<float>(_prediction_sampling_policy.orbiter_min_window_s);
+                    float orbiter_min_window_s = static_cast<float>(_prediction->state().sampling_policy.orbiter_min_window_s);
                     if (ImGui::DragFloat("Orbiter min window (s)",
                                          &orbiter_min_window_s,
                                          10.0f,
@@ -765,11 +791,11 @@ namespace Game
                                          15552000.0f,
                                          "%.0f"))
                     {
-                        _prediction_sampling_policy.orbiter_min_window_s =
+                        _prediction->state().sampling_policy.orbiter_min_window_s =
                                 static_cast<double>(std::max(0.0f, orbiter_min_window_s));
                     }
 
-                    float celestial_min_window_s = static_cast<float>(_prediction_sampling_policy.celestial_min_window_s);
+                    float celestial_min_window_s = static_cast<float>(_prediction->state().sampling_policy.celestial_min_window_s);
                     if (ImGui::DragFloat("Celestial min window (s)",
                                          &celestial_min_window_s,
                                          60.0f,
@@ -777,37 +803,37 @@ namespace Game
                                          15552000.0f,
                                          "%.0f"))
                     {
-                        _prediction_sampling_policy.celestial_min_window_s =
+                        _prediction->state().sampling_policy.celestial_min_window_s =
                                 static_cast<double>(std::max(0.0f, celestial_min_window_s));
                     }
 
-                    ImGui::Text("Plan horizon: %.0f s", _maneuver_plan_horizon.horizon_s);
+                    ImGui::Text("Plan horizon: %.0f s", _maneuver.settings().plan_horizon.horizon_s);
 
                     ImGui::SeparatorText("Orbit Budget");
 
-                    float render_error_px = static_cast<float>(_orbit_plot_budget.render_error_px);
+                    float render_error_px = static_cast<float>(_prediction->budget().render_error_px);
                     if (ImGui::DragFloat("Render error (px)", &render_error_px, 0.01f, 0.05f, 4.0f, "%.2f"))
                     {
-                        _orbit_plot_budget.render_error_px = std::clamp(static_cast<double>(render_error_px), 0.05, 4.0);
+                        _prediction->budget().render_error_px = std::clamp(static_cast<double>(render_error_px), 0.05, 4.0);
                     }
 
-                    int render_max_segments_cpu = _orbit_plot_budget.render_max_segments_cpu;
+                    int render_max_segments_cpu = _prediction->budget().render_max_segments_cpu;
                     if (ImGui::DragInt("Render max segments (CPU)",
                                        &render_max_segments_cpu,
                                        50.0f,
                                        64,
                                        200000))
                     {
-                        _orbit_plot_budget.render_max_segments_cpu = std::clamp(render_max_segments_cpu, 64, 200000);
+                        _prediction->budget().render_max_segments_cpu = std::clamp(render_max_segments_cpu, 64, 200000);
                     }
 
-                    int pick_max_segments = _orbit_plot_budget.pick_max_segments;
+                    int pick_max_segments = _prediction->budget().pick_max_segments;
                     if (ImGui::DragInt("Pick max segments", &pick_max_segments, 50.0f, 64, 32000))
                     {
-                        _orbit_plot_budget.pick_max_segments = std::clamp(pick_max_segments, 64, 32000);
+                        _prediction->budget().pick_max_segments = std::clamp(pick_max_segments, 64, 32000);
                     }
 
-                    float pick_margin_ratio = static_cast<float>(_orbit_plot_budget.pick_frustum_margin_ratio);
+                    float pick_margin_ratio = static_cast<float>(_prediction->budget().pick_frustum_margin_ratio);
                     if (ImGui::DragFloat("Pick frustum margin ratio",
                                          &pick_margin_ratio,
                                          0.01f,
@@ -815,7 +841,7 @@ namespace Game
                                          1.0f,
                                          "%.2f"))
                     {
-                        _orbit_plot_budget.pick_frustum_margin_ratio =
+                        _prediction->budget().pick_frustum_margin_ratio =
                                 std::clamp(static_cast<double>(pick_margin_ratio), 0.0, 1.0);
                     }
 
@@ -837,8 +863,8 @@ namespace Game
                     if (orbit_plot && ImGui::CollapsingHeader("Orbit Performance"))
                     {
                     const OrbitPlotSystem::Stats &plot_stats = orbit_plot->stats();
-                    const OrbitPlotPerfStats &perf = _orbit_plot_perf;
-                    const PredictionTrackState *active_track = active_prediction_track();
+                    const OrbitPlotPerfStats &perf = _prediction->state().orbit_plot_perf;
+                    const PredictionTrackState *active_track = prediction.active_prediction_track();
                     const double upload_mib =
                             static_cast<double>(plot_stats.upload_bytes_last_frame) / (1024.0 * 1024.0);
                     const double budget_mib =
@@ -846,13 +872,13 @@ namespace Game
                     const double peak_mib =
                             static_cast<double>(plot_stats.upload_bytes_peak) / (1024.0 * 1024.0);
 
-                    ImGui::Text("Visible subjects: %zu", _prediction_tracks.size());
+                    ImGui::Text("Visible subjects: %zu", _prediction->state().tracks.size());
                     ImGui::Text("Solver segments (base/planned): %u / %u",
                                 perf.solver_segments_base,
                                 perf.solver_segments_planned);
                     if (active_track)
                     {
-                        const OrbitPredictionService::Diagnostics &solver_diag = active_track->solver_diagnostics;
+                        const OrbitPredictionDiagnostics &solver_diag = active_track->solver_diagnostics;
                         const OrbitPredictionDerivedDiagnostics &derived_diag = active_track->derived_diagnostics;
                         ImGui::Text("Prediction status (solver/frame): %s / %s",
                                     prediction_solver_status_label(solver_diag.status),
@@ -911,19 +937,19 @@ namespace Game
                                 peak_mib,
                                 plot_stats.upload_ms_peak);
 
-                    if (_orbit_plot_perf.planned_window_valid || !_maneuver_state.nodes.empty())
+                    if (_prediction->state().orbit_plot_perf.planned_window_valid || !_maneuver.plan().nodes.empty())
                     {
                         ImGui::Separator();
-                        ImGui::Text("Planned window: %s", _orbit_plot_perf.planned_window_valid ? "VALID" : "INVALID");
-                        ImGui::Text("  t0p (traj start): %.3f", _orbit_plot_perf.planned_window_t0p);
-                        ImGui::Text("  now_s:            %.3f", _orbit_plot_perf.planned_window_now_s);
-                        ImGui::Text("  anchor (node):    %.3f", _orbit_plot_perf.planned_window_anchor_s);
-                        ImGui::Text("  t_plan_start:     %.3f", _orbit_plot_perf.planned_window_t_start);
-                        ImGui::Text("  t_plan_end:       %.3f", _orbit_plot_perf.planned_window_t_end);
-                        if (_orbit_plot_perf.planned_window_valid)
+                        ImGui::Text("Planned window: %s", _prediction->state().orbit_plot_perf.planned_window_valid ? "VALID" : "INVALID");
+                        ImGui::Text("  t0p (traj start): %.3f", _prediction->state().orbit_plot_perf.planned_window_t0p);
+                        ImGui::Text("  now_s:            %.3f", _prediction->state().orbit_plot_perf.planned_window_now_s);
+                        ImGui::Text("  anchor (node):    %.3f", _prediction->state().orbit_plot_perf.planned_window_anchor_s);
+                        ImGui::Text("  t_plan_start:     %.3f", _prediction->state().orbit_plot_perf.planned_window_t_start);
+                        ImGui::Text("  t_plan_end:       %.3f", _prediction->state().orbit_plot_perf.planned_window_t_end);
+                        if (_prediction->state().orbit_plot_perf.planned_window_valid)
                         {
-                            ImGui::Text("  offset from t0p:  %.3f s", _orbit_plot_perf.planned_window_t_start - _orbit_plot_perf.planned_window_t0p);
-                            ImGui::Text("  offset from now:  %.3f s", _orbit_plot_perf.planned_window_t_start - _orbit_plot_perf.planned_window_now_s);
+                            ImGui::Text("  offset from t0p:  %.3f s", _prediction->state().orbit_plot_perf.planned_window_t_start - _prediction->state().orbit_plot_perf.planned_window_t0p);
+                            ImGui::Text("  offset from now:  %.3f s", _prediction->state().orbit_plot_perf.planned_window_t_start - _prediction->state().orbit_plot_perf.planned_window_now_s);
                         }
                     }
                 }
@@ -932,14 +958,15 @@ namespace Game
 #if defined(VULKAN_ENGINE_USE_JOLT) && VULKAN_ENGINE_USE_JOLT
                     if (_physics && _physics_context && ImGui::CollapsingHeader("Physics Debug"))
                     {
-                    int mode_idx = (_velocity_origin_mode == VelocityOriginMode::PerStepAnchorSync) ? 0 : 1;
+                    using VelocityOriginMode = OrbitalPhysicsSystem::VelocityOriginMode;
+                    int mode_idx = (_orbital_physics.velocity_origin_mode() == VelocityOriginMode::PerStepAnchorSync) ? 0 : 1;
                     const char *modes[] = {"Per-step anchor sync", "Free-fall anchor frame"};
                     if (ImGui::Combo("Velocity origin mode", &mode_idx, modes, IM_ARRAYSIZE(modes)))
                     {
-                        _velocity_origin_mode =
+                        _orbital_physics.set_velocity_origin_mode(
                                 (mode_idx == 0)
                                     ? VelocityOriginMode::PerStepAnchorSync
-                                    : VelocityOriginMode::FreeFallAnchorFrame;
+                                    : VelocityOriginMode::FreeFallAnchorFrame);
                         mark_prediction_dirty();
                     }
 
@@ -953,7 +980,7 @@ namespace Game
                     ImGui::SameLine();
                     ImGui::TextUnformatted("(0 = off)");
 
-                    const EntityId player_eid = player_entity();
+                    const EntityId player_eid = _orbit.player_entity();
                     if (_physics && player_eid.is_valid())
                     {
                         const Entity *player = _world.entities().find(player_eid);
@@ -982,58 +1009,14 @@ namespace Game
             ImGui::End();
         }
 
-        const auto is_maneuver_orbit_pick = [&](const PickingSystem::PickInfo &pick) -> bool {
-            const bool allow_base_pick = _maneuver_state.nodes.empty();
-            const bool allow_planned_pick = !_maneuver_state.nodes.empty();
-            return pick.valid &&
-                   pick.kind == PickingSystem::PickInfo::Kind::Line &&
-                   ((allow_base_pick && pick.ownerName == "OrbitPlot/Base") ||
-                    (allow_planned_pick && pick.ownerName == "OrbitPlot/Planned"));
-        };
-
-        const auto orbit_pick_matches_mouse_release = [&](const PickingSystem::PickInfo &pick) -> bool {
-            if (!ctx.input || !is_maneuver_orbit_pick(pick))
-            {
-                return false;
-            }
-
-            ManeuverGizmoViewContext view{};
-            glm::vec2 pick_screen{0.0f, 0.0f};
-            double pick_depth_m = 0.0;
-            if (!build_maneuver_gizmo_view_context(ctx, view) ||
-                !project_maneuver_gizmo_point(view, pick.worldPos, pick_screen, pick_depth_m))
-            {
-                return false;
-            }
-
-            const glm::vec2 mouse_pos = ctx.input->mouse_position();
-            const float dx = mouse_pos.x - pick_screen.x;
-            const float dy = mouse_pos.y - pick_screen.y;
-            constexpr float kOrbitPickActivateRadiusPx = 24.0f;
-            return (dx * dx + dy * dy) <= (kOrbitPickActivateRadiusPx * kOrbitPickActivateRadiusPx);
-        };
-
-        if (!_show_maneuver_nodes_panel &&
-            ctx.input &&
-            ctx.input->mouse_released(MouseButton::Left) &&
-            !ImGui::GetIO().WantCaptureMouse &&
-            ctx.renderer)
-        {
-            if (PickingSystem *picking = ctx.renderer->picking())
-            {
-                const PickingSystem::PickInfo &pick = picking->last_pick();
-                if (orbit_pick_matches_mouse_release(pick))
-                {
-                    _show_maneuver_nodes_panel = true;
-                }
-            }
-        }
+        ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
+        ManeuverUiController::open_nodes_panel_from_orbit_pick_release(maneuver_ui);
 
         if (_show_maneuver_nodes_panel)
         {
-            draw_maneuver_nodes_panel(ctx);
+            ManeuverUiController::draw_nodes_panel(maneuver_ui);
         }
-        draw_maneuver_imgui_gizmo(ctx);
+        ManeuverUiController::draw_imgui_gizmo(maneuver_ui);
         if (_show_orbit_drag_debug)
         {
             draw_orbit_drag_debug_window(ctx);
@@ -1046,10 +1029,12 @@ namespace Game
 
     void GameplayState::draw_orbit_drag_debug_window(GameStateContext &ctx)
     {
-        if (!_maneuver_nodes_enabled)
+        if (!_maneuver.settings().nodes_enabled)
         {
             return;
         }
+
+        GameplayPredictionAdapter prediction(build_prediction_access());
 
         const ImGuiViewport *viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(
@@ -1063,7 +1048,7 @@ namespace Game
             return;
         }
 
-        const PredictionTrackState *active_track = active_prediction_track();
+        const PredictionTrackState *active_track = prediction.active_prediction_track();
         if (!active_track)
         {
             ImGui::TextUnformatted("No active prediction track.");
@@ -1073,9 +1058,9 @@ namespace Game
 
         const PredictionDragDebugTelemetry &debug = active_track->drag_debug;
         const auto now_tp = PredictionDragDebugTelemetry::Clock::now();
-        const std::string subject_label = prediction_subject_label(active_track->key);
+        const std::string subject_label = prediction.prediction_subject_label(active_track->key);
         const char *gizmo_state = "Idle";
-        switch (_maneuver_gizmo_interaction.state)
+        switch (_maneuver.gizmo_interaction().state)
         {
             case ManeuverGizmoInteraction::State::Idle:
                 gizmo_state = "Idle";
@@ -1093,16 +1078,17 @@ namespace Game
         const OrbitPlotSystem::Stats *plot_stats = orbit_plot ? &orbit_plot->stats() : nullptr;
 
         const orbitsim::TrajectoryFrameSpec frame_spec =
-                active_track->cache.resolved_frame_spec_valid
-                        ? active_track->cache.resolved_frame_spec
-                        : _prediction_frame_selection.spec;
+                active_track->cache.display.resolved_frame_spec_valid
+                        ? active_track->cache.display.resolved_frame_spec
+                        : _prediction->state().frame_selection.spec;
         const bool live_chunk_path_supported =
                 frame_spec.type != orbitsim::TrajectoryFrameType::Inertial &&
                 frame_spec.type != orbitsim::TrajectoryFrameType::LVLH;
-        const bool have_sim_now = _orbitsim != nullptr;
-        const double sim_now_s = have_sim_now ? _orbitsim->sim.time_s() : 0.0;
-        const bool have_build_time = active_track->cache.valid && have_sim_now;
-        const double sim_since_build_s = have_build_time ? std::max(0.0, sim_now_s - active_track->cache.build_time_s) : 0.0;
+        const bool have_sim_now = _orbit.scenario_owner() != nullptr;
+        const double sim_now_s = have_sim_now ? _orbit.scenario_owner()->sim.time_s() : 0.0;
+        const bool have_build_time = active_track->cache.identity.valid && have_sim_now;
+        const double sim_since_build_s =
+                have_build_time ? std::max(0.0, sim_now_s - active_track->cache.identity.build_time_s) : 0.0;
         const double drag_gate_remaining_ms =
                 PredictionDragDebugTelemetry::has_time(debug.last_request_tp)
                         ? std::max(0.0,
@@ -1119,11 +1105,11 @@ namespace Game
                     active_track->derived_request_pending ? "yes" : "no",
                     active_track->dirty ? "yes" : "no");
         ImGui::Text("Gizmo state: %s", gizmo_state);
-        if (_maneuver_gizmo_interaction.node_id >= 0)
+        if (_maneuver.gizmo_interaction().node_id >= 0)
         {
             ImGui::Text("Gizmo node/axis: %d / %s",
-                        _maneuver_gizmo_interaction.node_id,
-                        maneuver_axis_label(_maneuver_gizmo_interaction.axis));
+                        _maneuver.gizmo_interaction().node_id,
+                        Gizmo::maneuver_axis_label(_maneuver.settings().gizmo_basis_mode, _maneuver.gizmo_interaction().axis));
         }
 
         ImGui::SeparatorText("Cadence");
@@ -1165,10 +1151,10 @@ namespace Game
                     debug.derived_flatten_ms_last);
         ImGui::Text("Derived apply: %.3f ms", debug.derived_apply_ms_last);
         ImGui::Text("Render LOD/chunk enqueue/fallback/pick: %.3f / %.3f / %.3f / %.3f",
-                    _orbit_plot_perf.render_lod_ms_last,
-                    _orbit_plot_perf.planned_chunk_enqueue_ms_last,
-                    _orbit_plot_perf.planned_fallback_draw_ms_last,
-                    _orbit_plot_perf.pick_lod_ms_last);
+                    _prediction->state().orbit_plot_perf.render_lod_ms_last,
+                    _prediction->state().orbit_plot_perf.planned_chunk_enqueue_ms_last,
+                    _prediction->state().orbit_plot_perf.planned_fallback_draw_ms_last,
+                    _prediction->state().orbit_plot_perf.pick_lod_ms_last);
         if (plot_stats)
         {
             ImGui::Text("Orbit upload last/peak: %.3f / %.3f ms",
@@ -1180,11 +1166,11 @@ namespace Game
         ImGui::Text("Flattened planned seg/samples: %zu / %zu",
                     debug.flattened_planned_segments_last,
                     debug.flattened_planned_samples_last);
-        ImGui::Text("Drawn planned chunks: %u", _orbit_plot_perf.planned_chunks_drawn);
+        ImGui::Text("Drawn planned chunks: %u", _prediction->state().orbit_plot_perf.planned_chunks_drawn);
         ImGui::Text("Fallback ranges / pick segs before-after: %u / %u -> %u",
-                    _orbit_plot_perf.planned_fallback_range_count,
-                    _orbit_plot_perf.pick_segments_before_cull,
-                    _orbit_plot_perf.pick_segments);
+                    _prediction->state().orbit_plot_perf.planned_fallback_range_count,
+                    _prediction->state().orbit_plot_perf.pick_segments_before_cull,
+                    _prediction->state().orbit_plot_perf.pick_segments);
 
         ImGui::Separator();
         if (debug.derived_flatten_ms_last > 0.0)

@@ -1,8 +1,13 @@
-#include "game/states/gameplay/prediction/gameplay_prediction_cache_internal.h"
+#include "game/orbit/trajectory/trajectory_utils.h"
+#include "game/states/gameplay/prediction/prediction_frame_cache_builder.h"
+#include "game/states/gameplay/prediction/prediction_metrics_builder.h"
+#include "game/states/gameplay/prediction/streamed_chunk_assembly_builder.h"
 
 #include "orbitsim/trajectories.hpp"
 
 #include <gtest/gtest.h>
+
+#include <utility>
 
 namespace
 {
@@ -89,14 +94,66 @@ namespace
             return fixture;
         }
 
-        fixture.cache.valid = true;
-        fixture.cache.shared_ephemeris = ephemeris;
-        fixture.cache.massive_bodies = fixture.sim.massive_bodies();
-        fixture.cache.trajectory_segments_inertial = root_segments;
-        fixture.cache.trajectory_inertial =
+        fixture.cache.identity.valid = true;
+        fixture.cache.solver.core.shared_ephemeris = ephemeris;
+        fixture.cache.solver.core.massive_bodies = fixture.sim.massive_bodies();
+        fixture.cache.solver.base.trajectory_segments_inertial = root_segments;
+        fixture.cache.solver.base.trajectory_inertial =
                 orbitsim::sample_trajectory_segments_uniform_dt(root_segments, 1.0, 64, true, true);
         return fixture;
     }
+
+    class PredictionCacheInternalFixture : public ::testing::Test
+    {
+    protected:
+        LinearPredictionFixture fixture = make_linear_cache();
+
+        void assert_ready() const
+        {
+            ASSERT_TRUE(fixture.cache.identity.valid);
+            ASSERT_NE(fixture.body_id, orbitsim::kInvalidBodyId);
+            ASSERT_GE(fixture.cache.solver.base.trajectory_inertial.size(), 2u);
+            ASSERT_FALSE(fixture.cache.solver.base.trajectory_segments_inertial.empty());
+        }
+
+        orbitsim::TrajectoryFrameSpec body_centered_frame() const
+        {
+            return orbitsim::TrajectoryFrameSpec::body_centered_inertial(fixture.body_id);
+        }
+
+        bool rebuild_body_centered_frame_cache(
+                Game::OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
+                const bool build_planned_render_curve = true)
+        {
+            return Game::PredictionFrameCacheBuilder::rebuild(
+                    fixture.cache.solver,
+                    fixture.cache.display,
+                    fixture.cache.analysis,
+                    body_centered_frame(),
+                    fixture.cache.solver.base.trajectory_segments_inertial,
+                    {},
+                    diagnostics,
+                    build_planned_render_curve);
+        }
+
+        bool rebuild_body_centered_planned_frame_cache(const bool build_planned_render_curve = true)
+        {
+            return Game::PredictionFrameCacheBuilder::rebuild_planned(
+                    fixture.cache.solver,
+                    fixture.cache.display,
+                    body_centered_frame(),
+                    fixture.cache.solver.base.trajectory_segments_inertial,
+                    {},
+                    nullptr,
+                    build_planned_render_curve);
+        }
+
+        void seed_planned_from_base()
+        {
+            fixture.cache.solver.planned.trajectory_inertial = fixture.cache.solver.base.trajectory_inertial;
+            fixture.cache.solver.planned.trajectory_segments_inertial = fixture.cache.solver.base.trajectory_segments_inertial;
+        }
+    };
 } // namespace
 
 TEST(PredictionTrajectorySamplingTests, BoundarySideSelectsBeforeOrAfterImpulseVelocity)
@@ -169,56 +226,97 @@ TEST(PredictionTrajectorySamplingTests, ContinuityRequiresImpulseFlagForVelocity
     EXPECT_TRUE(Game::validate_trajectory_segment_continuity(segments));
 }
 
-TEST(PredictionCacheInternalTests, RebuildFrameCacheProducesBodyCenteredSegments)
+TEST(PredictionSolverTrajectoryCacheTests, PayloadsCopyAndMoveIndependently)
 {
-    LinearPredictionFixture fixture = make_linear_cache();
-    ASSERT_TRUE(fixture.cache.valid);
-    ASSERT_NE(fixture.body_id, orbitsim::kInvalidBodyId);
-    ASSERT_GE(fixture.cache.trajectory_inertial.size(), 2u);
+    Game::PredictionSolverTrajectoryCache cache{};
+    cache.base.trajectory_inertial = {
+            orbitsim::TrajectorySample{
+                    .t_s = 0.0,
+                    .position_m = orbitsim::Vec3{1.0, 0.0, 0.0},
+            },
+    };
+    cache.planned.trajectory_inertial = {
+            orbitsim::TrajectorySample{
+                    .t_s = 1.0,
+                    .position_m = orbitsim::Vec3{2.0, 0.0, 0.0},
+            },
+    };
+    cache.planned.maneuver_previews = {
+            Game::OrbitPredictionManeuverNodePreview{
+                    .node_id = 7,
+                    .t_s = 1.0,
+                    .valid = true,
+            },
+    };
 
-    Game::OrbitPredictionDerivedDiagnostics diagnostics{};
-    const bool ok = Game::PredictionCacheInternal::rebuild_prediction_frame_cache(
-            fixture.cache,
-            orbitsim::TrajectoryFrameSpec::body_centered_inertial(fixture.body_id),
-            fixture.cache.trajectory_segments_inertial,
-            {},
-            &diagnostics);
+    Game::PredictionSolverTrajectoryCache copied = cache;
+    copied.planned.trajectory_inertial.push_back(orbitsim::TrajectorySample{
+            .t_s = 2.0,
+            .position_m = orbitsim::Vec3{3.0, 0.0, 0.0},
+    });
 
-    ASSERT_TRUE(ok);
-    ASSERT_TRUE(fixture.cache.resolved_frame_spec_valid);
-    ASSERT_FALSE(fixture.cache.trajectory_segments_frame.empty());
-    ASSERT_GE(fixture.cache.trajectory_frame.size(), 2u);
-    EXPECT_EQ(diagnostics.status, Game::PredictionDerivedStatus::Success);
-    EXPECT_EQ(diagnostics.frame_segment_count, fixture.cache.trajectory_segments_frame.size());
-    EXPECT_EQ(diagnostics.frame_sample_count, fixture.cache.trajectory_frame.size());
-    EXPECT_EQ(diagnostics.frame_base.accepted_segments, fixture.cache.trajectory_segments_frame.size());
-    EXPECT_GT(diagnostics.frame_base.covered_duration_s, 0.0);
+    EXPECT_EQ(copied.base.trajectory_inertial.size(), 1u);
+    EXPECT_EQ(copied.planned.trajectory_inertial.size(), 2u);
+    EXPECT_EQ(cache.planned.trajectory_inertial.size(), 1u);
+    ASSERT_EQ(copied.planned.maneuver_previews.size(), 1u);
+    EXPECT_EQ(copied.planned.maneuver_previews.front().node_id, 7u);
 
-    EXPECT_NEAR(fixture.cache.trajectory_segments_frame.front().start.position_m.x, 10.0, 1.0e-6);
-    EXPECT_NEAR(fixture.cache.trajectory_segments_frame.front().start.velocity_mps.x, 0.5, 1.0e-6);
-    EXPECT_NEAR(fixture.cache.trajectory_frame.back().position_m.x, 15.0, 1.0e-4);
+    Game::PredictionSolverTrajectoryCache assigned{};
+    assigned = copied;
+    EXPECT_EQ(assigned.base.trajectory_inertial.size(), 1u);
+    EXPECT_EQ(assigned.planned.trajectory_inertial.size(), 2u);
+
+    Game::PredictionSolverTrajectoryCache moved = std::move(assigned);
+    EXPECT_EQ(moved.base.trajectory_inertial.size(), 1u);
+    EXPECT_EQ(moved.planned.trajectory_inertial.size(), 2u);
+    ASSERT_EQ(moved.planned.maneuver_previews.size(), 1u);
+    EXPECT_EQ(moved.planned.maneuver_previews.front().node_id, 7u);
 }
 
-TEST(PredictionCacheInternalTests, RebuildPredictionMetricsUsesSegmentDerivedSamples)
+TEST_F(PredictionCacheInternalFixture, RebuildFrameCacheProducesBodyCenteredSegments)
 {
-    LinearPredictionFixture fixture = make_linear_cache();
-    ASSERT_TRUE(fixture.cache.valid);
-    ASSERT_NE(fixture.body_id, orbitsim::kInvalidBodyId);
-    ASSERT_GE(fixture.cache.trajectory_inertial.size(), 2u);
+    assert_ready();
 
-    ASSERT_TRUE(Game::PredictionCacheInternal::rebuild_prediction_frame_cache(
-            fixture.cache,
-            orbitsim::TrajectoryFrameSpec::body_centered_inertial(fixture.body_id),
-            fixture.cache.trajectory_segments_inertial));
+    Game::OrbitPredictionDerivedDiagnostics diagnostics{};
+    const bool ok = rebuild_body_centered_frame_cache(&diagnostics);
 
-    Game::PredictionCacheInternal::rebuild_prediction_metrics(fixture.cache, fixture.sim.config(), fixture.body_id);
+    ASSERT_TRUE(ok);
+    ASSERT_TRUE(fixture.cache.display.resolved_frame_spec_valid);
+    ASSERT_FALSE(fixture.cache.display.trajectory_segments_frame.empty());
+    ASSERT_GE(fixture.cache.display.trajectory_frame.size(), 2u);
+    EXPECT_EQ(diagnostics.status, Game::PredictionDerivedStatus::Success);
+    EXPECT_EQ(diagnostics.frame_segment_count, fixture.cache.display.trajectory_segments_frame.size());
+    EXPECT_EQ(diagnostics.frame_sample_count, fixture.cache.display.trajectory_frame.size());
+    EXPECT_EQ(diagnostics.frame_base.accepted_segments, fixture.cache.display.trajectory_segments_frame.size());
+    EXPECT_GT(diagnostics.frame_base.covered_duration_s, 0.0);
 
-    EXPECT_TRUE(fixture.cache.metrics_valid);
-    EXPECT_EQ(fixture.cache.metrics_body_id, fixture.body_id);
-    ASSERT_EQ(fixture.cache.altitude_km.size(), fixture.cache.trajectory_frame.size());
-    ASSERT_EQ(fixture.cache.speed_kmps.size(), fixture.cache.trajectory_frame.size());
-    EXPECT_NEAR(fixture.cache.altitude_km.front(), 0.009f, 1.0e-4f);
-    EXPECT_NEAR(fixture.cache.speed_kmps.front(), 0.0005f, 1.0e-5f);
+    EXPECT_NEAR(fixture.cache.display.trajectory_segments_frame.front().start.position_m.x, 10.0, 1.0e-6);
+    EXPECT_NEAR(fixture.cache.display.trajectory_segments_frame.front().start.velocity_mps.x, 0.5, 1.0e-6);
+    EXPECT_NEAR(fixture.cache.display.trajectory_frame.back().position_m.x, 15.0, 1.0e-4);
+}
+
+TEST_F(PredictionCacheInternalFixture, RebuildPredictionMetricsUsesSegmentDerivedSamples)
+{
+    assert_ready();
+
+    ASSERT_TRUE(rebuild_body_centered_frame_cache());
+
+    Game::PredictionMetricsBuilder::rebuild(fixture.cache.solver,
+                                            fixture.cache.display,
+                                            fixture.cache.analysis,
+                                            fixture.sim.config(),
+                                            fixture.body_id);
+
+    EXPECT_TRUE(fixture.cache.analysis.metrics_valid);
+    EXPECT_EQ(fixture.cache.analysis.metrics_body_id, fixture.body_id);
+    ASSERT_EQ(fixture.cache.analysis.altitude_km.size(), fixture.cache.display.trajectory_frame.size());
+    ASSERT_EQ(fixture.cache.analysis.speed_kmps.size(), fixture.cache.display.trajectory_frame.size());
+    EXPECT_TRUE(fixture.cache.analysis.analysis_cache_valid);
+    EXPECT_EQ(fixture.cache.analysis.analysis_cache_body_id, fixture.body_id);
+    EXPECT_FALSE(fixture.cache.analysis.trajectory_segments_analysis_bci.empty());
+    EXPECT_FALSE(fixture.cache.analysis.trajectory_analysis_bci.empty());
+    EXPECT_NEAR(fixture.cache.analysis.altitude_km.front(), 0.009f, 1.0e-4f);
+    EXPECT_NEAR(fixture.cache.analysis.speed_kmps.front(), 0.0005f, 1.0e-5f);
 }
 
 TEST(PredictionCacheInternalTests, RebuildPredictionMetricsFindsPeriapsisFromSegments)
@@ -226,17 +324,17 @@ TEST(PredictionCacheInternalTests, RebuildPredictionMetricsFindsPeriapsisFromSeg
     constexpr orbitsim::BodyId body_id = 1;
 
     Game::OrbitPredictionCache cache{};
-    cache.valid = true;
-    cache.massive_bodies = {
+    cache.identity.valid = true;
+    cache.solver.core.massive_bodies = {
             orbitsim::MassiveBody{
                     .mass_kg = 1.0,
                     .radius_m = 1.0,
                     .id = body_id,
             },
     };
-    cache.resolved_frame_spec = orbitsim::TrajectoryFrameSpec::body_centered_inertial(body_id);
-    cache.resolved_frame_spec_valid = true;
-    cache.trajectory_segments_frame = {
+    cache.display.resolved_frame_spec = orbitsim::TrajectoryFrameSpec::body_centered_inertial(body_id);
+    cache.display.resolved_frame_spec_valid = true;
+    cache.display.trajectory_segments_frame = {
             orbitsim::TrajectorySegment{
                     .t0_s = 0.0,
                     .dt_s = 10.0,
@@ -246,98 +344,63 @@ TEST(PredictionCacheInternalTests, RebuildPredictionMetricsFindsPeriapsisFromSeg
                                                 orbitsim::Vec3{2.0, 0.0, 0.0}),
             },
     };
-    cache.trajectory_frame = {
+    cache.display.trajectory_frame = {
             orbitsim::TrajectorySample{
                     .t_s = 0.0,
-                    .position_m = cache.trajectory_segments_frame.front().start.position_m,
-                    .velocity_mps = cache.trajectory_segments_frame.front().start.velocity_mps,
+                    .position_m = cache.display.trajectory_segments_frame.front().start.position_m,
+                    .velocity_mps = cache.display.trajectory_segments_frame.front().start.velocity_mps,
             },
             orbitsim::TrajectorySample{
                     .t_s = 10.0,
-                    .position_m = cache.trajectory_segments_frame.front().end.position_m,
-                    .velocity_mps = cache.trajectory_segments_frame.front().end.velocity_mps,
+                    .position_m = cache.display.trajectory_segments_frame.front().end.position_m,
+                    .velocity_mps = cache.display.trajectory_segments_frame.front().end.velocity_mps,
             },
     };
 
     orbitsim::GameSimulation::Config cfg{};
     cfg.gravitational_constant = 1.0;
 
-    Game::PredictionCacheInternal::rebuild_prediction_metrics(cache, cfg, body_id);
+    Game::PredictionMetricsBuilder::rebuild(cache.solver,
+                                            cache.display,
+                                            cache.analysis,
+                                            cfg,
+                                            body_id);
 
-    ASSERT_TRUE(cache.metrics_valid);
-    ASSERT_EQ(cache.altitude_km.size(), 2u);
-    EXPECT_NEAR(cache.altitude_km.front(), 0.009f, 1.0e-6f);
-    EXPECT_NEAR(cache.periapsis_alt_km, 0.004, 1.0e-6);
+    ASSERT_TRUE(cache.analysis.metrics_valid);
+    ASSERT_EQ(cache.analysis.altitude_km.size(), 2u);
+    EXPECT_NEAR(cache.analysis.altitude_km.front(), 0.009f, 1.0e-6f);
+    EXPECT_NEAR(cache.analysis.periapsis_alt_km, 0.004, 1.0e-6);
 }
 
-TEST(PredictionCacheInternalTests, RebuildFrameCacheCanSkipPreviewPlannedRenderCurve)
+TEST_F(PredictionCacheInternalFixture, RebuildFrameCacheCanSkipPreviewPlannedRenderCurve)
 {
-    LinearPredictionFixture fixture = make_linear_cache();
-    ASSERT_TRUE(fixture.cache.valid);
-    ASSERT_NE(fixture.body_id, orbitsim::kInvalidBodyId);
-    ASSERT_FALSE(fixture.cache.trajectory_segments_inertial.empty());
+    assert_ready();
+    seed_planned_from_base();
 
-    fixture.cache.trajectory_inertial_planned = fixture.cache.trajectory_inertial;
-    fixture.cache.trajectory_segments_inertial_planned = fixture.cache.trajectory_segments_inertial;
+    ASSERT_TRUE(rebuild_body_centered_frame_cache(nullptr, false));
 
-    ASSERT_TRUE(Game::PredictionCacheInternal::rebuild_prediction_frame_cache(
-            fixture.cache,
-            orbitsim::TrajectoryFrameSpec::body_centered_inertial(fixture.body_id),
-            fixture.cache.trajectory_segments_inertial,
-            {},
-            nullptr,
-            false));
-
-    EXPECT_FALSE(fixture.cache.render_curve_frame.empty());
-    EXPECT_FALSE(fixture.cache.trajectory_segments_frame_planned.empty());
-    EXPECT_TRUE(fixture.cache.render_curve_frame_planned.empty());
+    EXPECT_FALSE(fixture.cache.display.render_curve_frame.empty());
+    EXPECT_FALSE(fixture.cache.display.trajectory_segments_frame_planned.empty());
+    EXPECT_TRUE(fixture.cache.display.render_curve_frame_planned.empty());
 }
 
-TEST(PredictionCacheInternalTests, RebuildPlannedFrameCacheCanSkipPreviewPlannedRenderCurve)
+TEST_F(PredictionCacheInternalFixture, RebuildPlannedFrameCacheCanSkipPreviewPlannedRenderCurve)
 {
-    LinearPredictionFixture fixture = make_linear_cache();
-    ASSERT_TRUE(fixture.cache.valid);
-    ASSERT_NE(fixture.body_id, orbitsim::kInvalidBodyId);
-    ASSERT_FALSE(fixture.cache.trajectory_segments_inertial.empty());
+    assert_ready();
+    seed_planned_from_base();
 
-    fixture.cache.trajectory_inertial_planned = fixture.cache.trajectory_inertial;
-    fixture.cache.trajectory_segments_inertial_planned = fixture.cache.trajectory_segments_inertial;
+    ASSERT_TRUE(rebuild_body_centered_planned_frame_cache(false));
 
-    ASSERT_TRUE(Game::PredictionCacheInternal::rebuild_prediction_planned_frame_cache(
-            fixture.cache,
-            orbitsim::TrajectoryFrameSpec::body_centered_inertial(fixture.body_id),
-            fixture.cache.trajectory_segments_inertial,
-            {},
-            nullptr,
-            false));
-
-    EXPECT_FALSE(fixture.cache.trajectory_segments_frame_planned.empty());
-    EXPECT_GE(fixture.cache.trajectory_frame_planned.size(), 2u);
-    EXPECT_TRUE(fixture.cache.render_curve_frame_planned.empty());
+    EXPECT_FALSE(fixture.cache.display.trajectory_segments_frame_planned.empty());
+    EXPECT_GE(fixture.cache.display.trajectory_frame_planned.size(), 2u);
+    EXPECT_TRUE(fixture.cache.display.render_curve_frame_planned.empty());
 }
 
-TEST(PredictionCacheInternalTests, RebuildPredictionMetricsCachesAnalysisTransformResults)
+TEST_F(PredictionCacheInternalFixture, RebuildFrameCacheRejectsDiscontinuousSegments)
 {
-    LinearPredictionFixture fixture = make_linear_cache();
-    ASSERT_TRUE(fixture.cache.valid);
-    ASSERT_NE(fixture.body_id, orbitsim::kInvalidBodyId);
+    assert_ready();
 
-    Game::PredictionCacheInternal::rebuild_prediction_metrics(fixture.cache, fixture.sim.config(), fixture.body_id);
-
-    EXPECT_TRUE(fixture.cache.metrics_valid);
-    EXPECT_TRUE(fixture.cache.analysis_cache_valid);
-    EXPECT_EQ(fixture.cache.analysis_cache_body_id, fixture.body_id);
-    EXPECT_FALSE(fixture.cache.trajectory_segments_analysis_bci.empty());
-    EXPECT_FALSE(fixture.cache.trajectory_analysis_bci.empty());
-}
-
-TEST(PredictionCacheInternalTests, RebuildFrameCacheRejectsDiscontinuousSegments)
-{
-    LinearPredictionFixture fixture = make_linear_cache();
-    ASSERT_TRUE(fixture.cache.valid);
-    ASSERT_FALSE(fixture.cache.trajectory_segments_inertial.empty());
-
-    fixture.cache.trajectory_segments_inertial.push_back(orbitsim::TrajectorySegment{
+    fixture.cache.solver.base.trajectory_segments_inertial.push_back(orbitsim::TrajectorySegment{
             .t0_s = 20.0,
             .dt_s = 5.0,
             .start = orbitsim::make_state(orbitsim::Vec3{500.0, 0.0, 0.0}, orbitsim::Vec3{0.0, 1.0, 0.0}),
@@ -346,10 +409,12 @@ TEST(PredictionCacheInternalTests, RebuildFrameCacheRejectsDiscontinuousSegments
     });
 
     Game::OrbitPredictionDerivedDiagnostics diagnostics{};
-    const bool ok = Game::PredictionCacheInternal::rebuild_prediction_frame_cache(
-            fixture.cache,
+    const bool ok = Game::PredictionFrameCacheBuilder::rebuild(
+            fixture.cache.solver,
+            fixture.cache.display,
+            fixture.cache.analysis,
             orbitsim::TrajectoryFrameSpec::inertial(),
-            fixture.cache.trajectory_segments_inertial,
+            fixture.cache.solver.base.trajectory_segments_inertial,
             {},
             &diagnostics);
 
@@ -360,8 +425,8 @@ TEST(PredictionCacheInternalTests, RebuildFrameCacheRejectsDiscontinuousSegments
 TEST(PredictionCacheInternalTests, RebuildPredictionPatchChunksClipsStraddlingSegmentsAtChunkBoundaries)
 {
     Game::OrbitPredictionCache cache{};
-    cache.valid = true;
-    cache.trajectory_segments_inertial_planned = {
+    cache.identity.valid = true;
+    cache.solver.planned.trajectory_segments_inertial = {
             orbitsim::TrajectorySegment{
                     .t0_s = 0.0,
                     .dt_s = 20.0,
@@ -370,19 +435,19 @@ TEST(PredictionCacheInternalTests, RebuildPredictionPatchChunksClipsStraddlingSe
                     .flags = 0u,
             },
     };
-    cache.trajectory_segments_frame_planned = cache.trajectory_segments_inertial_planned;
+    cache.display.trajectory_segments_frame_planned = cache.solver.planned.trajectory_segments_inertial;
 
-    const std::vector<Game::OrbitPredictionService::PublishedChunk> published_chunks = {
-            Game::OrbitPredictionService::PublishedChunk{
+    const std::vector<Game::OrbitPredictionPublishedChunk> published_chunks = {
+            Game::OrbitPredictionPublishedChunk{
                     .chunk_id = 0u,
-                    .quality_state = Game::OrbitPredictionService::ChunkQualityState::PreviewPatch,
+                    .quality_state = Game::OrbitPredictionChunkQualityState::PreviewPatch,
                     .t0_s = 0.0,
                     .t1_s = 10.0,
                     .includes_planned_path = true,
             },
-            Game::OrbitPredictionService::PublishedChunk{
+            Game::OrbitPredictionPublishedChunk{
                     .chunk_id = 1u,
-                    .quality_state = Game::OrbitPredictionService::ChunkQualityState::Final,
+                    .quality_state = Game::OrbitPredictionChunkQualityState::Final,
                     .t0_s = 10.0,
                     .t1_s = 20.0,
                     .includes_planned_path = true,
@@ -391,9 +456,9 @@ TEST(PredictionCacheInternalTests, RebuildPredictionPatchChunksClipsStraddlingSe
 
     Game::PredictionChunkAssembly assembly{};
     Game::OrbitPredictionDerivedDiagnostics diagnostics{};
-    ASSERT_TRUE(Game::PredictionCacheInternal::rebuild_prediction_patch_chunks(
+    ASSERT_TRUE(Game::StreamedChunkAssemblyBuilder::rebuild_from_published(
             assembly,
-            cache,
+            cache.display,
             published_chunks,
             7u,
             orbitsim::TrajectoryFrameSpec::inertial(),
@@ -404,18 +469,40 @@ TEST(PredictionCacheInternalTests, RebuildPredictionPatchChunksClipsStraddlingSe
             &diagnostics));
 
     ASSERT_TRUE(assembly.valid);
+    EXPECT_EQ(assembly.generation_id, 7u);
     ASSERT_EQ(assembly.chunks.size(), 2u);
+    EXPECT_TRUE(assembly.chunks[0].valid);
+    EXPECT_TRUE(assembly.chunks[1].valid);
+    EXPECT_EQ(assembly.chunks[0].chunk_id, published_chunks[0].chunk_id);
+    EXPECT_EQ(assembly.chunks[1].chunk_id, published_chunks[1].chunk_id);
+    EXPECT_EQ(assembly.chunks[0].generation_id, 7u);
+    EXPECT_EQ(assembly.chunks[1].generation_id, 7u);
+    EXPECT_EQ(assembly.chunks[0].quality_state, Game::OrbitPredictionChunkQualityState::PreviewPatch);
+    EXPECT_EQ(assembly.chunks[1].quality_state, Game::OrbitPredictionChunkQualityState::Final);
+    EXPECT_DOUBLE_EQ(assembly.chunks[0].t0_s, published_chunks[0].t0_s);
+    EXPECT_DOUBLE_EQ(assembly.chunks[0].t1_s, published_chunks[0].t1_s);
+    EXPECT_DOUBLE_EQ(assembly.chunks[1].t0_s, published_chunks[1].t0_s);
+    EXPECT_DOUBLE_EQ(assembly.chunks[1].t1_s, published_chunks[1].t1_s);
+    ASSERT_FALSE(assembly.chunks[0].frame_samples.empty());
+    ASSERT_FALSE(assembly.chunks[1].frame_samples.empty());
     EXPECT_DOUBLE_EQ(assembly.chunks[0].frame_segments.front().t0_s, 0.0);
     EXPECT_DOUBLE_EQ(assembly.chunks[0].frame_segments.front().dt_s, 10.0);
     EXPECT_DOUBLE_EQ(assembly.chunks[1].frame_segments.front().t0_s, 10.0);
     EXPECT_DOUBLE_EQ(assembly.chunks[1].frame_segments.front().dt_s, 10.0);
+    EXPECT_DOUBLE_EQ(assembly.chunks[0].frame_samples.front().t_s, published_chunks[0].t0_s);
+    EXPECT_DOUBLE_EQ(assembly.chunks[0].frame_samples.back().t_s, published_chunks[0].t1_s);
+    EXPECT_DOUBLE_EQ(assembly.chunks[1].frame_samples.front().t_s, published_chunks[1].t0_s);
+    EXPECT_DOUBLE_EQ(assembly.chunks[1].frame_samples.back().t_s, published_chunks[1].t1_s);
 
-    Game::PredictionCacheInternal::flatten_chunk_assembly_to_cache(cache, assembly);
-    ASSERT_EQ(cache.trajectory_segments_frame_planned.size(), 2u);
-    EXPECT_DOUBLE_EQ(cache.trajectory_segments_frame_planned[0].t0_s, 0.0);
-    EXPECT_DOUBLE_EQ(cache.trajectory_segments_frame_planned[0].dt_s, 10.0);
-    EXPECT_DOUBLE_EQ(cache.trajectory_segments_frame_planned[1].t0_s, 10.0);
-    EXPECT_DOUBLE_EQ(cache.trajectory_segments_frame_planned[1].dt_s, 10.0);
+    Game::StreamedChunkAssemblyBuilder::flatten(cache.display, assembly);
+    ASSERT_EQ(cache.display.trajectory_segments_frame_planned.size(), 2u);
+    ASSERT_EQ(cache.display.trajectory_frame_planned.size(), 3u);
+    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[0].t0_s, 0.0);
+    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[0].dt_s, 10.0);
+    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[1].t0_s, 10.0);
+    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[1].dt_s, 10.0);
+    EXPECT_DOUBLE_EQ(cache.display.trajectory_frame_planned.front().t_s, 0.0);
+    EXPECT_DOUBLE_EQ(cache.display.trajectory_frame_planned.back().t_s, 20.0);
     EXPECT_EQ(diagnostics.status, Game::PredictionDerivedStatus::Success);
 }
 

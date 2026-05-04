@@ -5,6 +5,9 @@
 #include "core/picking/picking_system.h"
 #include "game/component/ship_controller.h"
 #include "game/entity_manager.h"
+#include "game/states/gameplay/prediction/prediction_system.h"
+#include "physics/physics_context.h"
+#include "physics/physics_world.h"
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -12,6 +15,7 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
+#include <memory>
 #include <unordered_map>
 
 namespace
@@ -60,7 +64,8 @@ namespace Game
     }
 
     GameplayState::GameplayState()
-        : _scenario_config(default_earth_moon_config())
+        : _scenario_config(default_earth_moon_config()),
+          _prediction(std::make_unique<PredictionSystem>())
     {
     }
 
@@ -74,48 +79,18 @@ namespace Game
 
     void GameplayState::setup_scene(GameStateContext &ctx) { (void) ctx; }
     void GameplayState::setup_environment(GameStateContext &ctx) { (void) ctx; }
-    void GameplayState::init_orbitsim(WorldVec3 &player_pos_world, glm::dvec3 &player_vel_world)
-    {
-        (void) player_pos_world;
-        (void) player_vel_world;
-    }
 
     void GameplayState::reset_time_warp_state()
     {
         _time_warp.warp_level = 0;
         _time_warp.mode = TimeWarpState::Mode::Realtime;
-        _rails_warp_active = false;
-        _last_sim_step_dt_s = 0.0;
-        _rails_thrust_applied_this_tick = false;
-        _rails_last_thrust_dir_local = glm::vec3(0.0f);
-        _rails_last_torque_dir_local = glm::vec3(0.0f);
+        _orbital_physics.reset();
     }
 
     void GameplayState::handle_time_warp_input(GameStateContext &ctx) { (void) ctx; }
-
-    Physics::BodyId GameplayState::create_orbiter_physics_body(const bool render_is_gltf,
-                                                               Entity &entity,
-                                                               const Physics::BodySettings &settings,
-                                                               const WorldVec3 &position_world,
-                                                               const glm::quat &rotation,
-                                                               glm::vec3 *out_origin_offset_local)
+    bool GameplayState::ui_capture_keyboard(const GameStateContext &ctx) const
     {
-        (void) render_is_gltf;
-        (void) entity;
-        (void) settings;
-        (void) position_world;
-        (void) rotation;
-        if (out_origin_offset_local)
-        {
-            *out_origin_offset_local = glm::vec3(0.0f);
-        }
-        return {};
-    }
-
-    bool GameplayState::destroy_orbiter_physics_body(const bool render_is_gltf, Entity &entity)
-    {
-        (void) render_is_gltf;
-        (void) entity;
+        (void) ctx;
         return false;
     }
 
@@ -131,137 +106,9 @@ namespace Game
         return comp_ctx;
     }
 
-    OrbiterInfo *GameplayState::find_player_orbiter()
-    {
-        for (auto &o : _orbiters)
-        {
-            if (o.is_player)
-            {
-                return &o;
-            }
-        }
-        return nullptr;
-    }
-
-    const OrbiterInfo *GameplayState::find_player_orbiter() const
-    {
-        for (const auto &o : _orbiters)
-        {
-            if (o.is_player)
-            {
-                return &o;
-            }
-        }
-        return nullptr;
-    }
-
-    EntityId GameplayState::player_entity() const
-    {
-        const OrbiterInfo *p = find_player_orbiter();
-        return p ? p->entity : EntityId{};
-    }
-
-    OrbiterInfo *GameplayState::find_orbiter(const EntityId entity)
-    {
-        if (!entity.is_valid())
-        {
-            return nullptr;
-        }
-
-        for (auto &orbiter : _orbiters)
-        {
-            if (orbiter.entity == entity)
-            {
-                return &orbiter;
-            }
-        }
-
-        return nullptr;
-    }
-
-    const OrbiterInfo *GameplayState::find_orbiter(const EntityId entity) const
-    {
-        if (!entity.is_valid())
-        {
-            return nullptr;
-        }
-
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.entity == entity)
-            {
-                return &orbiter;
-            }
-        }
-
-        return nullptr;
-    }
-
-    OrbiterInfo *GameplayState::find_orbiter(const std::string_view name)
-    {
-        if (name.empty())
-        {
-            return nullptr;
-        }
-
-        for (auto &orbiter : _orbiters)
-        {
-            if (orbiter.name == name)
-            {
-                return &orbiter;
-            }
-        }
-
-        return nullptr;
-    }
-
-    const OrbiterInfo *GameplayState::find_orbiter(const std::string_view name) const
-    {
-        if (name.empty())
-        {
-            return nullptr;
-        }
-
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.name == name)
-            {
-                return &orbiter;
-            }
-        }
-
-        return nullptr;
-    }
-
-    EntityId GameplayState::select_rebase_anchor_entity() const
-    {
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.is_rebase_anchor && orbiter.entity.is_valid())
-            {
-                return orbiter.entity;
-            }
-        }
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.is_player && orbiter.entity.is_valid())
-            {
-                return orbiter.entity;
-            }
-        }
-        for (const auto &orbiter : _orbiters)
-        {
-            if (orbiter.entity.is_valid())
-            {
-                return orbiter.entity;
-            }
-        }
-        return EntityId{};
-    }
-
     void GameplayState::update_rebase_anchor()
     {
-        const EntityId next_anchor = select_rebase_anchor_entity();
+        const EntityId next_anchor = _orbit.select_rebase_anchor_entity();
         if (!next_anchor.is_valid())
         {
             _world.clear_rebase_anchor();

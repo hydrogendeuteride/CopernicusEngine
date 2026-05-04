@@ -15,8 +15,16 @@ set(ORBIT_PREDICTION_POLICY_SOURCES
 )
 
 set(ORBIT_PREDICTION_SERVICE_SOURCES
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/trajectory/trajectory_utils.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/orbit_prediction_service.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_compute.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_route_solvers.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_spacecraft_route.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_route.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_stage_publisher.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_cache.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_maneuver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_chunk_attempt.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_trajectory.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_sampling.cpp"
@@ -181,6 +189,12 @@ add_test(NAME time_warp_state_tests COMMAND time_warp_state_tests)
 add_executable(gameplay_time_warp_transition_tests
   gameplay_time_warp_transition_tests.cpp
   gameplay_state_test_stubs.cpp
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_runtime_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_orbital_context.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_world_state_provider.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_physics_bridge.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/formation_hold_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_physics_system.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_sim.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/orbit_prediction_math.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve.cpp"
@@ -194,6 +208,7 @@ set_property(TARGET gameplay_time_warp_transition_tests PROPERTY CXX_STANDARD 20
 
 target_compile_definitions(gameplay_time_warp_transition_tests PRIVATE
   VULKAN_ENGINE_USE_JOLT=0
+  VULKAN_ENGINE_GAMEPLAY_TEST_ACCESS=1
 )
 
 target_include_directories(gameplay_time_warp_transition_tests PRIVATE
@@ -211,6 +226,30 @@ target_link_libraries(gameplay_time_warp_transition_tests PRIVATE
 
 add_test(NAME gameplay_time_warp_transition_tests COMMAND gameplay_time_warp_transition_tests)
 
+add_executable(maneuver_system_tests
+  maneuver_system_tests.cpp
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_plan_model.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_commands.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_controller.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_system.cpp"
+)
+
+set_property(TARGET maneuver_system_tests PROPERTY CXX_STANDARD 20)
+
+target_include_directories(maneuver_system_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/third_party/vma"
+  "${PROJECT_SOURCE_DIR}/third_party/taskflow/3rd-party"
+)
+
+target_link_libraries(maneuver_system_tests PRIVATE
+  gtest
+  glm
+  orbitsim
+)
+
+add_test(NAME maneuver_system_tests COMMAND maneuver_system_tests)
+
 add_executable(gameplay_prediction_maneuver_tests
   gameplay_prediction_maneuver_runtime_window_tests.cpp
   gameplay_prediction_maneuver_lifecycle_tests.cpp
@@ -227,18 +266,50 @@ add_executable(gameplay_prediction_maneuver_tests
   "${PROJECT_SOURCE_DIR}/src/core/orbit_plot/orbit_plot.cpp"
   ${ORBIT_PREDICTION_SERVICE_SOURCES}
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_sim.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_physics_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_physics_bridge.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_runtime_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_orbital_context.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_world_state_provider.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/formation_hold_system.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_state_prediction.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_frame_context_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_host_context_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_subject_state_provider.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_window_context_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_solver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_lifecycle_reducer.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_request_factory.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_invalidation_controller.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_maneuver_invalidation.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_result_applier.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_solver_result_applier.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/prediction_runtime_controller.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_prediction_state.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_system.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_requests.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_results.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_state_prediction_frames.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_frame_resolver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_frame_controller.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/draw/gameplay_state_prediction_draw_helpers.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/draw/gameplay_state_prediction_draw_prepare.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/draw/gameplay_state_prediction_draw_render_helpers.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/draw/gameplay_state_prediction_draw_shared.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/draw/gameplay_state_prediction_draw_track.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_prediction_cache_internal.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_trajectory_sampler.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_frame_cache_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_metrics_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/streamed_chunk_assembly_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_prediction_derived_service.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_plan_model.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_commands.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_controller.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_prediction_bridge.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_runtime_cache_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/gameplay_state_maneuver_nodes.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/gameplay_state_maneuver_nodes_cache.cpp"
   "${PROJECT_SOURCE_DIR}/src/core/util/logger.cpp"
@@ -284,6 +355,11 @@ add_executable(prediction_cache_internal_tests
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve_pick.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_trajectory.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_sampling.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/trajectory/trajectory_utils.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_prediction_cache_internal.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_frame_cache_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_metrics_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/streamed_chunk_assembly_builder.cpp"
 )
 
 set_property(TARGET prediction_cache_internal_tests PROPERTY CXX_STANDARD 20)
@@ -298,6 +374,7 @@ target_link_libraries(prediction_cache_internal_tests PRIVATE
   gtest
   fmt::fmt
   glm
+  Vulkan::Vulkan
   orbitsim
 )
 

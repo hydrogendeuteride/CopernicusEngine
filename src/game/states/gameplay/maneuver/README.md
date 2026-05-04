@@ -23,10 +23,19 @@ This folder contains the maneuver-node editor used by `GameplayState`.
 ### Implementation Files
 
 - `gameplay_state_maneuver_nodes.cpp`
-  Core node management: sim-time query (`current_sim_time_s`), primary-body resolution (`resolve_maneuver_node_primary_body_id`), node removal (`remove_maneuver_node`, `remove_maneuver_node_suffix`, `finalize_maneuver_node_removal`), and orbit-curve alignment delta (`compute_maneuver_align_delta`).
+  Core node coordination: sim-time query (`current_sim_time_s`), edit-preview prediction hooks, and command side effects (`apply_maneuver_command`).
+
+- `maneuver_prediction_bridge.*`
+  Thin bridge between maneuver editing/runtime and prediction data. Owns primary-body resolution and orbit-curve alignment delta sampling without exposing those helpers on `GameplayState`.
+
+- `maneuver_plan_model.*`, `maneuver_commands.*`, `maneuver_controller.*`
+  Plan mutation boundary. UI and gizmo code create commands, the controller applies them to `ManeuverPlanState`, and the returned result drives prediction dirty/artifact cleanup from `GameplayState`.
+
+- `maneuver_runtime_cache_builder.*`
+  Per-frame runtime cache builder. Rebuilds all derived node state (world positions, RTN/PON bases, burn direction, gizmo validity) from prediction data without including `GameplayState`.
 
 - `gameplay_state_maneuver_nodes_cache.cpp`
-  Per-frame runtime cache rebuild: `refresh_maneuver_node_runtime_cache()` and its internal helpers. Rebuilds all derived node state (world positions, RTN/PON bases, burn direction, gizmo validity) from prediction data. Contains shared sampling helpers as templates (`sample_traj_world_at`, `sample_chunk_world_at`, `sample_tangent_world_from`).
+  Thin adapter for `refresh_maneuver_node_runtime_cache()`. Gathers the active prediction cache, stable fallback cache, display time, frame resolver context, alignment delta, and primary-body callback before delegating to `ManeuverRuntimeCacheBuilder`.
 
 - `gameplay_state_maneuver_panel.cpp`
   ImGui panel UI -- the "Maneuver Nodes" window, timeline bar, node list, node detail editor, and buttons like `+Node`, `Warp to Node`, and `Execute`.
@@ -97,10 +106,10 @@ Relevant call sites are currently in:
   Start in `gameplay_state_maneuver_util.h`.
 
 - Core node logic like primary-body resolution or node removal:
-  Start in `gameplay_state_maneuver_nodes.cpp`.
+  Start in `maneuver_prediction_bridge.*` for prediction-backed primary-body resolution, or `gameplay_state_maneuver_nodes.cpp` for edit-preview and command side effects.
 
-- Runtime cache rebuild, trajectory/chunk sampling, or per-frame derived state:
-  Start in `gameplay_state_maneuver_nodes_cache.cpp`.
+- Runtime cache rebuild, trajectory sampling, or per-frame derived state:
+  Start in `maneuver_runtime_cache_builder.*`.
 
 ## Notes About Structure
 
@@ -111,4 +120,4 @@ Relevant call sites are currently in:
 - Execution and prediction always use the canonical true RTN frame built from the pre-burn primary-relative state.
 - The gizmo can either expose that same RTN basis directly or a `Prograde / Outward / Normal` display basis that projects back into RTN for storage.
 - The gizmo depends on prediction data and render interpolation, so marker placement is rebuilt every frame in `refresh_maneuver_node_runtime_cache()`.
-- Sampling helpers in `nodes_cache.cpp` use templated callables to access `GameplayState` private methods without exposing them.
+- Prediction-backed sampling for the panel, runtime cache, and execution path goes through `ManeuverPredictionBridge`.

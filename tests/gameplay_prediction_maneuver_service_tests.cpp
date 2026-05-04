@@ -13,7 +13,7 @@ TEST(GameplayPredictionManeuverTests, BuildEphemerisSamplingSpecAllowsFutureWind
             Game::OrbitPredictionService::build_ephemeris_sampling_spec(request);
 
     ASSERT_TRUE(spec.valid);
-    EXPECT_GE(spec.horizon_s, request.future_window_s);
+    EXPECT_GE(spec.horizon_s, request.options.future_window_s);
 }
 
 TEST(GameplayPredictionManeuverTests, PredictionServiceBuildsSecondNodePreviewFromPrefixPlan)
@@ -21,43 +21,21 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceBuildsSecondNodePreviewFr
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request request = make_prediction_request(0.0, 120.0);
 
-    Game::OrbitPredictionService::ManeuverImpulse first{};
-    first.node_id = 1;
-    first.t_s = 10.0;
-    first.primary_body_id = 1;
-    first.dv_rtn_mps = glm::dvec3(0.0, 0.0, 50.0);
-    request.maneuver_impulses.push_back(first);
-
-    Game::OrbitPredictionService::ManeuverImpulse second{};
-    second.node_id = 2;
-    second.t_s = 20.0;
-    second.primary_body_id = 1;
-    second.dv_rtn_mps = glm::dvec3(0.0, 0.0, 0.0);
-    request.maneuver_impulses.push_back(second);
+    add_maneuver_impulse(request, 1, 10.0, glm::dvec3(0.0, 0.0, 50.0));
+    add_maneuver_impulse(request, 2, 20.0, glm::dvec3(0.0, 0.0, 0.0));
 
     std::vector<Game::OrbitPredictionService::Result> results = run_prediction_results(service, 1, std::move(request));
     ASSERT_EQ(results.size(), 1u);
     const Game::OrbitPredictionService::Result &result = results.front();
 
-    ASSERT_TRUE(result.valid) << "status=" << static_cast<int>(result.diagnostics.status)
+    ASSERT_TRUE(result.envelope.valid) << "status=" << static_cast<int>(result.diagnostics.status)
                               << " ephemeris_accepted=" << result.diagnostics.ephemeris.accepted_segments
                               << " base_accepted=" << result.diagnostics.trajectory_base.accepted_segments
                               << " planned_accepted=" << result.diagnostics.trajectory_planned.accepted_segments;
-    ASSERT_GE(result.maneuver_previews.size(), 2u);
+    ASSERT_GE(result.planned.maneuver_previews.size(), 2u);
 
-    const auto find_preview = [&](const int node_id) -> const Game::OrbitPredictionService::ManeuverNodePreview * {
-        for (const auto &preview : result.maneuver_previews)
-        {
-            if (preview.node_id == node_id)
-            {
-                return &preview;
-            }
-        }
-        return nullptr;
-    };
-
-    const auto *first_preview = find_preview(1);
-    const auto *second_preview = find_preview(2);
+    const auto *first_preview = find_maneuver_preview(result, 1);
+    const auto *second_preview = find_maneuver_preview(result, 2);
     ASSERT_NE(first_preview, nullptr);
     ASSERT_NE(second_preview, nullptr);
     EXPECT_TRUE(first_preview->valid);
@@ -71,40 +49,28 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceSupportsFarFutureManeuver
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request request = make_prediction_request(0.0, 50'400.0);
 
-    Game::OrbitPredictionService::ManeuverImpulse impulse{};
-    impulse.node_id = 1;
-    impulse.t_s = 50'000.0;
-    impulse.primary_body_id = 1;
-    impulse.dv_rtn_mps = glm::dvec3(0.0, 0.0, 25.0);
-    request.maneuver_impulses.push_back(impulse);
+    constexpr int impulse_node_id = 1;
+    constexpr double impulse_time_s = 50'000.0;
+    add_maneuver_impulse(request, impulse_node_id, impulse_time_s, glm::dvec3(0.0, 0.0, 25.0));
 
     std::vector<Game::OrbitPredictionService::Result> results = run_prediction_results(service, 1, std::move(request));
     ASSERT_EQ(results.size(), 1u);
     const Game::OrbitPredictionService::Result &result = results.front();
 
-    ASSERT_TRUE(result.valid) << "status=" << static_cast<int>(result.diagnostics.status)
+    ASSERT_TRUE(result.envelope.valid) << "status=" << static_cast<int>(result.diagnostics.status)
                               << " ephemeris_accepted=" << result.diagnostics.ephemeris.accepted_segments
                               << " base_accepted=" << result.diagnostics.trajectory_base.accepted_segments
                               << " planned_accepted=" << result.diagnostics.trajectory_planned.accepted_segments;
-    ASSERT_FALSE(result.trajectory_segments_inertial_planned.empty());
-    ASSERT_FALSE(result.maneuver_previews.empty());
+    ASSERT_FALSE(result.planned.trajectory_segments_inertial.empty());
+    ASSERT_FALSE(result.planned.maneuver_previews.empty());
 
-    const auto *preview = [&]() -> const Game::OrbitPredictionService::ManeuverNodePreview * {
-        for (const auto &item : result.maneuver_previews)
-        {
-            if (item.node_id == impulse.node_id)
-            {
-                return &item;
-            }
-        }
-        return nullptr;
-    }();
+    const auto *preview = find_maneuver_preview(result, impulse_node_id);
     ASSERT_NE(preview, nullptr);
     EXPECT_TRUE(preview->valid);
 
-    const orbitsim::TrajectorySegment &last_planned = result.trajectory_segments_inertial_planned.back();
+    const orbitsim::TrajectorySegment &last_planned = result.planned.trajectory_segments_inertial.back();
     const double planned_end_s = last_planned.t0_s + last_planned.dt_s;
-    EXPECT_GE(planned_end_s, impulse.t_s);
+    EXPECT_GE(planned_end_s, impulse_time_s);
 }
 
 TEST(GameplayPredictionManeuverTests, PredictionServiceReusesBaselineForFastManeuverPreview)
@@ -117,35 +83,30 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceReusesBaselineForFastMane
     ASSERT_EQ(baseline_results.size(), 1u);
     const Game::OrbitPredictionService::Result &baseline_result = baseline_results.front();
 
-    ASSERT_TRUE(baseline_result.valid);
-    ASSERT_FALSE(baseline_result.trajectory_inertial.empty());
-    ASSERT_FALSE(baseline_result.trajectory_segments_inertial.empty());
-    ASSERT_TRUE(baseline_result.shared_ephemeris);
+    ASSERT_TRUE(baseline_result.envelope.valid);
+    ASSERT_FALSE(baseline_result.core.trajectory_inertial.empty());
+    ASSERT_FALSE(baseline_result.core.trajectory_segments_inertial.empty());
+    ASSERT_TRUE(baseline_result.core.shared_ephemeris);
     EXPECT_FALSE(baseline_result.diagnostics.trajectory_base.cache_reused);
 
     Game::OrbitPredictionService::Request preview_request = make_prediction_request(5.0, 120.0);
-    preview_request.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
-    preview_request.shared_ephemeris = baseline_result.shared_ephemeris;
+    preview_request.options.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
+    preview_request.world.shared_ephemeris = baseline_result.core.shared_ephemeris;
 
-    Game::OrbitPredictionService::ManeuverImpulse impulse{};
-    impulse.node_id = 1;
-    impulse.t_s = 20.0;
-    impulse.primary_body_id = 1;
-    impulse.dv_rtn_mps = glm::dvec3(0.0, 0.0, 10.0);
-    preview_request.maneuver_impulses.push_back(impulse);
+    add_maneuver_impulse(preview_request, 1, 20.0, glm::dvec3(0.0, 0.0, 10.0));
 
     std::vector<Game::OrbitPredictionService::Result> preview_results =
             run_prediction_results(service, 2, std::move(preview_request));
     ASSERT_EQ(preview_results.size(), 1u);
     const Game::OrbitPredictionService::Result &preview_result = preview_results.front();
 
-    ASSERT_TRUE(preview_result.valid);
+    ASSERT_TRUE(preview_result.envelope.valid);
     EXPECT_TRUE(preview_result.diagnostics.trajectory_base.cache_reused);
     EXPECT_EQ(preview_result.diagnostics.trajectory_sample_count, baseline_result.diagnostics.trajectory_sample_count);
-    ASSERT_FALSE(preview_result.trajectory_segments_inertial_planned.empty());
-    EXPECT_GE(preview_result.trajectory_segments_inertial.back().t0_s +
-                      preview_result.trajectory_segments_inertial.back().dt_s,
-              preview_request.sim_time_s + preview_request.future_window_s);
+    ASSERT_FALSE(preview_result.planned.trajectory_segments_inertial.empty());
+    EXPECT_GE(preview_result.core.trajectory_segments_inertial.back().t0_s +
+                      preview_result.core.trajectory_segments_inertial.back().dt_s,
+              preview_request.world.sim_time_s + preview_request.options.future_window_s);
 }
 
 TEST(GameplayPredictionManeuverTests, PredictionServicePublishesChunkMetadataForBaselineOnlyFullRequest)
@@ -158,16 +119,16 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePublishesChunkMetadataFor
     ASSERT_EQ(results.size(), 1u);
     const Game::OrbitPredictionService::Result &result = results.front();
 
-    ASSERT_TRUE(result.valid);
-    ASSERT_EQ(result.publish_stage, Game::OrbitPredictionService::PublishStage::PreviewFinalizing);
-    ASSERT_EQ(result.published_chunks.size(), 1u);
-    const Game::OrbitPredictionService::PublishedChunk &chunk = result.published_chunks.front();
+    ASSERT_TRUE(result.envelope.valid);
+    ASSERT_EQ(result.envelope.publish_stage, Game::OrbitPredictionService::PublishStage::PreviewFinalizing);
+    ASSERT_EQ(result.publish.published_chunks.size(), 1u);
+    const Game::OrbitPredictionService::PublishedChunk &chunk = result.publish.published_chunks.front();
     EXPECT_EQ(chunk.chunk_id, 0u);
     EXPECT_EQ(chunk.quality_state, Game::OrbitPredictionService::ChunkQualityState::Final);
     EXPECT_FALSE(chunk.includes_planned_path);
     EXPECT_FALSE(chunk.reused_from_cache);
-    EXPECT_DOUBLE_EQ(chunk.t0_s, request.sim_time_s);
-    EXPECT_GE(chunk.t1_s, request.sim_time_s + request.future_window_s);
+    EXPECT_DOUBLE_EQ(chunk.t0_s, request.world.sim_time_s);
+    EXPECT_GE(chunk.t1_s, request.world.sim_time_s + request.options.future_window_s);
 }
 
 TEST(GameplayPredictionManeuverTests, PredictionServicePublishesChunkMetadataForCelestialFullRequest)
@@ -180,45 +141,34 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePublishesChunkMetadataFor
     ASSERT_EQ(results.size(), 1u);
     const Game::OrbitPredictionService::Result &result = results.front();
 
-    ASSERT_TRUE(result.valid);
-    ASSERT_EQ(result.publish_stage, Game::OrbitPredictionService::PublishStage::PreviewFinalizing);
-    ASSERT_EQ(result.published_chunks.size(), 1u);
-    const Game::OrbitPredictionService::PublishedChunk &chunk = result.published_chunks.front();
+    ASSERT_TRUE(result.envelope.valid);
+    ASSERT_EQ(result.envelope.publish_stage, Game::OrbitPredictionService::PublishStage::PreviewFinalizing);
+    ASSERT_EQ(result.publish.published_chunks.size(), 1u);
+    const Game::OrbitPredictionService::PublishedChunk &chunk = result.publish.published_chunks.front();
     EXPECT_EQ(chunk.chunk_id, 0u);
     EXPECT_EQ(chunk.quality_state, Game::OrbitPredictionService::ChunkQualityState::Final);
     EXPECT_FALSE(chunk.includes_planned_path);
     EXPECT_FALSE(chunk.reused_from_cache);
-    EXPECT_DOUBLE_EQ(chunk.t0_s, request.sim_time_s);
-    EXPECT_GE(chunk.t1_s, request.sim_time_s + request.future_window_s);
+    EXPECT_DOUBLE_EQ(chunk.t0_s, request.world.sim_time_s);
+    EXPECT_GE(chunk.t1_s, request.world.sim_time_s + request.options.future_window_s);
 }
 
 TEST(GameplayPredictionManeuverTests, PredictionServicePublishesPreviewPatchThenFullFinalStage)
 {
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request request = make_prediction_request(0.0, 60.0);
-    request.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
-    request.preview_patch.active = true;
-    request.preview_patch.anchor_state_valid = true;
-    request.preview_patch.anchor_state_trusted = true;
-    request.preview_patch.anchor_time_s = 20.0;
-    request.preview_patch.visual_window_s = 10.0;
-    request.preview_patch.exact_window_s = request.preview_patch.visual_window_s;
-    request.preview_patch.anchor_state_inertial =
-            orbitsim::make_state(request.ship_bary_position_m, request.ship_bary_velocity_mps);
+    request.options.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
+    request.maneuver.preview_patch.active = true;
+    request.maneuver.preview_patch.anchor_state_valid = true;
+    request.maneuver.preview_patch.anchor_state_trusted = true;
+    request.maneuver.preview_patch.anchor_time_s = 20.0;
+    request.maneuver.preview_patch.visual_window_s = 10.0;
+    request.maneuver.preview_patch.exact_window_s = request.maneuver.preview_patch.visual_window_s;
+    request.maneuver.preview_patch.anchor_state_inertial =
+            orbitsim::make_state(request.subject.ship_bary_position_m, request.subject.ship_bary_velocity_mps);
 
-    Game::OrbitPredictionService::ManeuverImpulse stream_impulse{};
-    stream_impulse.node_id = 1;
-    stream_impulse.t_s = 25.0;
-    stream_impulse.primary_body_id = 1;
-    stream_impulse.dv_rtn_mps = glm::dvec3(0.0, 0.0, 10.0);
-    request.maneuver_impulses.push_back(stream_impulse);
-
-    Game::OrbitPredictionService::ManeuverImpulse finalizing_impulse{};
-    finalizing_impulse.node_id = 2;
-    finalizing_impulse.t_s = 45.0;
-    finalizing_impulse.primary_body_id = 1;
-    finalizing_impulse.dv_rtn_mps = glm::dvec3(0.0, 0.0, 15.0);
-    request.maneuver_impulses.push_back(finalizing_impulse);
+    add_maneuver_impulse(request, 1, 25.0, glm::dvec3(0.0, 0.0, 10.0));
+    add_maneuver_impulse(request, 2, 45.0, glm::dvec3(0.0, 0.0, 15.0));
 
     std::vector<Game::OrbitPredictionService::Result> results = run_prediction_results(service, 1, std::move(request));
     ASSERT_GE(results.size(), 2u);
@@ -228,15 +178,15 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePublishesPreviewPatchThen
     bool saw_finalizing_stage = false;
     for (const Game::OrbitPredictionService::Result &result : results)
     {
-        ASSERT_TRUE(result.valid);
-        if (result.publish_stage == Game::OrbitPredictionService::PublishStage::PreviewStreaming)
+        ASSERT_TRUE(result.envelope.valid);
+        if (result.envelope.publish_stage == Game::OrbitPredictionService::PublishStage::PreviewStreaming)
         {
             EXPECT_FALSE(saw_finalizing_stage);
             streaming_results.push_back(&result);
             continue;
         }
 
-        EXPECT_EQ(result.publish_stage, Game::OrbitPredictionService::PublishStage::PreviewFinalizing);
+        EXPECT_EQ(result.envelope.publish_stage, Game::OrbitPredictionService::PublishStage::PreviewFinalizing);
         saw_finalizing_stage = true;
         finalizing_results.push_back(&result);
     }
@@ -249,44 +199,44 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePublishesPreviewPatchThen
     const Game::OrbitPredictionService::Result &first_finalizing_result = *finalizing_results.front();
     const Game::OrbitPredictionService::Result &last_finalizing_result = *finalizing_results.back();
 
-    ASSERT_FALSE(first_streaming_result.published_chunks.empty());
-    EXPECT_EQ(first_streaming_result.published_chunks.front().chunk_id, 0u);
-    EXPECT_DOUBLE_EQ(first_streaming_result.published_chunks.front().t0_s, 20.0);
-    EXPECT_LE(last_streaming_result.published_chunks.back().t1_s, 40.0 + 1.0e-6);
+    ASSERT_FALSE(first_streaming_result.publish.published_chunks.empty());
+    EXPECT_EQ(first_streaming_result.publish.published_chunks.front().chunk_id, 0u);
+    EXPECT_DOUBLE_EQ(first_streaming_result.publish.published_chunks.front().t0_s, 20.0);
+    EXPECT_LE(last_streaming_result.publish.published_chunks.back().t1_s, 40.0 + 1.0e-6);
     for (const Game::OrbitPredictionService::Result *result : streaming_results)
     {
-        for (const Game::OrbitPredictionService::PublishedChunk &chunk : result->published_chunks)
+        for (const Game::OrbitPredictionService::PublishedChunk &chunk : result->publish.published_chunks)
         {
             EXPECT_EQ(chunk.quality_state, Game::OrbitPredictionService::ChunkQualityState::PreviewPatch);
         }
     }
-    ASSERT_FALSE(last_streaming_result.trajectory_segments_inertial_planned.empty());
-    EXPECT_DOUBLE_EQ(last_streaming_result.trajectory_segments_inertial_planned.front().t0_s, 20.0);
-    EXPECT_LE(last_streaming_result.trajectory_segments_inertial_planned.back().t0_s +
-                      last_streaming_result.trajectory_segments_inertial_planned.back().dt_s,
+    ASSERT_FALSE(last_streaming_result.planned.trajectory_segments_inertial.empty());
+    EXPECT_DOUBLE_EQ(last_streaming_result.planned.trajectory_segments_inertial.front().t0_s, 20.0);
+    EXPECT_LE(last_streaming_result.planned.trajectory_segments_inertial.back().t0_s +
+                      last_streaming_result.planned.trajectory_segments_inertial.back().dt_s,
               40.0 + 1.0e-6);
     bool saw_stream_impulse_preview = false;
     for (const Game::OrbitPredictionService::Result *result : streaming_results)
     {
-        for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : result->maneuver_previews)
+        for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : result->planned.maneuver_previews)
         {
             saw_stream_impulse_preview |= preview.node_id == 1;
         }
     }
     EXPECT_TRUE(saw_stream_impulse_preview);
 
-    ASSERT_FALSE(first_finalizing_result.published_chunks.empty());
-    EXPECT_EQ(first_finalizing_result.published_chunks.front().chunk_id, 0u);
-    EXPECT_LE(first_finalizing_result.published_chunks.front().t0_s, 1.0e-6);
-    EXPECT_GE(first_finalizing_result.published_chunks.back().t1_s, 60.0);
-    EXPECT_GT(first_finalizing_result.published_chunks.size(),
-              last_streaming_result.published_chunks.size());
+    ASSERT_FALSE(first_finalizing_result.publish.published_chunks.empty());
+    EXPECT_EQ(first_finalizing_result.publish.published_chunks.front().chunk_id, 0u);
+    EXPECT_LE(first_finalizing_result.publish.published_chunks.front().t0_s, 1.0e-6);
+    EXPECT_GE(first_finalizing_result.publish.published_chunks.back().t1_s, 60.0);
+    EXPECT_GT(first_finalizing_result.publish.published_chunks.size(),
+              last_streaming_result.publish.published_chunks.size());
     bool saw_final_prefix_chunk = false;
     bool saw_final_preview_chunk = false;
     bool saw_final_tail_chunk = false;
     for (const Game::OrbitPredictionService::Result *result : finalizing_results)
     {
-        for (const Game::OrbitPredictionService::PublishedChunk &chunk : result->published_chunks)
+        for (const Game::OrbitPredictionService::PublishedChunk &chunk : result->publish.published_chunks)
         {
             EXPECT_EQ(chunk.quality_state, Game::OrbitPredictionService::ChunkQualityState::Final);
             saw_final_prefix_chunk |= chunk.t0_s < (20.0 - 1.0e-6);
@@ -299,19 +249,19 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePublishesPreviewPatchThen
     EXPECT_TRUE(saw_final_prefix_chunk);
     EXPECT_TRUE(saw_final_preview_chunk);
     EXPECT_TRUE(saw_final_tail_chunk);
-    ASSERT_FALSE(first_finalizing_result.trajectory_segments_inertial_planned.empty());
-    ASSERT_FALSE(last_finalizing_result.trajectory_segments_inertial_planned.empty());
-    EXPECT_LE(first_finalizing_result.trajectory_segments_inertial_planned.front().t0_s, 1.0e-6);
-    EXPECT_GE(last_finalizing_result.trajectory_segments_inertial_planned.back().t0_s +
-                      last_finalizing_result.trajectory_segments_inertial_planned.back().dt_s,
+    ASSERT_FALSE(first_finalizing_result.planned.trajectory_segments_inertial.empty());
+    ASSERT_FALSE(last_finalizing_result.planned.trajectory_segments_inertial.empty());
+    EXPECT_LE(first_finalizing_result.planned.trajectory_segments_inertial.front().t0_s, 1.0e-6);
+    EXPECT_GE(last_finalizing_result.planned.trajectory_segments_inertial.back().t0_s +
+                      last_finalizing_result.planned.trajectory_segments_inertial.back().dt_s,
               60.0);
-    EXPECT_GE(first_finalizing_result.trajectory_segments_inertial_planned.size(),
-              last_streaming_result.trajectory_segments_inertial_planned.size());
+    EXPECT_GE(first_finalizing_result.planned.trajectory_segments_inertial.size(),
+              last_streaming_result.planned.trajectory_segments_inertial.size());
     bool saw_finalizing_impulse_preview = false;
     bool saw_preview_impulse_in_finalizing = false;
     for (const Game::OrbitPredictionService::Result *result : finalizing_results)
     {
-        for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : result->maneuver_previews)
+        for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : result->planned.maneuver_previews)
         {
             saw_finalizing_impulse_preview |= preview.node_id == 2;
             saw_preview_impulse_in_finalizing |= preview.node_id == 1;
@@ -325,29 +275,20 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceFinalizingStageRetainsPre
 {
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request request = make_prediction_request(0.0, 60.0);
-    request.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
-    request.preview_patch.active = true;
-    request.preview_patch.anchor_state_valid = true;
-    request.preview_patch.anchor_state_trusted = true;
-    request.preview_patch.anchor_time_s = 20.0;
-    request.preview_patch.visual_window_s = 10.0;
-    request.preview_patch.exact_window_s = 10.0;
-    request.preview_patch.anchor_state_inertial =
-            orbitsim::make_state(request.ship_bary_position_m, request.ship_bary_velocity_mps);
+    request.options.solve_quality = Game::OrbitPredictionService::SolveQuality::FastPreview;
+    request.maneuver.preview_patch.active = true;
+    request.maneuver.preview_patch.anchor_state_valid = true;
+    request.maneuver.preview_patch.anchor_state_trusted = true;
+    request.maneuver.preview_patch.anchor_time_s = 20.0;
+    request.maneuver.preview_patch.visual_window_s = 10.0;
+    request.maneuver.preview_patch.exact_window_s = 10.0;
+    request.maneuver.preview_patch.anchor_state_inertial =
+            orbitsim::make_state(request.subject.ship_bary_position_m, request.subject.ship_bary_velocity_mps);
 
-    Game::OrbitPredictionService::ManeuverImpulse preview_impulse{};
-    preview_impulse.node_id = 1;
-    preview_impulse.t_s = 25.0;
-    preview_impulse.primary_body_id = 1;
-    preview_impulse.dv_rtn_mps = glm::dvec3(0.0, 0.0, 10.0);
-    request.maneuver_impulses.push_back(preview_impulse);
-
-    Game::OrbitPredictionService::ManeuverImpulse tail_impulse{};
-    tail_impulse.node_id = 2;
-    tail_impulse.t_s = 45.0;
-    tail_impulse.primary_body_id = 1;
-    tail_impulse.dv_rtn_mps = glm::dvec3(0.0, 0.0, 15.0);
-    request.maneuver_impulses.push_back(tail_impulse);
+    const auto preview_impulse = make_maneuver_impulse(1, 25.0, glm::dvec3(0.0, 0.0, 10.0));
+    const auto tail_impulse = make_maneuver_impulse(2, 45.0, glm::dvec3(0.0, 0.0, 15.0));
+    request.maneuver.maneuver_impulses.push_back(preview_impulse);
+    request.maneuver.maneuver_impulses.push_back(tail_impulse);
 
     const std::vector<Game::OrbitPredictionService::Result> results =
             run_prediction_results(service, 1, std::move(request));
@@ -355,18 +296,18 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceFinalizingStageRetainsPre
     const auto finalizing_it = std::find_if(results.begin(),
                                             results.end(),
                                             [](const Game::OrbitPredictionService::Result &result) {
-                                                return result.publish_stage ==
+                                                return result.envelope.publish_stage ==
                                                        Game::OrbitPredictionService::PublishStage::PreviewFinalizing;
                                             });
     ASSERT_NE(finalizing_it, results.end());
-    ASSERT_TRUE(finalizing_it->valid);
-    ASSERT_GE(finalizing_it->trajectory_inertial_planned.size(), 3u);
-    ASSERT_FALSE(finalizing_it->trajectory_segments_inertial_planned.empty());
-    EXPECT_LE(finalizing_it->trajectory_segments_inertial_planned.front().t0_s, 20.0);
+    ASSERT_TRUE(finalizing_it->envelope.valid);
+    ASSERT_GE(finalizing_it->planned.trajectory_inertial.size(), 3u);
+    ASSERT_FALSE(finalizing_it->planned.trajectory_segments_inertial.empty());
+    EXPECT_LE(finalizing_it->planned.trajectory_segments_inertial.front().t0_s, 20.0);
 
     bool saw_preview_impulse = false;
     bool saw_tail_impulse = false;
-    for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : finalizing_it->maneuver_previews)
+    for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : finalizing_it->planned.maneuver_previews)
     {
         saw_preview_impulse = saw_preview_impulse || preview.node_id == preview_impulse.node_id;
         saw_tail_impulse = saw_tail_impulse || preview.node_id == tail_impulse.node_id;
@@ -375,45 +316,59 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceFinalizingStageRetainsPre
     EXPECT_TRUE(saw_tail_impulse);
 }
 
-TEST(GameplayPredictionManeuverTests, PredictionServiceReusesPlannedChunksWhenRequestIsUnchanged)
+TEST(GameplayPredictionManeuverTests, PredictionServiceObservationPinsPlannedChunkReuseShape)
 {
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request request =
             make_prediction_request(0.0, 2.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
 
-    Game::OrbitPredictionService::ManeuverImpulse first{};
-    first.node_id = 1;
-    first.t_s = 6.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    first.primary_body_id = 1;
-    first.dv_rtn_mps = glm::dvec3(0.0, 0.0, 5.0);
-    request.maneuver_impulses.push_back(first);
-
-    Game::OrbitPredictionService::ManeuverImpulse second{};
-    second.node_id = 2;
-    second.t_s = 30.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    second.primary_body_id = 1;
-    second.dv_rtn_mps = glm::dvec3(0.0, 2.0, 0.0);
-    request.maneuver_impulses.push_back(second);
+    add_maneuver_impulse(request,
+                         1,
+                         6.0 * Game::OrbitPredictionTuning::kSecondsPerHour,
+                         glm::dvec3(0.0, 0.0, 5.0));
+    add_maneuver_impulse(request,
+                         2,
+                         30.0 * Game::OrbitPredictionTuning::kSecondsPerHour,
+                         glm::dvec3(0.0, 2.0, 0.0));
 
     const std::vector<Game::OrbitPredictionService::Result> first_results =
             run_prediction_results(service, 1, request, 1);
     ASSERT_EQ(first_results.size(), 1u);
-    ASSERT_TRUE(first_results.front().valid);
-    ASSERT_FALSE(first_results.front().published_chunks.empty());
-    for (const Game::OrbitPredictionService::PublishedChunk &chunk : first_results.front().published_chunks)
-    {
-        EXPECT_FALSE(chunk.reused_from_cache);
-    }
+    const Game::OrbitPredictionService::Result &first_result = first_results.front();
+    ASSERT_TRUE(first_result.envelope.valid);
+    ASSERT_GT(first_result.publish.published_chunks.size(), 1u);
+    ASSERT_FALSE(first_result.planned.trajectory_segments_inertial.empty());
 
     const std::vector<Game::OrbitPredictionService::Result> second_results =
             run_prediction_results(service, 2, request, 1);
     ASSERT_EQ(second_results.size(), 1u);
-    ASSERT_TRUE(second_results.front().valid);
-    ASSERT_FALSE(second_results.front().published_chunks.empty());
-    EXPECT_TRUE(second_results.front().diagnostics.trajectory_planned.cache_reused);
-    for (const Game::OrbitPredictionService::PublishedChunk &chunk : second_results.front().published_chunks)
+    const Game::OrbitPredictionService::Result &second_result = second_results.front();
+    ASSERT_TRUE(second_result.envelope.valid);
+    ASSERT_EQ(second_result.publish.published_chunks.size(), first_result.publish.published_chunks.size());
+
+    EXPECT_TRUE(second_result.diagnostics.trajectory_planned.cache_reused);
+    EXPECT_EQ(second_result.diagnostics.trajectory_segment_count_planned,
+              first_result.diagnostics.trajectory_segment_count_planned);
+    EXPECT_EQ(second_result.diagnostics.trajectory_sample_count_planned,
+              first_result.diagnostics.trajectory_sample_count_planned);
+    EXPECT_EQ(second_result.planned.trajectory_segments_inertial.size(),
+              first_result.planned.trajectory_segments_inertial.size());
+    EXPECT_EQ(second_result.planned.maneuver_previews.size(), first_result.planned.maneuver_previews.size());
+
+    for (std::size_t i = 0; i < first_result.publish.published_chunks.size(); ++i)
     {
-        EXPECT_TRUE(chunk.reused_from_cache);
+        const Game::OrbitPredictionService::PublishedChunk &fresh_chunk = first_result.publish.published_chunks[i];
+        const Game::OrbitPredictionService::PublishedChunk &reused_chunk = second_result.publish.published_chunks[i];
+
+        EXPECT_EQ(reused_chunk.chunk_id, fresh_chunk.chunk_id);
+        EXPECT_EQ(reused_chunk.quality_state, Game::OrbitPredictionService::ChunkQualityState::Final);
+        EXPECT_EQ(reused_chunk.quality_state, fresh_chunk.quality_state);
+        EXPECT_DOUBLE_EQ(reused_chunk.t0_s, fresh_chunk.t0_s);
+        EXPECT_DOUBLE_EQ(reused_chunk.t1_s, fresh_chunk.t1_s);
+        EXPECT_TRUE(reused_chunk.includes_planned_path);
+        EXPECT_EQ(reused_chunk.includes_planned_path, fresh_chunk.includes_planned_path);
+        EXPECT_FALSE(fresh_chunk.reused_from_cache);
+        EXPECT_TRUE(reused_chunk.reused_from_cache);
     }
 }
 
@@ -422,71 +377,44 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePlannedSuffixRefineStarts
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request baseline_request = make_prediction_request(0.0, 120.0);
 
-    Game::OrbitPredictionService::ManeuverImpulse first{};
-    first.node_id = 1;
-    first.t_s = 10.0;
-    first.primary_body_id = 1;
-    first.dv_rtn_mps = glm::dvec3(0.0, 0.0, 5.0);
-    baseline_request.maneuver_impulses.push_back(first);
-
-    Game::OrbitPredictionService::ManeuverImpulse selected{};
-    selected.node_id = 2;
-    selected.t_s = 20.0;
-    selected.primary_body_id = 1;
-    selected.dv_rtn_mps = glm::dvec3(0.0, 2.0, 0.0);
-    baseline_request.maneuver_impulses.push_back(selected);
-
-    Game::OrbitPredictionService::ManeuverImpulse downstream{};
-    downstream.node_id = 3;
-    downstream.t_s = 45.0;
-    downstream.primary_body_id = 1;
-    downstream.dv_rtn_mps = glm::dvec3(0.0, 0.0, 0.0);
-    baseline_request.maneuver_impulses.push_back(downstream);
+    const auto selected = make_maneuver_impulse(2, 20.0, glm::dvec3(0.0, 2.0, 0.0));
+    const auto downstream = make_maneuver_impulse(3, 45.0, glm::dvec3(0.0, 0.0, 0.0));
+    add_maneuver_impulse(baseline_request, 1, 10.0, glm::dvec3(0.0, 0.0, 5.0));
+    baseline_request.maneuver.maneuver_impulses.push_back(selected);
+    baseline_request.maneuver.maneuver_impulses.push_back(downstream);
 
     const std::vector<Game::OrbitPredictionService::Result> baseline_results =
             run_prediction_results(service, 1, baseline_request, 1);
     ASSERT_EQ(baseline_results.size(), 1u);
     const Game::OrbitPredictionService::Result &baseline_result = baseline_results.front();
-    ASSERT_TRUE(baseline_result.valid);
-    ASSERT_FALSE(baseline_result.trajectory_segments_inertial_planned.empty());
-
-    const auto find_preview = [](const Game::OrbitPredictionService::Result &result,
-                                 const int node_id) -> const Game::OrbitPredictionService::ManeuverNodePreview * {
-        for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : result.maneuver_previews)
-        {
-            if (preview.node_id == node_id)
-            {
-                return &preview;
-            }
-        }
-        return nullptr;
-    };
+    ASSERT_TRUE(baseline_result.envelope.valid);
+    ASSERT_FALSE(baseline_result.planned.trajectory_segments_inertial.empty());
 
     const Game::OrbitPredictionService::ManeuverNodePreview *baseline_selected_preview =
-            find_preview(baseline_result, selected.node_id);
+            find_maneuver_preview(baseline_result, selected.node_id);
     const Game::OrbitPredictionService::ManeuverNodePreview *baseline_downstream_preview =
-            find_preview(baseline_result, downstream.node_id);
+            find_maneuver_preview(baseline_result, downstream.node_id);
     ASSERT_NE(baseline_selected_preview, nullptr);
     ASSERT_NE(baseline_downstream_preview, nullptr);
     ASSERT_TRUE(baseline_selected_preview->valid);
 
     Game::OrbitPredictionService::Request refined_request = baseline_request;
-    refined_request.maneuver_impulses[1].dv_rtn_mps = glm::dvec3(0.0, 6.0, 0.0);
-    refined_request.planned_suffix_refine.active = true;
-    refined_request.planned_suffix_refine.anchor_node_id = selected.node_id;
-    refined_request.planned_suffix_refine.anchor_time_s = selected.t_s;
-    refined_request.planned_suffix_refine.anchor_state_inertial =
+    refined_request.maneuver.maneuver_impulses[1].dv_rtn_mps = glm::dvec3(0.0, 6.0, 0.0);
+    refined_request.maneuver.planned_suffix_refine.active = true;
+    refined_request.maneuver.planned_suffix_refine.anchor_node_id = selected.node_id;
+    refined_request.maneuver.planned_suffix_refine.anchor_time_s = selected.t_s;
+    refined_request.maneuver.planned_suffix_refine.anchor_state_inertial =
             orbitsim::make_state(baseline_selected_preview->inertial_position_m,
                                  baseline_selected_preview->inertial_velocity_mps);
-    refined_request.planned_suffix_refine.prefix_segments_inertial =
-            Game::slice_trajectory_segments(baseline_result.trajectory_segments_inertial_planned,
-                                            refined_request.sim_time_s,
+    refined_request.maneuver.planned_suffix_refine.prefix_segments_inertial =
+            Game::slice_trajectory_segments(baseline_result.planned.trajectory_segments_inertial,
+                                            refined_request.world.sim_time_s,
                                             selected.t_s);
-    for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : baseline_result.maneuver_previews)
+    for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : baseline_result.planned.maneuver_previews)
     {
         if (preview.t_s < (selected.t_s - 1.0e-6))
         {
-            refined_request.planned_suffix_refine.prefix_previews.push_back(preview);
+            refined_request.maneuver.planned_suffix_refine.prefix_previews.push_back(preview);
         }
     }
 
@@ -494,26 +422,26 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePlannedSuffixRefineStarts
             run_prediction_results(service, 2, refined_request, 1);
     ASSERT_EQ(refined_results.size(), 1u);
     const Game::OrbitPredictionService::Result &refined_result = refined_results.front();
-    ASSERT_TRUE(refined_result.valid) << "status=" << static_cast<int>(refined_result.diagnostics.status);
-    ASSERT_FALSE(refined_result.trajectory_segments_inertial_planned.empty());
-    EXPECT_NEAR(refined_result.trajectory_segments_inertial_planned.front().t0_s,
-                refined_request.sim_time_s,
+    ASSERT_TRUE(refined_result.envelope.valid) << "status=" << static_cast<int>(refined_result.diagnostics.status);
+    ASSERT_FALSE(refined_result.planned.trajectory_segments_inertial.empty());
+    EXPECT_NEAR(refined_result.planned.trajectory_segments_inertial.front().t0_s,
+                refined_request.world.sim_time_s,
                 1.0e-6);
-    EXPECT_GE(refined_result.trajectory_segments_inertial_planned.back().t0_s +
-                      refined_result.trajectory_segments_inertial_planned.back().dt_s,
-              refined_request.sim_time_s + refined_request.future_window_s);
+    EXPECT_GE(refined_result.planned.trajectory_segments_inertial.back().t0_s +
+                      refined_result.planned.trajectory_segments_inertial.back().dt_s,
+              refined_request.world.sim_time_s + refined_request.options.future_window_s);
 
     const auto first_resolved_chunk =
-            std::find_if(refined_result.published_chunks.begin(),
-                         refined_result.published_chunks.end(),
+            std::find_if(refined_result.publish.published_chunks.begin(),
+                         refined_result.publish.published_chunks.end(),
                          [](const Game::OrbitPredictionService::PublishedChunk &chunk) {
                              return !chunk.reused_from_cache;
                          });
-    ASSERT_NE(first_resolved_chunk, refined_result.published_chunks.end());
+    ASSERT_NE(first_resolved_chunk, refined_result.publish.published_chunks.end());
     EXPECT_NEAR(first_resolved_chunk->t0_s, selected.t_s, 1.0e-6);
 
     const Game::OrbitPredictionService::ManeuverNodePreview *refined_downstream_preview =
-            find_preview(refined_result, downstream.node_id);
+            find_maneuver_preview(refined_result, downstream.node_id);
     ASSERT_NE(refined_downstream_preview, nullptr);
     const double downstream_velocity_delta_mps =
             glm::length(glm::dvec3(refined_downstream_preview->inertial_velocity_mps -
@@ -526,54 +454,40 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePlannedSuffixRefineStream
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request baseline_request = make_prediction_request(0.0, 90.0);
 
-    Game::OrbitPredictionService::ManeuverImpulse upstream{};
-    upstream.node_id = 1;
-    upstream.t_s = 10.0;
-    upstream.primary_body_id = 1;
-    upstream.dv_rtn_mps = glm::dvec3(0.0, 0.0, 1.0);
-    baseline_request.maneuver_impulses.push_back(upstream);
-
-    Game::OrbitPredictionService::ManeuverImpulse selected{};
-    selected.node_id = 2;
-    selected.t_s = 20.0;
-    selected.primary_body_id = 1;
-    selected.dv_rtn_mps = glm::dvec3(0.0, 2.0, 0.0);
-    baseline_request.maneuver_impulses.push_back(selected);
+    const auto selected = make_maneuver_impulse(2, 20.0, glm::dvec3(0.0, 2.0, 0.0));
+    add_maneuver_impulse(baseline_request, 1, 10.0, glm::dvec3(0.0, 0.0, 1.0));
+    baseline_request.maneuver.maneuver_impulses.push_back(selected);
 
     const std::vector<Game::OrbitPredictionService::Result> baseline_results =
             run_prediction_results(service, 1, baseline_request, 1);
     ASSERT_EQ(baseline_results.size(), 1u);
     const Game::OrbitPredictionService::Result &baseline_result = baseline_results.front();
-    ASSERT_TRUE(baseline_result.valid);
-    ASSERT_FALSE(baseline_result.trajectory_segments_inertial_planned.empty());
+    ASSERT_TRUE(baseline_result.envelope.valid);
+    ASSERT_FALSE(baseline_result.planned.trajectory_segments_inertial.empty());
 
-    const auto selected_preview_it =
-            std::find_if(baseline_result.maneuver_previews.begin(),
-                         baseline_result.maneuver_previews.end(),
-                         [&selected](const Game::OrbitPredictionService::ManeuverNodePreview &preview) {
-                             return preview.node_id == selected.node_id && preview.valid;
-                         });
-    ASSERT_NE(selected_preview_it, baseline_result.maneuver_previews.end());
+    const Game::OrbitPredictionService::ManeuverNodePreview *selected_preview =
+            find_valid_maneuver_preview(baseline_result, selected.node_id);
+    ASSERT_NE(selected_preview, nullptr);
 
     Game::OrbitPredictionService::Request refined_request = baseline_request;
-    refined_request.maneuver_impulses[1].dv_rtn_mps = glm::dvec3(0.0, 6.0, 0.0);
-    refined_request.full_stream_publish.active = true;
-    refined_request.planned_suffix_refine.active = true;
-    refined_request.planned_suffix_refine.anchor_node_id = selected.node_id;
-    refined_request.planned_suffix_refine.anchor_time_s = selected.t_s;
-    refined_request.planned_suffix_refine.anchor_state_inertial =
-            orbitsim::make_state(selected_preview_it->inertial_position_m,
-                                 selected_preview_it->inertial_velocity_mps);
-    refined_request.planned_suffix_refine.prefix_segments_inertial =
-            Game::slice_trajectory_segments(baseline_result.trajectory_segments_inertial_planned,
-                                            refined_request.sim_time_s,
+    refined_request.maneuver.maneuver_impulses[1].dv_rtn_mps = glm::dvec3(0.0, 6.0, 0.0);
+    refined_request.maneuver.full_stream_publish.active = true;
+    refined_request.maneuver.planned_suffix_refine.active = true;
+    refined_request.maneuver.planned_suffix_refine.anchor_node_id = selected.node_id;
+    refined_request.maneuver.planned_suffix_refine.anchor_time_s = selected.t_s;
+    refined_request.maneuver.planned_suffix_refine.anchor_state_inertial =
+            orbitsim::make_state(selected_preview->inertial_position_m,
+                                 selected_preview->inertial_velocity_mps);
+    refined_request.maneuver.planned_suffix_refine.prefix_segments_inertial =
+            Game::slice_trajectory_segments(baseline_result.planned.trajectory_segments_inertial,
+                                            refined_request.world.sim_time_s,
                                             selected.t_s);
-    ASSERT_FALSE(refined_request.planned_suffix_refine.prefix_segments_inertial.empty());
-    for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : baseline_result.maneuver_previews)
+    ASSERT_FALSE(refined_request.maneuver.planned_suffix_refine.prefix_segments_inertial.empty());
+    for (const Game::OrbitPredictionService::ManeuverNodePreview &preview : baseline_result.planned.maneuver_previews)
     {
         if (preview.t_s < (selected.t_s - 1.0e-6))
         {
-            refined_request.planned_suffix_refine.prefix_previews.push_back(preview);
+            refined_request.maneuver.planned_suffix_refine.prefix_previews.push_back(preview);
         }
     }
 
@@ -582,36 +496,36 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePlannedSuffixRefineStream
     ASSERT_GE(refined_results.size(), 2u);
 
     const Game::OrbitPredictionService::Result &prefix_result = refined_results.front();
-    ASSERT_TRUE(prefix_result.valid);
-    EXPECT_EQ(prefix_result.publish_stage, Game::OrbitPredictionService::PublishStage::FullStreaming);
-    ASSERT_FALSE(prefix_result.published_chunks.empty());
-    ASSERT_FALSE(prefix_result.streamed_planned_chunks.empty());
-    EXPECT_TRUE(prefix_result.trajectory_segments_inertial_planned.empty());
+    ASSERT_TRUE(prefix_result.envelope.valid);
+    EXPECT_EQ(prefix_result.envelope.publish_stage, Game::OrbitPredictionService::PublishStage::FullStreaming);
+    ASSERT_FALSE(prefix_result.publish.published_chunks.empty());
+    ASSERT_FALSE(prefix_result.publish.streamed_planned_chunks.empty());
+    EXPECT_TRUE(prefix_result.planned.trajectory_segments_inertial.empty());
 
-    for (const Game::OrbitPredictionService::PublishedChunk &chunk : prefix_result.published_chunks)
+    for (const Game::OrbitPredictionService::PublishedChunk &chunk : prefix_result.publish.published_chunks)
     {
         EXPECT_TRUE(chunk.reused_from_cache);
         EXPECT_LE(chunk.t1_s, selected.t_s + 1.0e-6);
     }
-    EXPECT_NEAR(prefix_result.published_chunks.front().t0_s, refined_request.sim_time_s, 1.0e-6);
-    EXPECT_NEAR(prefix_result.published_chunks.back().t1_s, selected.t_s, 1.0e-6);
+    EXPECT_NEAR(prefix_result.publish.published_chunks.front().t0_s, refined_request.world.sim_time_s, 1.0e-6);
+    EXPECT_NEAR(prefix_result.publish.published_chunks.back().t1_s, selected.t_s, 1.0e-6);
 
     const auto final_it =
             std::find_if(refined_results.begin(),
                          refined_results.end(),
                          [](const Game::OrbitPredictionService::Result &result) {
-                             return result.publish_stage == Game::OrbitPredictionService::PublishStage::Final;
+                             return result.envelope.publish_stage == Game::OrbitPredictionService::PublishStage::Final;
                          });
     ASSERT_NE(final_it, refined_results.end());
-    ASSERT_TRUE(final_it->valid);
-    ASSERT_FALSE(final_it->published_chunks.empty());
+    ASSERT_TRUE(final_it->envelope.valid);
+    ASSERT_FALSE(final_it->publish.published_chunks.empty());
     const auto first_resolved_chunk =
-            std::find_if(final_it->published_chunks.begin(),
-                         final_it->published_chunks.end(),
+            std::find_if(final_it->publish.published_chunks.begin(),
+                         final_it->publish.published_chunks.end(),
                          [](const Game::OrbitPredictionService::PublishedChunk &chunk) {
                              return !chunk.reused_from_cache;
                          });
-    ASSERT_NE(first_resolved_chunk, final_it->published_chunks.end());
+    ASSERT_NE(first_resolved_chunk, final_it->publish.published_chunks.end());
     EXPECT_NEAR(first_resolved_chunk->t0_s, selected.t_s, 1.0e-6);
 }
 
@@ -620,43 +534,39 @@ TEST(GameplayPredictionManeuverTests, PredictionServicePlannedSuffixRefineFallsB
     Game::OrbitPredictionService service{};
     Game::OrbitPredictionService::Request baseline_request = make_prediction_request(0.0, 90.0);
 
-    Game::OrbitPredictionService::ManeuverImpulse selected{};
-    selected.node_id = 7;
-    selected.t_s = 20.0;
-    selected.primary_body_id = 1;
-    selected.dv_rtn_mps = glm::dvec3(0.0, 2.0, 0.0);
-    baseline_request.maneuver_impulses.push_back(selected);
+    const auto selected = make_maneuver_impulse(7, 20.0, glm::dvec3(0.0, 2.0, 0.0));
+    baseline_request.maneuver.maneuver_impulses.push_back(selected);
 
     const std::vector<Game::OrbitPredictionService::Result> baseline_results =
             run_prediction_results(service, 1, baseline_request, 1);
     ASSERT_EQ(baseline_results.size(), 1u);
     const Game::OrbitPredictionService::Result &baseline_result = baseline_results.front();
-    ASSERT_TRUE(baseline_result.valid);
-    ASSERT_FALSE(baseline_result.trajectory_segments_inertial_planned.empty());
+    ASSERT_TRUE(baseline_result.envelope.valid);
+    ASSERT_FALSE(baseline_result.planned.trajectory_segments_inertial.empty());
 
     Game::OrbitPredictionService::Request refined_request = baseline_request;
-    refined_request.maneuver_impulses.front().dv_rtn_mps = glm::dvec3(0.0, 5.0, 0.0);
-    refined_request.planned_suffix_refine.active = true;
-    refined_request.planned_suffix_refine.anchor_node_id = selected.node_id;
-    refined_request.planned_suffix_refine.anchor_time_s = selected.t_s;
-    refined_request.planned_suffix_refine.prefix_segments_inertial =
-            Game::slice_trajectory_segments(baseline_result.trajectory_segments_inertial_planned,
-                                            refined_request.sim_time_s,
+    refined_request.maneuver.maneuver_impulses.front().dv_rtn_mps = glm::dvec3(0.0, 5.0, 0.0);
+    refined_request.maneuver.planned_suffix_refine.active = true;
+    refined_request.maneuver.planned_suffix_refine.anchor_node_id = selected.node_id;
+    refined_request.maneuver.planned_suffix_refine.anchor_time_s = selected.t_s;
+    refined_request.maneuver.planned_suffix_refine.prefix_segments_inertial =
+            Game::slice_trajectory_segments(baseline_result.planned.trajectory_segments_inertial,
+                                            refined_request.world.sim_time_s,
                                             selected.t_s);
-    ASSERT_FALSE(refined_request.planned_suffix_refine.prefix_segments_inertial.empty());
-    refined_request.planned_suffix_refine.anchor_state_inertial =
-            refined_request.planned_suffix_refine.prefix_segments_inertial.back().end;
-    refined_request.planned_suffix_refine.anchor_state_inertial.position_m.x += 1'000'000.0;
+    ASSERT_FALSE(refined_request.maneuver.planned_suffix_refine.prefix_segments_inertial.empty());
+    refined_request.maneuver.planned_suffix_refine.anchor_state_inertial =
+            refined_request.maneuver.planned_suffix_refine.prefix_segments_inertial.back().end;
+    refined_request.maneuver.planned_suffix_refine.anchor_state_inertial.position_m.x += 1'000'000.0;
 
     const std::vector<Game::OrbitPredictionService::Result> refined_results =
             run_prediction_results(service, 2, refined_request, 1);
     ASSERT_EQ(refined_results.size(), 1u);
     const Game::OrbitPredictionService::Result &refined_result = refined_results.front();
-    ASSERT_TRUE(refined_result.valid) << "status=" << static_cast<int>(refined_result.diagnostics.status);
+    ASSERT_TRUE(refined_result.envelope.valid) << "status=" << static_cast<int>(refined_result.diagnostics.status);
     EXPECT_EQ(refined_result.diagnostics.status, Game::OrbitPredictionService::Status::Success);
-    ASSERT_FALSE(refined_result.trajectory_segments_inertial_planned.empty());
-    EXPECT_NEAR(refined_result.trajectory_segments_inertial_planned.front().t0_s,
-                refined_request.sim_time_s,
+    ASSERT_FALSE(refined_result.planned.trajectory_segments_inertial.empty());
+    EXPECT_NEAR(refined_result.planned.trajectory_segments_inertial.front().t0_s,
+                refined_request.world.sim_time_s,
                 1.0e-6);
 }
 
@@ -666,39 +576,34 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceInvalidatesOnlyChunksDown
     Game::OrbitPredictionService::Request request =
             make_prediction_request(0.0, 3.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
 
-    Game::OrbitPredictionService::ManeuverImpulse first{};
-    first.node_id = 1;
-    first.t_s = 6.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    first.primary_body_id = 1;
-    first.dv_rtn_mps = glm::dvec3(0.0, 0.0, 5.0);
-    request.maneuver_impulses.push_back(first);
-
-    Game::OrbitPredictionService::ManeuverImpulse second{};
-    second.node_id = 2;
-    second.t_s = 36.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    second.primary_body_id = 1;
-    second.dv_rtn_mps = glm::dvec3(0.0, 2.0, 0.0);
-    request.maneuver_impulses.push_back(second);
+    add_maneuver_impulse(request,
+                         1,
+                         6.0 * Game::OrbitPredictionTuning::kSecondsPerHour,
+                         glm::dvec3(0.0, 0.0, 5.0));
+    add_maneuver_impulse(request,
+                         2,
+                         36.0 * Game::OrbitPredictionTuning::kSecondsPerHour,
+                         glm::dvec3(0.0, 2.0, 0.0));
 
     const std::vector<Game::OrbitPredictionService::Result> first_results =
             run_prediction_results(service, 1, request, 1);
     ASSERT_EQ(first_results.size(), 1u);
-    ASSERT_TRUE(first_results.front().valid);
+    ASSERT_TRUE(first_results.front().envelope.valid);
 
     Game::OrbitPredictionService::Request changed_request = request;
-    changed_request.maneuver_impulses.back().dv_rtn_mps = glm::dvec3(0.0, 3.0, 0.0);
+    changed_request.maneuver.maneuver_impulses.back().dv_rtn_mps = glm::dvec3(0.0, 3.0, 0.0);
 
     const std::vector<Game::OrbitPredictionService::Result> second_results =
             run_prediction_results(service, 2, changed_request, 1);
     ASSERT_EQ(second_results.size(), 1u);
-    ASSERT_TRUE(second_results.front().valid);
-    ASSERT_FALSE(second_results.front().published_chunks.empty());
+    ASSERT_TRUE(second_results.front().envelope.valid);
+    ASSERT_FALSE(second_results.front().publish.published_chunks.empty());
     EXPECT_TRUE(second_results.front().diagnostics.trajectory_planned.cache_reused);
 
-    const double changed_time_s = changed_request.maneuver_impulses.back().t_s;
+    const double changed_time_s = changed_request.maneuver.maneuver_impulses.back().t_s;
     bool saw_reused_upstream = false;
     bool saw_resolved_downstream = false;
-    for (const Game::OrbitPredictionService::PublishedChunk &chunk : second_results.front().published_chunks)
+    for (const Game::OrbitPredictionService::PublishedChunk &chunk : second_results.front().publish.published_chunks)
     {
         if (chunk.t1_s <= changed_time_s + 1.0e-6)
         {
@@ -722,17 +627,15 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceBuildsChunkScopedEphemeri
     Game::OrbitPredictionService::Request request =
             make_prediction_request(0.0, 5.0 * Game::OrbitPredictionTuning::kSecondsPerDay);
 
-    Game::OrbitPredictionService::ManeuverImpulse maneuver{};
-    maneuver.node_id = 1;
-    maneuver.t_s = 2.0 * Game::OrbitPredictionTuning::kSecondsPerHour;
-    maneuver.primary_body_id = 1;
-    maneuver.dv_rtn_mps = glm::dvec3(0.0, 0.0, 5.0);
-    request.maneuver_impulses.push_back(maneuver);
+    add_maneuver_impulse(request,
+                         1,
+                         2.0 * Game::OrbitPredictionTuning::kSecondsPerHour,
+                         glm::dvec3(0.0, 0.0, 5.0));
 
     const std::vector<Game::OrbitPredictionService::Result> results =
             run_prediction_results(service, 1, request, 1);
     ASSERT_EQ(results.size(), 1u);
-    ASSERT_TRUE(results.front().valid);
+    ASSERT_TRUE(results.front().envelope.valid);
 
     std::lock_guard<std::mutex> lock(service._ephemeris_mutex);
     ASSERT_FALSE(service._ephemeris_cache.empty());
@@ -741,13 +644,13 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceBuildsChunkScopedEphemeri
     bool saw_chunk_scoped_ephemeris = false;
     for (const Game::OrbitPredictionService::CachedEphemerisEntry &entry : service._ephemeris_cache)
     {
-        if (std::abs(entry.sim_time_s - request.sim_time_s) <= 1.0e-9 &&
-            std::abs(entry.duration_s - request.future_window_s) <= 1.0e-6)
+        if (std::abs(entry.sim_time_s - request.world.sim_time_s) <= 1.0e-9 &&
+            std::abs(entry.duration_s - request.options.future_window_s) <= 1.0e-6)
         {
             saw_full_window_ephemeris = true;
         }
-        if (entry.sim_time_s > (request.sim_time_s + 1.0e-6) &&
-            entry.duration_s < (request.future_window_s - 1.0e-6))
+        if (entry.sim_time_s > (request.world.sim_time_s + 1.0e-6) &&
+            entry.duration_s < (request.options.future_window_s - 1.0e-6))
         {
             saw_chunk_scoped_ephemeris = true;
         }
@@ -781,9 +684,9 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceReusesCoveredEphemerisFor
 
     Game::OrbitPredictionService::Request later_request =
             make_celestial_prediction_request(30.0, 120.0);
-    for (orbitsim::MassiveBody &body : later_request.massive_bodies)
+    for (orbitsim::MassiveBody &body : later_request.world.massive_bodies)
     {
-        body.state = first_ephemeris->body_state_at_by_id(body.id, later_request.sim_time_s);
+        body.state = first_ephemeris->body_state_at_by_id(body.id, later_request.world.sim_time_s);
     }
 
     const Game::OrbitPredictionService::EphemerisSamplingSpec later_sampling_spec =
@@ -832,9 +735,9 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceInvalidatesStaleManeuverR
     constexpr uint64_t track_id = 77u;
 
     Game::OrbitPredictionService::Result completed{};
-    completed.track_id = track_id;
-    completed.generation_id = 12u;
-    completed.maneuver_plan_revision = 2u;
+    completed.envelope.track_id = track_id;
+    completed.envelope.generation_id = 12u;
+    completed.envelope.maneuver_plan_revision = 2u;
     service._completed.push_back(completed);
 
     service._latest_requested_generation_by_track[track_id] = 12u;
@@ -856,12 +759,12 @@ TEST(GameplayPredictionManeuverTests, PredictionServiceInvalidatesStaleManeuverR
     stale_job.track_id = track_id;
     stale_job.request_epoch = service._request_epoch;
     stale_job.generation_id = 12u;
-    stale_job.request.maneuver_plan_revision = 2u;
+    stale_job.request.envelope.maneuver_plan_revision = 2u;
 
     Game::OrbitPredictionService::Result stale_result{};
-    stale_result.track_id = track_id;
-    stale_result.generation_id = 12u;
-    stale_result.maneuver_plan_revision = 2u;
+    stale_result.envelope.track_id = track_id;
+    stale_result.envelope.generation_id = 12u;
+    stale_result.envelope.maneuver_plan_revision = 2u;
     EXPECT_FALSE(service.publish_completed_result(stale_job, std::move(stale_result)));
     EXPECT_TRUE(service._completed.empty());
 }

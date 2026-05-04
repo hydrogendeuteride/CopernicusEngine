@@ -1,7 +1,10 @@
 #include "gameplay_state.h"
+#include "gameplay_orbital_context.h"
 #include "gameplay_preload_cache.h"
 #include "orbit_helpers.h"
 #include "game/states/gameplay/gameplay_settings.h"
+#include "game/states/gameplay/maneuver/maneuver_ui_controller.h"
+#include "game/states/gameplay/prediction/prediction_system.h"
 #include "game/states/gameplay/scenario/scenario_loader.h"
 #include "game/component/ship_controller.h"
 #include "game/states/pause_state.h"
@@ -10,6 +13,8 @@
 #include "core/input/input_system.h"
 #include "core/orbit_plot/orbit_plot.h"
 #include "core/util/logger.h"
+#include "physics/physics_context.h"
+#include "physics/physics_world.h"
 
 #include <cmath>
 
@@ -19,12 +24,14 @@ namespace Game
 
     GameplayState::GameplayState()
         : _scenario_config()
+        , _prediction(std::make_unique<PredictionSystem>())
     {
     }
 
     GameplayState::GameplayState(ScenarioConfig scenario_config)
         : _scenario_preloaded(true)
         , _scenario_config(std::move(scenario_config))
+        , _prediction(std::make_unique<PredictionSystem>())
     {
     }
 
@@ -37,28 +44,13 @@ namespace Game
         _elapsed = 0.0f;
         _fixed_time_s = 0.0;
         reset_time_warp_state();
-        _warp_to_time_active = false;
-        _warp_to_time_target_s = 0.0;
-        _warp_to_time_restore_level = 0;
-        _execute_node_armed = false;
-        _execute_node_id = -1;
-        _maneuver_state.nodes.clear();
-        _maneuver_state.selected_node_id = -1;
-        _maneuver_state.next_node_id = 0;
-        _maneuver_gizmo_interaction = {};
+        _maneuver.reset_session();
         _reset_requested = false;
         _scenario_io_status.clear();
         _scenario_io_status_ok = true;
         _settings_io_status.clear();
         _settings_io_status_ok = true;
-        _prediction_service.reset();
-        _prediction_derived_service.reset();
-        _prediction_tracks.clear();
-        _prediction_groups.clear();
-        _prediction_selection.clear();
-        _prediction_frame_selection.clear();
-        _prediction_analysis_selection.clear();
-        _orbit_plot_perf = {};
+        _prediction->reset_session_state();
 
         if (ctx.renderer && ctx.renderer->_context && ctx.renderer->_context->orbit_plot)
         {
@@ -128,40 +120,23 @@ namespace Game
             _outline_settings_saved = false;
         }
 
-        clear_maneuver_gizmo_instances(ctx);
+        _maneuver.clear_gizmo_interaction();
 
         _world.clear_rebase_anchor();
         _world.clear();
         _world.set_physics(nullptr);
         _world.set_physics_context(nullptr);
         _world.set_api(nullptr);
-        _orbitsim.reset();
-        _orbiters.clear();
+        _orbit.reset();
         _contact_log.clear();
-        _prediction_tracks.clear();
-        _prediction_groups.clear();
-        _prediction_selection.clear();
-        _prediction_frame_selection.clear();
-        _prediction_analysis_selection.clear();
-        _prediction_dirty = true;
-        _prediction_service.reset();
-        _prediction_derived_service.reset();
-        _orbit_plot_perf = {};
+        _prediction->reset_session_state();
         _renderer = nullptr;
         if (ctx.renderer && ctx.renderer->_context && ctx.renderer->_context->orbit_plot)
         {
             ctx.renderer->_context->orbit_plot->clear_all();
         }
         reset_time_warp_state();
-        _warp_to_time_active = false;
-        _warp_to_time_target_s = 0.0;
-        _warp_to_time_restore_level = 0;
-        _execute_node_armed = false;
-        _execute_node_id = -1;
-        _maneuver_state.nodes.clear();
-        _maneuver_state.selected_node_id = -1;
-        _maneuver_state.next_node_id = 0;
-        _maneuver_gizmo_interaction = {};
+        _maneuver.reset_session();
 #if defined(VULKAN_ENGINE_USE_JOLT) && VULKAN_ENGINE_USE_JOLT
         if (ctx.renderer && ctx.renderer->_context)
         {
@@ -200,13 +175,12 @@ namespace Game
         _world.entities().update_components(comp_ctx, dt);
         _world.entities().sync_to_render(*ctx.api, alpha);
 
-        poll_completed_prediction_results();
-
         refresh_maneuver_node_runtime_cache(ctx);
 
         // Draw orbit debug using the same interpolation alpha as rendering to avoid visual offset.
-        emit_orbit_prediction_debug(ctx);
-        emit_maneuver_node_debug_overlay(ctx);
+        draw_prediction(ctx);
+        ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
+        ManeuverUiController::emit_node_debug_overlay(maneuver_ui);
     }
 
     void GameplayState::on_fixed_update(GameStateContext &ctx, float fixed_dt)
@@ -224,30 +198,48 @@ namespace Game
         _time_warp.mode = desired_mode;
 
         const double warp_factor = _time_warp.factor();
+        auto build_orbital_context = [this]() {
+            return GameplayOrbitalContextBuilder(GameplayOrbitalContextInputs{
+                    .renderer = _renderer,
+                    .world = _world,
+                    .orbit = _orbit,
+                    .physics = _physics.get(),
+                    .physics_context = _physics_context.get(),
+                    .scenario_config = _scenario_config,
+                    .keybinds = &_keybinds,
+                    .ui_capture_keyboard = [this](const GameStateContext &frame_ctx) {
+                        return ui_capture_keyboard(frame_ctx);
+                    },
+                    .mark_prediction_dirty = [this]() {
+                        mark_prediction_dirty();
+                    },
+            }).build();
+        };
 
         if (desired_mode == TimeWarpState::Mode::RailsWarp)
         {
-            if (!_rails_warp_active)
+            OrbitalPhysicsSystem::Context orbital_physics = build_orbital_context();
+            if (!_orbital_physics.rails_warp_active())
             {
-                enter_rails_warp(ctx);
+                (void) _orbital_physics.enter_rails_warp(orbital_physics, ctx);
             }
 
-            if (_rails_warp_active)
+            if (_orbital_physics.rails_warp_active())
             {
                 double dt_s = static_cast<double>(fixed_dt) * warp_factor;
-                if (_warp_to_time_active)
+                if (_maneuver.runtime().warp_to_time_active)
                 {
-                    const double now_s = _orbitsim ? _orbitsim->sim.time_s() : _fixed_time_s;
-                    const double remaining_s = _warp_to_time_target_s - now_s;
+                    const double now_s = _orbit.scenario_owner() ? _orbit.scenario_owner()->sim.time_s() : _fixed_time_s;
+                    const double remaining_s = _maneuver.runtime().warp_to_time_target_s - now_s;
                     if (std::isfinite(remaining_s) && remaining_s > 0.0)
                     {
                         dt_s = std::min(dt_s, remaining_s);
                     }
                 }
                 _fixed_time_s += dt_s;
-                _last_sim_step_dt_s = dt_s;
+                _orbital_physics.set_last_sim_step_dt_s(dt_s);
 
-                rails_warp_step(ctx, dt_s);
+                _orbital_physics.rails_warp_step(orbital_physics, ctx, dt_s);
                 update_maneuver_nodes_execution(ctx);
                 update_prediction(ctx, static_cast<float>(dt_s));
                 return;
@@ -260,16 +252,17 @@ namespace Game
                     : 1;
 
         const double effective_dt_s = static_cast<double>(fixed_dt) * static_cast<double>(physics_steps);
-        _last_sim_step_dt_s = static_cast<double>(fixed_dt);
+        _orbital_physics.set_last_sim_step_dt_s(static_cast<double>(fixed_dt));
 
         ComponentContext comp_ctx = build_component_context(ctx);
+        OrbitalPhysicsSystem::Context orbital_physics = build_orbital_context();
 
         for (int i = 0; i < physics_steps; ++i)
         {
             _fixed_time_s += static_cast<double>(fixed_dt);
             _world.entities().fixed_update_components(comp_ctx, fixed_dt);
-            update_formation_hold(static_cast<double>(fixed_dt));
-            step_physics(ctx, fixed_dt);
+            _orbital_physics.update_formation_hold(orbital_physics, static_cast<double>(fixed_dt));
+            _orbital_physics.step_physics(orbital_physics, ctx, fixed_dt);
         }
 
         update_maneuver_nodes_execution(ctx);
@@ -280,11 +273,7 @@ namespace Game
     {
         _time_warp.warp_level = 0;
         _time_warp.mode = TimeWarpState::Mode::Realtime;
-        _rails_warp_active = false;
-        _last_sim_step_dt_s = 0.0;
-        _rails_thrust_applied_this_tick = false;
-        _rails_last_thrust_dir_local = glm::vec3(0.0f);
-        _rails_last_torque_dir_local = glm::vec3(0.0f);
+        _orbital_physics.reset();
     }
 
     void GameplayState::handle_time_warp_input(GameStateContext &ctx)
@@ -294,13 +283,12 @@ namespace Game
             return;
         }
 
-        if (_warp_to_time_active)
+        if (_maneuver.runtime().warp_to_time_active)
         {
             return;
         }
 
-        const bool ui_capture_keyboard = ctx.renderer && ctx.renderer->ui() && ctx.renderer->ui()->wantCaptureKeyboard();
-        if (ui_capture_keyboard)
+        if (ui_capture_keyboard(ctx))
         {
             return;
         }
@@ -347,8 +335,14 @@ namespace Game
         comp_ctx.input = ctx.input;
         comp_ctx.physics = _physics.get();
         comp_ctx.keybinds = &_keybinds;
-        comp_ctx.ui_capture_keyboard = ctx.renderer && ctx.renderer->ui() && ctx.renderer->ui()->wantCaptureKeyboard();
+        comp_ctx.ui_capture_keyboard = ui_capture_keyboard(ctx);
         comp_ctx.interpolation_alpha = alpha;
         return comp_ctx;
     }
+
+    bool GameplayState::ui_capture_keyboard(const GameStateContext &ctx) const
+    {
+        return ctx.renderer && ctx.renderer->ui() && ctx.renderer->ui()->wantCaptureKeyboard();
+    }
+
 } // namespace Game

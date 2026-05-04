@@ -1,6 +1,4 @@
-#define private public
 #include "game/states/gameplay/gameplay_state.h"
-#undef private
 
 #include <gtest/gtest.h>
 
@@ -16,8 +14,8 @@ TEST(GameplayStateTimeWarpTransition, RailsRequestWithoutOrbitSimFallsBackToPhys
     GameplayState state{};
     Game::GameStateContext ctx{};
 
-    state._orbitsim.reset();
-    state._rails_warp_active = false;
+    state._orbit.scenario_owner().reset();
+    state._orbital_physics.set_rails_warp_active_for_test(false);
     state._time_warp.mode = Mode::Realtime;
     state._time_warp.warp_level = 0;
 
@@ -25,7 +23,7 @@ TEST(GameplayStateTimeWarpTransition, RailsRequestWithoutOrbitSimFallsBackToPhys
 
     EXPECT_EQ(state._time_warp.warp_level, TimeWarpState::kMaxPhysicsWarpLevel);
     EXPECT_EQ(state._time_warp.mode, Mode::PhysicsWarp);
-    EXPECT_FALSE(state._rails_warp_active);
+    EXPECT_FALSE(state._orbital_physics.rails_warp_active());
 }
 
 TEST(GameplayStateTimeWarpTransition, LeavingRailsWarpClearsRailsHandlesAndDisablesRailsState)
@@ -36,20 +34,20 @@ TEST(GameplayStateTimeWarpTransition, LeavingRailsWarpClearsRailsHandlesAndDisab
     Game::OrbiterInfo orbiter{};
     orbiter.entity = Game::EntityId{1};
     orbiter.rails.sc_id = 123;
-    state._orbiters.push_back(orbiter);
+    state._orbit.orbiters().push_back(orbiter);
 
-    state._orbitsim.reset();
-    state._rails_warp_active = true;
+    state._orbit.scenario_owner().reset();
+    state._orbital_physics.set_rails_warp_active_for_test(true);
     state._time_warp.mode = Mode::RailsWarp;
     state._time_warp.warp_level = TimeWarpState::kMaxWarpLevel;
 
     state.set_time_warp_level(ctx, 0);
 
-    ASSERT_EQ(state._orbiters.size(), 1u);
+    ASSERT_EQ(state._orbit.orbiters().size(), 1u);
     EXPECT_EQ(state._time_warp.mode, Mode::Realtime);
     EXPECT_EQ(state._time_warp.warp_level, 0);
-    EXPECT_FALSE(state._rails_warp_active);
-    EXPECT_EQ(state._orbiters[0].rails.sc_id, orbitsim::kInvalidSpacecraftId);
+    EXPECT_FALSE(state._orbital_physics.rails_warp_active());
+    EXPECT_EQ(state._orbit.orbiters()[0].rails.sc_id, orbitsim::kInvalidSpacecraftId);
 }
 
 TEST(GameplayStateTimeWarpTransition, WarpLevelClampsToBounds)
@@ -62,14 +60,14 @@ TEST(GameplayStateTimeWarpTransition, WarpLevelClampsToBounds)
     EXPECT_EQ(state._time_warp.mode, Mode::Realtime);
 
     // Keep mode in Rails so upper-bound clamp can be asserted without fallback.
-    state._rails_warp_active = true;
+    state._orbital_physics.set_rails_warp_active_for_test(true);
     state._time_warp.mode = Mode::RailsWarp;
     state._time_warp.warp_level = TimeWarpState::kMaxWarpLevel;
 
     state.set_time_warp_level(ctx, 999);
     EXPECT_EQ(state._time_warp.warp_level, TimeWarpState::kMaxWarpLevel);
     EXPECT_EQ(state._time_warp.mode, Mode::RailsWarp);
-    EXPECT_TRUE(state._rails_warp_active);
+    EXPECT_TRUE(state._orbital_physics.rails_warp_active());
 }
 
 int main(int argc, char **argv)
@@ -77,4 +75,3 @@ int main(int argc, char **argv)
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
-

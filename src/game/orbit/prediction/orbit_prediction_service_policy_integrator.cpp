@@ -18,22 +18,22 @@ namespace Game
     std::size_t count_future_maneuver_impulses(const OrbitPredictionService::Request &request)
     {
         return static_cast<std::size_t>(std::count_if(
-                request.maneuver_impulses.begin(),
-                request.maneuver_impulses.end(),
+                request.maneuver.maneuver_impulses.begin(),
+                request.maneuver.maneuver_impulses.end(),
                 [&request](const OrbitPredictionService::ManeuverImpulse &impulse) {
-                    return std::isfinite(impulse.t_s) && impulse.t_s >= request.sim_time_s;
+                    return std::isfinite(impulse.t_s) && impulse.t_s >= request.world.sim_time_s;
                 }));
     }
 
     bool request_needs_control_sensitive_prediction(const OrbitPredictionService::Request &request)
     {
-        return request.thrusting || count_future_maneuver_impulses(request) > 0;
+        return request.options.thrusting || count_future_maneuver_impulses(request) > 0;
     }
 
     double resolve_prediction_integrator_max_step_s(const OrbitPredictionService::Request &request,
                                                     const double /*resolved_horizon_s*/)
     {
-        if (request.solve_quality == OrbitPredictionService::SolveQuality::FastPreview)
+        if (request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview)
         {
             return OrbitPredictionTuning::kPredictionIntegratorMaxStepPreviewS;
         }

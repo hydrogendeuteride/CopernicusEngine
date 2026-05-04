@@ -7,6 +7,8 @@
 #include "game/orbit/orbit_prediction_service.h"
 #include "game/orbit/orbit_prediction_math.h"
 #include "game/orbit/orbit_prediction_tuning.h"
+#include "game/orbit/prediction/prediction_diagnostics_util.h"
+#include "game/orbit/trajectory/trajectory_utils.h"
 
 #include "orbitsim/coordinate_frames.hpp"
 #include "orbitsim/game_sim.hpp"
@@ -15,9 +17,11 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -26,18 +30,17 @@ namespace Game
     // ── Constants ──────────────────────────────────────────────────────────────
     constexpr double kEphemerisDurationEpsilonS = 1.0e-6;
     constexpr double kEphemerisDtEpsilonS = 1.0e-9;
+    constexpr double kPlannedChunkBoundaryEpsilonS = 1.0e-9;
+    constexpr uint64_t kPlannedCacheHashSeed = 0xcbf29ce484222325ULL;
     constexpr std::size_t kMaxCachedEphemerides = 64;
-    constexpr double kContinuityMinTimeEpsilonS = 1.0e-6;
-    constexpr double kContinuityMinPosToleranceM = 1.0e-3;
-    constexpr double kContinuityMinVelToleranceMps = 1.0e-6;
 
     using CancelCheck = std::function<bool()>;
 
     inline bool request_can_reuse_spacecraft_baseline(const OrbitPredictionService::Request &request)
     {
-        return request.kind == OrbitPredictionService::RequestKind::Spacecraft &&
-               !request.thrusting &&
-               !request.maneuver_impulses.empty();
+        return request.envelope.kind == OrbitPredictionService::RequestKind::Spacecraft &&
+               !request.options.thrusting &&
+               !request.maneuver.maneuver_impulses.empty();
     }
 
     inline std::size_t prediction_sample_budget(const OrbitPredictionService::Request &request,
@@ -50,153 +53,12 @@ namespace Game
     }
 
     // ── Inline micro-helpers ──────────────────────────────────────────────────
-    inline bool finite_vec3(const glm::dvec3 &v)
-    {
-        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-    }
-
-    inline bool finite_state(const orbitsim::State &state)
-    {
-        return finite_vec3(state.position_m) && finite_vec3(state.velocity_mps);
-    }
-
-    inline double prediction_segment_end_time(const orbitsim::TrajectorySegment &segment)
-    {
-        return segment.t0_s + segment.dt_s;
-    }
-
-    inline double prediction_segment_span_s(const std::vector<orbitsim::TrajectorySegment> &segments)
-    {
-        if (segments.empty())
-        {
-            return 0.0;
-        }
-
-        const double t0_s = segments.front().t0_s;
-        const double t1_s = prediction_segment_end_time(segments.back());
-        if (!std::isfinite(t0_s) || !std::isfinite(t1_s) || !(t1_s > t0_s))
-        {
-            return 0.0;
-        }
-
-        return t1_s - t0_s;
-    }
-
-    inline double continuity_time_epsilon_s(const double reference_time_s)
-    {
-        return std::max(kContinuityMinTimeEpsilonS, std::abs(reference_time_s) * 1.0e-12);
-    }
-
     inline double request_end_time_s(const OrbitPredictionService::Request &request)
     {
-        return request.sim_time_s + std::max(0.0, std::isfinite(request.future_window_s) ? request.future_window_s : 0.0);
-    }
-
-    inline bool trajectory_segments_cover_window(const std::vector<orbitsim::TrajectorySegment> &segments,
-                                                 const double sim_time_s,
-                                                 const double required_duration_s)
-    {
-        if (segments.empty() || !std::isfinite(sim_time_s))
-        {
-            return false;
-        }
-
-        const double end_time_s = prediction_segment_end_time(segments.back());
-        const double start_epsilon_s = continuity_time_epsilon_s(sim_time_s);
-        const double end_epsilon_s = continuity_time_epsilon_s(end_time_s);
-        const double required_end_s = sim_time_s + std::max(0.0, required_duration_s);
-        return segments.front().t0_s <= (sim_time_s + start_epsilon_s) &&
-               end_time_s >= (required_end_s - end_epsilon_s);
-    }
-
-    inline double continuity_pos_tolerance_m(const orbitsim::State &a, const orbitsim::State &b)
-    {
-        const double scale_m =
-                std::max({1.0, glm::length(glm::dvec3(a.position_m)), glm::length(glm::dvec3(b.position_m))});
-        return std::max(kContinuityMinPosToleranceM, scale_m * 1.0e-10);
-    }
-
-    inline double continuity_vel_tolerance_mps(const orbitsim::State &a, const orbitsim::State &b)
-    {
-        const double scale_mps =
-                std::max({1.0, glm::length(glm::dvec3(a.velocity_mps)), glm::length(glm::dvec3(b.velocity_mps))});
-        return std::max(kContinuityMinVelToleranceMps, scale_mps * 1.0e-10);
-    }
-
-    inline bool states_are_continuous(const orbitsim::State &a, const orbitsim::State &b)
-    {
-        if (!finite_state(a) || !finite_state(b))
-        {
-            return false;
-        }
-
-        const double pos_gap_m = glm::length(glm::dvec3(a.position_m - b.position_m));
-        const double vel_gap_mps = glm::length(glm::dvec3(a.velocity_mps - b.velocity_mps));
-        return pos_gap_m <= continuity_pos_tolerance_m(a, b) &&
-               vel_gap_mps <= continuity_vel_tolerance_mps(a, b);
-    }
-
-    inline bool states_are_position_continuous(const orbitsim::State &a, const orbitsim::State &b)
-    {
-        if (!finite_state(a) || !finite_state(b))
-        {
-            return false;
-        }
-
-        const double pos_gap_m = glm::length(glm::dvec3(a.position_m - b.position_m));
-        return pos_gap_m <= continuity_pos_tolerance_m(a, b);
-    }
-
-    inline bool segment_allows_velocity_discontinuity(const orbitsim::TrajectorySegment &segment)
-    {
-        return (segment.flags & (orbitsim::kTrajectorySegmentFlagImpulseBoundary |
-                                 orbitsim::kTrajectorySegmentFlagBurnBoundary)) != 0u;
-    }
-
-    inline bool validate_trajectory_segment_continuity(const std::vector<orbitsim::TrajectorySegment> &segments)
-    {
-        if (segments.empty())
-        {
-            return false;
-        }
-
-        for (std::size_t i = 0; i < segments.size(); ++i)
-        {
-            const orbitsim::TrajectorySegment &segment = segments[i];
-            if (!(segment.dt_s > 0.0) || !std::isfinite(segment.t0_s) || !std::isfinite(segment.dt_s) ||
-                !finite_state(segment.start) || !finite_state(segment.end))
-            {
-                return false;
-            }
-
-            if (i == 0)
-            {
-                continue;
-            }
-
-            const orbitsim::TrajectorySegment &prev = segments[i - 1];
-            const double prev_t1_s = prediction_segment_end_time(prev);
-            if (std::abs(segment.t0_s - prev_t1_s) > continuity_time_epsilon_s(prev_t1_s))
-            {
-                return false;
-            }
-
-            if (segment_allows_velocity_discontinuity(segment))
-            {
-                if (!states_are_position_continuous(prev.end, segment.start))
-                {
-                    return false;
-                }
-                continue;
-            }
-
-            if (!states_are_continuous(prev.end, segment.start))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return request.world.sim_time_s + std::max(0.0,
+                                                   std::isfinite(request.options.future_window_s)
+                                                           ? request.options.future_window_s
+                                                           : 0.0);
     }
 
     inline bool validate_ephemeris_continuity(const orbitsim::CelestialEphemeris &ephemeris)
@@ -248,127 +110,6 @@ namespace Game
         return true;
     }
 
-    template<typename AdaptiveDiag>
-    OrbitPredictionService::AdaptiveStageDiagnostics make_stage_diagnostics_from_adaptive(
-            const AdaptiveDiag &diag,
-            const double requested_duration_s,
-            const bool cache_reused = false)
-    {
-        OrbitPredictionService::AdaptiveStageDiagnostics out{};
-        out.requested_duration_s = std::max(0.0, requested_duration_s);
-        out.covered_duration_s = std::max(0.0, diag.covered_duration_s);
-        out.accepted_segments = diag.accepted_segments;
-        out.rejected_splits = diag.rejected_splits;
-        out.forced_boundary_splits = diag.forced_boundary_splits;
-        out.min_dt_s = diag.min_dt_s;
-        out.max_dt_s = diag.max_dt_s;
-        out.avg_dt_s = diag.avg_dt_s;
-        out.hard_cap_hit = diag.hard_cap_hit;
-        out.cancelled = diag.cancelled;
-        out.cache_reused = cache_reused;
-        return out;
-    }
-
-    inline OrbitPredictionService::AdaptiveStageDiagnostics make_stage_diagnostics_from_segments(
-            const std::vector<orbitsim::TrajectorySegment> &segments,
-            const double requested_duration_s,
-            const bool cache_reused = false)
-    {
-        OrbitPredictionService::AdaptiveStageDiagnostics out{};
-        out.requested_duration_s = std::max(0.0, requested_duration_s);
-        out.covered_duration_s = prediction_segment_span_s(segments);
-        out.accepted_segments = segments.size();
-        out.cache_reused = cache_reused;
-
-        bool first_dt = true;
-        double dt_sum_s = 0.0;
-        for (const orbitsim::TrajectorySegment &segment : segments)
-        {
-            if (!(segment.dt_s > 0.0) || !std::isfinite(segment.dt_s))
-            {
-                continue;
-            }
-
-            if ((segment.flags & (orbitsim::kTrajectorySegmentFlagForcedBoundary |
-                                  orbitsim::kTrajectorySegmentFlagImpulseBoundary |
-                                  orbitsim::kTrajectorySegmentFlagBurnBoundary)) != 0u)
-            {
-                ++out.forced_boundary_splits;
-            }
-            if ((segment.flags & orbitsim::kTrajectorySegmentFlagFrameResegmented) != 0u)
-            {
-                ++out.frame_resegmentation_count;
-            }
-
-            if (first_dt)
-            {
-                out.min_dt_s = segment.dt_s;
-                out.max_dt_s = segment.dt_s;
-                first_dt = false;
-            }
-            else
-            {
-                out.min_dt_s = std::min(out.min_dt_s, segment.dt_s);
-                out.max_dt_s = std::max(out.max_dt_s, segment.dt_s);
-            }
-            dt_sum_s += segment.dt_s;
-        }
-
-        if (out.accepted_segments > 0 && dt_sum_s > 0.0)
-        {
-            out.avg_dt_s = dt_sum_s / static_cast<double>(out.accepted_segments);
-        }
-
-        return out;
-    }
-
-    inline OrbitPredictionService::AdaptiveStageDiagnostics make_stage_diagnostics_from_ephemeris(
-            const OrbitPredictionService::SharedCelestialEphemeris &ephemeris,
-            const double requested_duration_s,
-            const bool cache_reused = false)
-    {
-        OrbitPredictionService::AdaptiveStageDiagnostics out{};
-        out.requested_duration_s = std::max(0.0, requested_duration_s);
-        out.cache_reused = cache_reused;
-        if (!ephemeris || ephemeris->empty())
-        {
-            return out;
-        }
-
-        out.covered_duration_s = std::max(0.0, ephemeris->t_end_s() - ephemeris->t0_s());
-        out.accepted_segments = ephemeris->segments.size();
-
-        bool first_dt = true;
-        double dt_sum_s = 0.0;
-        for (const orbitsim::CelestialEphemerisSegment &segment : ephemeris->segments)
-        {
-            if (!(segment.dt_s > 0.0) || !std::isfinite(segment.dt_s))
-            {
-                continue;
-            }
-
-            if (first_dt)
-            {
-                out.min_dt_s = segment.dt_s;
-                out.max_dt_s = segment.dt_s;
-                first_dt = false;
-            }
-            else
-            {
-                out.min_dt_s = std::min(out.min_dt_s, segment.dt_s);
-                out.max_dt_s = std::max(out.max_dt_s, segment.dt_s);
-            }
-            dt_sum_s += segment.dt_s;
-        }
-
-        if (out.accepted_segments > 0 && dt_sum_s > 0.0)
-        {
-            out.avg_dt_s = dt_sum_s / static_cast<double>(out.accepted_segments);
-        }
-
-        return out;
-    }
-
     // ── Structs ───────────────────────────────────────────────────────────────
     struct PlannedSegmentBoundaryState
     {
@@ -376,16 +117,6 @@ namespace Game
         orbitsim::State state_before{};
         orbitsim::State state_after{};
         std::uint32_t flags{orbitsim::kTrajectorySegmentFlagImpulseBoundary};
-    };
-
-    enum class TrajectoryBoundarySide
-    {
-        // At t == segment boundary, return the state from the segment ending at t.
-        Before,
-        // At t == segment boundary, return the state from the segment starting at t.
-        After,
-        // Position-only callers should not interpret boundary velocity.
-        ContinuousPositionOnly,
     };
 
     struct CelestialPredictionSamplingSpec
@@ -405,15 +136,6 @@ namespace Game
             const orbitsim::CelestialEphemeris &ephemeris,
             orbitsim::BodyId body_id);
 
-    bool eval_segment_state(const orbitsim::TrajectorySegment &segment,
-                            const double t_s,
-                            orbitsim::State &out_state);
-
-    bool sample_trajectory_segment_state(const std::vector<orbitsim::TrajectorySegment> &segments,
-                                          const double t_s,
-                                          orbitsim::State &out_state,
-                                          TrajectoryBoundarySide boundary_side = TrajectoryBoundarySide::Before);
-
     void append_or_merge_planned_boundary_state(std::vector<PlannedSegmentBoundaryState> &states,
                                                 const double t_s,
                                                 const orbitsim::State &state_before,
@@ -424,16 +146,7 @@ namespace Game
             const std::vector<orbitsim::TrajectorySegment> &segments,
             const std::vector<PlannedSegmentBoundaryState> &boundaries);
 
-    std::vector<orbitsim::TrajectorySegment> slice_trajectory_segments(
-            const std::vector<orbitsim::TrajectorySegment> &segments,
-            double t0_s,
-            double t1_s);
-
     // ── Sampling helpers (orbit_prediction_service_sampling.cpp) ──────────────
-    std::vector<orbitsim::TrajectorySample> resample_segments_uniform(
-            const std::vector<orbitsim::TrajectorySegment> &segments,
-            std::size_t sample_count);
-
     std::vector<orbitsim::TrajectorySample> resample_ephemeris_uniform(
             const orbitsim::CelestialEphemeris &ephemeris,
             orbitsim::BodyId body_id,
@@ -559,8 +272,132 @@ namespace Game
             const OrbitPredictionService::Request &request,
             const orbitsim::MassiveBody &subject_body);
 
-    // ── Planned trajectory types (orbit_prediction_service_planned.cpp) ────
+    using EphemerisResolverFn = std::function<OrbitPredictionService::SharedCelestialEphemeris(
+            const OrbitPredictionService::EphemerisBuildRequest &,
+            const CancelCheck &,
+            OrbitPredictionService::AdaptiveStageDiagnostics *)>;
     using PublishFn = std::function<bool(OrbitPredictionService::Result)>;
+
+    struct EphemerisResolveOutcome
+    {
+        OrbitPredictionService::Status status{OrbitPredictionService::Status::Success};
+        OrbitPredictionService::SharedCelestialEphemeris ephemeris{};
+        OrbitPredictionService::AdaptiveStageDiagnostics diagnostics{};
+    };
+
+    EphemerisResolveOutcome resolve_ephemeris_for_request(
+            const OrbitPredictionService::Request &request,
+            const OrbitPredictionService::EphemerisSamplingSpec &sampling_spec,
+            double horizon_s,
+            const CancelCheck &cancel_requested,
+            const EphemerisResolverFn &resolve_ephemeris);
+
+    OrbitPredictionService::Status solve_celestial_prediction_route(
+            const OrbitPredictionService::Request &request,
+            orbitsim::GameSimulation &sim,
+            const CancelCheck &cancel_requested,
+            const EphemerisResolverFn &resolve_ephemeris,
+            OrbitPredictionService::Result &out);
+
+    OrbitPredictionService::Status solve_spacecraft_baseline_trajectory(
+            const OrbitPredictionService::Request &request,
+            orbitsim::GameSimulation &sim,
+            const orbitsim::CelestialEphemeris &ephemeris,
+            orbitsim::GameSimulation::SpacecraftHandle ship_handle,
+            const orbitsim::AdaptiveSegmentOptions &segment_options,
+            double horizon_s,
+            const CancelCheck &cancel_requested,
+            OrbitPredictionService::Result &out);
+
+    // ── Spacecraft route types (orbit_prediction_service_spacecraft_route.cpp)
+    struct ReusableSpacecraftBaseline
+    {
+        std::vector<orbitsim::TrajectorySample> trajectory_inertial{};
+        std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial{};
+    };
+
+    struct PlannedTrajectoryServices
+    {
+        virtual ~PlannedTrajectoryServices() = default;
+        virtual std::optional<OrbitPredictionService::PlannedChunkCacheEntry> find_cached_chunk(
+                const OrbitPredictionService::PlannedChunkCacheKey &key,
+                const orbitsim::State &expected_start_state) = 0;
+        virtual void store_cached_chunk(OrbitPredictionService::PlannedChunkCacheEntry entry) = 0;
+        virtual OrbitPredictionService::SharedCelestialEphemeris get_or_build_ephemeris(
+                const OrbitPredictionService::EphemerisBuildRequest &request,
+                const CancelCheck &cancel_requested) = 0;
+    };
+
+    struct SpacecraftPredictionRouteServices : PlannedTrajectoryServices
+    {
+        virtual std::optional<ReusableSpacecraftBaseline> find_reusable_baseline(
+                uint64_t track_id,
+                uint64_t request_epoch) = 0;
+        virtual void store_reusable_baseline(
+                uint64_t track_id,
+                uint64_t generation_id,
+                uint64_t request_epoch,
+                OrbitPredictionService::SharedCelestialEphemeris shared_ephemeris,
+                std::vector<orbitsim::TrajectorySample> trajectory_inertial,
+                std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial) = 0;
+    };
+
+    struct PredictionRouteJobIdentity
+    {
+        uint64_t generation_id{0};
+        uint64_t request_epoch{0};
+    };
+
+    struct PredictionRouteCallbacks
+    {
+        const CancelCheck &cancel_requested;
+        PublishFn publish;
+        std::chrono::steady_clock::time_point compute_start;
+    };
+
+    struct PredictionRouteMutableState
+    {
+        orbitsim::GameSimulation &sim;
+        OrbitPredictionService::Result &out;
+    };
+
+    struct SpacecraftPredictionRouteEnvironment
+    {
+        const OrbitPredictionService::Request &request;
+        PredictionRouteJobIdentity job;
+        PredictionRouteMutableState state;
+        const OrbitPredictionService::EphemerisSamplingSpec &sampling_spec;
+        const EphemerisResolverFn &resolve_ephemeris;
+        PredictionRouteCallbacks callbacks;
+        SpacecraftPredictionRouteServices &services;
+    };
+
+    struct SpacecraftPredictionRouteOutcome
+    {
+        OrbitPredictionService::Status status{OrbitPredictionService::Status::Success};
+        bool published_staged_preview{false};
+    };
+
+    SpacecraftPredictionRouteOutcome solve_spacecraft_prediction_route(
+            const SpacecraftPredictionRouteEnvironment &env);
+
+    // ── Planned trajectory types (orbit_prediction_service_planned.cpp) ────
+
+    struct PlannedPredictionRouteEnvironment
+    {
+        const OrbitPredictionService::Request &request;
+        PredictionRouteCallbacks callbacks;
+        OrbitPredictionService::Result &out;
+        const orbitsim::CelestialEphemeris &ephemeris;
+        const orbitsim::State &ship_state;
+        PlannedTrajectoryServices &services;
+    };
+
+    struct PlannedPredictionRouteOutcome
+    {
+        OrbitPredictionService::Status status{OrbitPredictionService::Status::Success};
+        bool published_staged_preview{false};
+    };
 
     struct PlannedTrajectoryContext
     {
@@ -569,14 +406,7 @@ namespace Game
         OrbitPredictionService::Result &out;
         const orbitsim::CelestialEphemeris &ephemeris;
         PublishFn publish;
-
-        std::function<std::optional<OrbitPredictionService::PlannedChunkCacheEntry>(
-                const OrbitPredictionService::PlannedChunkCacheKey &,
-                const orbitsim::State &)> find_cached_chunk;
-        std::function<void(OrbitPredictionService::PlannedChunkCacheEntry)> store_cached_chunk;
-        std::function<OrbitPredictionService::SharedCelestialEphemeris(
-                const OrbitPredictionService::EphemerisBuildRequest &,
-                const CancelCheck &)> get_or_build_ephemeris;
+        PlannedTrajectoryServices &services;
     };
 
     struct PlannedChunkPacket
@@ -609,6 +439,38 @@ namespace Game
         OrbitPredictionService::Status status{OrbitPredictionService::Status::Success};
     };
 
+    struct StagedCoreDataBuilder
+    {
+        const OrbitPredictionService::Result &source;
+        std::shared_ptr<const OrbitPredictionService::Result::CoreData> staged_core_data{};
+
+        std::shared_ptr<const OrbitPredictionService::Result::CoreData> get();
+    };
+
+    struct FullStreamBatchPublisher
+    {
+        using MakeStageResultFn = std::function<OrbitPredictionService::Result(
+                const PlannedSolveOutput &,
+                const std::vector<OrbitPredictionService::PublishedChunk> &,
+                OrbitPredictionService::PublishStage,
+                std::vector<OrbitPredictionService::StreamedPlannedChunk>,
+                bool)>;
+
+        bool active{false};
+        double min_publish_interval_s{OrbitPredictionTuning::kFullStreamPublishMinIntervalS};
+        std::chrono::steady_clock::time_point last_publish_tp{};
+        bool published_any_batch{false};
+        std::vector<OrbitPredictionService::PublishedChunk> pending_published_chunks{};
+        std::vector<OrbitPredictionService::StreamedPlannedChunk> pending_streamed_chunks{};
+
+        void append(const OrbitPredictionService::PublishedChunk &published_chunk,
+                    const PlannedChunkPacket &packet);
+        bool flush(const PlannedSolveOutput &stage_output,
+                   const MakeStageResultFn &make_stage_result,
+                   const PublishFn &publish,
+                   bool force_publish);
+    };
+
     struct ChunkAttemptOutput
     {
         std::vector<orbitsim::TrajectorySegment> segments{};
@@ -621,9 +483,97 @@ namespace Game
         bool reused_from_cache{false};
     };
 
+    struct PlannedChunkAttemptRequest
+    {
+        OrbitPredictionService::PredictionChunkPlan chunk{};
+        OrbitPredictionService::PredictionChunkPlan effective_chunk{};
+        bool split_chunk{false};
+        bool include_chunk_end_impulse{false};
+        uint64_t baseline_generation_id{0};
+        uint64_t frame_independent_generation{0};
+        orbitsim::State start_state{};
+    };
+
     // ── Planned trajectory helpers (orbit_prediction_service_planned.cpp) ────
+    void accumulate_planned_stage_diagnostics(
+            OrbitPredictionService::AdaptiveStageDiagnostics &dst,
+            const OrbitPredictionService::AdaptiveStageDiagnostics &src,
+            double &dt_sum_s,
+            bool &has_dt);
+    void append_planned_chunk_samples(std::vector<orbitsim::TrajectorySample> &dst,
+                                      std::vector<orbitsim::TrajectorySample> src);
+
+    uint64_t planned_baseline_generation_hash(const OrbitPredictionService::Request &request,
+                                              double start_time_s,
+                                              const orbitsim::State &start_state);
+    uint64_t planned_solver_context_hash(const OrbitPredictionService::Request &request,
+                                         const std::vector<orbitsim::MassiveBody> &massive_bodies);
+    void accumulate_planned_maneuver_cache_hash(
+            uint64_t &seed,
+            const OrbitPredictionService::ManeuverImpulse &impulse);
+    OrbitPredictionService::PlannedChunkCacheKey make_planned_chunk_cache_key(
+            const OrbitPredictionService::Request &request,
+            const OrbitPredictionService::PredictionChunkPlan &chunk,
+            OrbitPredictionService::PredictionProfileId profile_id,
+            uint64_t baseline_generation_id,
+            uint64_t frame_independent_generation,
+            uint64_t upstream_maneuver_hash);
+
+    bool planned_maneuver_impulse_input_is_valid(
+            const OrbitPredictionService::ManeuverImpulse &src);
+    void record_planned_maneuver_apply_failure(
+            OrbitPredictionService::AdaptiveStageDiagnostics &diagnostics,
+            int node_id);
+    bool apply_planned_maneuver_impulse_to_spacecraft(
+            orbitsim::Spacecraft &spacecraft,
+            const OrbitPredictionService::ManeuverImpulse &src,
+            const std::vector<orbitsim::MassiveBody> &massive_bodies,
+            const orbitsim::CelestialEphemeris &ephemeris,
+            double softening_length_m,
+            std::vector<OrbitPredictionService::ManeuverNodePreview> *out_previews,
+            std::vector<PlannedSegmentBoundaryState> *out_boundaries,
+            OrbitPredictionService::AdaptiveStageDiagnostics &diagnostics);
+
     void append_planned_chunk_packet(PlannedSolveOutput &planned, PlannedChunkPacket packet);
     void apply_planned_range_summary(PlannedSolveOutput &planned, const PlannedSolveRangeSummary &summary);
+
+    ChunkAttemptOutput solve_planned_chunk_attempt(
+            PlannedTrajectoryContext &ctx,
+            const PlannedChunkAttemptRequest &request);
+
+    OrbitPredictionService::PublishedChunk make_published_chunk(
+            const PlannedChunkPacket &packet,
+            uint32_t chunk_id,
+            OrbitPredictionService::ChunkQualityState quality_state);
+    void append_published_chunk(std::vector<OrbitPredictionService::PublishedChunk> &dst,
+                                const PlannedChunkPacket &packet,
+                                uint32_t chunk_id,
+                                OrbitPredictionService::ChunkQualityState quality_state);
+    void append_published_chunks_as_final(
+            std::vector<OrbitPredictionService::PublishedChunk> &dst,
+            const std::vector<OrbitPredictionService::PublishedChunk> &src);
+    OrbitPredictionService::PublishedChunk make_published_chunk_from_plan(
+            const OrbitPredictionService::PredictionChunkPlan &chunk,
+            uint32_t chunk_id,
+            bool reused_from_cache);
+    OrbitPredictionService::Result make_planned_stage_result(
+            const OrbitPredictionService::Result &base_result,
+            const PlannedSolveOutput &stage_output,
+            const std::vector<OrbitPredictionService::PublishedChunk> &published_chunks,
+            OrbitPredictionService::PublishStage publish_stage,
+            std::shared_ptr<const OrbitPredictionService::Result::CoreData> shared_core_data,
+            std::vector<OrbitPredictionService::StreamedPlannedChunk> streamed_planned_chunks = {},
+            bool include_cumulative_planned = true);
+    bool build_cached_prefix_stream_chunks(
+            const OrbitPredictionService::Request &request,
+            const OrbitPredictionService::PredictionSolvePlan &solve_plan,
+            std::size_t suffix_begin_index,
+            const PlannedSolveOutput &prefix_output,
+            std::vector<OrbitPredictionService::PublishedChunk> &out_published_chunks,
+            std::vector<OrbitPredictionService::StreamedPlannedChunk> &out_streamed_chunks);
+    FullStreamBatchPublisher make_full_stream_batch_publisher(
+            const OrbitPredictionService::Request &request,
+            std::chrono::steady_clock::time_point compute_start);
 
     PlannedSolveRangeSummary solve_planned_chunk_range(
             PlannedTrajectoryContext &ctx,
@@ -632,5 +582,8 @@ namespace Game
             std::size_t chunk_end_index,
             const orbitsim::State &range_start_state,
             std::function<bool(PlannedChunkPacket &&)> chunk_sink);
+
+    PlannedPredictionRouteOutcome solve_planned_prediction_route(
+            const PlannedPredictionRouteEnvironment &env);
 
 } // namespace Game

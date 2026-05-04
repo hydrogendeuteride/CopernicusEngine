@@ -30,11 +30,10 @@ namespace Game
             uint64_t maneuver_plan_revision{0};
             bool maneuver_plan_signature_valid{false};
             uint64_t maneuver_plan_signature{0};
-            OrbitPredictionService::RequestPriority priority{
-                    OrbitPredictionService::RequestPriority::BackgroundOrbiter};
-            OrbitPredictionService::Result solver_result{};
+            OrbitPredictionRequestPriority priority{OrbitPredictionRequestPriority::BackgroundOrbiter};
+            OrbitPredictionResult solver_result{};
             bool reuse_existing_base_frame{false};
-            OrbitPredictionService::AdaptiveStageDiagnostics reused_base_frame_diagnostics{};
+            OrbitPredictionAdaptiveStageDiagnostics reused_base_frame_diagnostics{};
             WorldVec3 build_pos_world{0.0, 0.0, 0.0};
             glm::dvec3 build_vel_world{0.0, 0.0, 0.0};
             orbitsim::GameSimulation::Config sim_config{};
@@ -64,9 +63,8 @@ namespace Game
             orbitsim::BodyId analysis_body_id{orbitsim::kInvalidBodyId};
             bool valid{false};
             bool base_frame_reused{false};
-            OrbitPredictionService::SolveQuality solve_quality{OrbitPredictionService::SolveQuality::Full};
-            OrbitPredictionService::PublishStage publish_stage{
-                    OrbitPredictionService::PublishStage::Final};
+            OrbitPredictionSolveQuality solve_quality{OrbitPredictionSolveQuality::Full};
+            OrbitPredictionPublishStage publish_stage{OrbitPredictionPublishStage::Final};
             TimingStats timings{};
             OrbitPredictionDerivedDiagnostics diagnostics{};
             OrbitPredictionCache cache{};
@@ -100,13 +98,13 @@ namespace Game
                                           uint64_t generation_id,
                                           uint64_t request_epoch,
                                           uint64_t current_request_epoch,
-                                          OrbitPredictionService::SolveQuality solve_quality,
+                                          OrbitPredictionSolveQuality solve_quality,
                                           const std::unordered_map<uint64_t, uint64_t> &latest_requested_generation_by_track);
         bool should_continue_job(uint64_t track_id,
                                  uint64_t generation_id,
                                  uint64_t request_epoch,
                                  uint64_t maneuver_plan_revision,
-                                 OrbitPredictionService::SolveQuality solve_quality) const;
+                                 OrbitPredictionSolveQuality solve_quality) const;
         void worker_loop();
 
         std::vector<std::thread> _workers{};
