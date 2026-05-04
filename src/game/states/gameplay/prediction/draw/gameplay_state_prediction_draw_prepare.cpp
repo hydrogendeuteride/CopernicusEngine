@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace Game
 {
@@ -94,16 +95,23 @@ namespace Game
         }
     }
 
-    bool GameplayPredictionAdapter::build_orbit_prediction_track_draw_context(
+    Draw::PredictionDrawPlanner::PredictionDrawPlanner(GameplayPredictionAdapter &adapter)
+        : _adapter(adapter)
+    {
+    }
+
+    bool Draw::PredictionDrawPlanner::build_track(
             PredictionTrackState &track,
             const Draw::PredictionGlobalDrawContext &global_ctx,
-            Draw::PredictionTrackDrawContext &out)
+            Draw::PredictionTrackVisualPlan &plan)
     {
+        Draw::PredictionTrackDrawContext &out = plan.track;
         out = {};
         out.track = &track;
+        const GameplayPredictionContext adapter_context = _adapter.context();
 
-        refresh_prediction_derived_cache(track, global_ctx.display_time_s);
-        if (!prediction_track_has_current_derived_cache(track, global_ctx.display_time_s))
+        _adapter.refresh_prediction_derived_cache(track, global_ctx.display_time_s);
+        if (!_adapter.prediction_track_has_current_derived_cache(track, global_ctx.display_time_s))
         {
             return false;
         }
@@ -115,13 +123,13 @@ namespace Game
         out.traj_planned = &out.planned_cache->display.trajectory_frame_planned;
         out.display_cache = out.planned_cache->display.resolved_frame_spec_valid ? out.planned_cache : out.stable_cache;
 
-        if (!build_prediction_display_transform(
+        if (!_adapter.build_prediction_display_transform(
                     *out.display_cache,
                     out.ref_body_world,
                     out.frame_to_world,
                     global_ctx.display_time_s))
         {
-            out.ref_body_world = prediction_frame_origin_world(*out.display_cache, global_ctx.display_time_s);
+            out.ref_body_world = _adapter.prediction_frame_origin_world(*out.display_cache, global_ctx.display_time_s);
             out.frame_to_world = glm::dmat3(1.0);
         }
 
@@ -138,7 +146,7 @@ namespace Game
             return false;
         }
 
-        if (!get_prediction_subject_world_state(
+        if (!_adapter.prediction_subject_world_state(
                     track.key,
                     out.subject_pos_world_state,
                     out.subject_vel_world,
@@ -150,7 +158,7 @@ namespace Game
         out.subject_pos_world = out.subject_pos_world_state;
         if (track.key.kind == PredictionSubjectKind::Orbiter)
         {
-            if (const Entity *entity = _state._world.entities().find(EntityId{track.key.value}))
+            if (const Entity *entity = adapter_context.world.entities().find(EntityId{track.key.value}))
             {
                 out.subject_pos_world = entity->get_render_physics_center_of_mass_world(global_ctx.alpha_f);
             }
@@ -170,16 +178,16 @@ namespace Game
                                    ? &out.planned_cache->display.trajectory_segments_frame_planned
                                    : out.traj_planned_segments);
 
-        out.is_active = track.key == _state._prediction->state().selection.active_subject;
-        out.active_player_track = out.is_active && prediction_subject_is_player(track.key);
-        const PredictionWindowContextBuilder window_context(context());
+        out.is_active = track.key == _adapter.prediction_draw_state().selection.active_subject;
+        out.active_player_track = out.is_active && _adapter.prediction_subject_is_player(track.key);
+        const PredictionWindowContextBuilder window_context(adapter_context);
         const bool with_maneuver_live_preview =
                 out.active_player_track &&
-                prediction_subject_supports_maneuvers(track.key) &&
-                _state._maneuver.settings().nodes_enabled &&
-                !_state._maneuver.plan().nodes.empty();
+                _adapter.prediction_subject_supports_maneuvers(track.key) &&
+                adapter_context.maneuver.settings().nodes_enabled &&
+                !adapter_context.maneuver.plan().nodes.empty();
         out.active_maneuver_track = with_maneuver_live_preview;
-        const bool live_preview_active = _state._maneuver.live_preview_active(with_maneuver_live_preview);
+        const bool live_preview_active = adapter_context.maneuver.live_preview_active(with_maneuver_live_preview);
         out.maneuver_drag_active =
                 out.active_player_track &&
                 live_preview_active;
@@ -203,17 +211,17 @@ namespace Game
         {
             const auto resolve_stale_prefix_cutoff_s = [&]() {
                 double cutoff_s = std::numeric_limits<double>::quiet_NaN();
-                if (_state._maneuver.edit_preview().state == ManeuverNodeEditPreview::State::EditingTime)
+                if (adapter_context.maneuver.edit_preview().state == ManeuverNodeEditPreview::State::EditingTime)
                 {
                     if (const ManeuverNode *edit_node =
-                                _state._maneuver.plan().find_node(_state._maneuver.edit_preview().node_id))
+                                adapter_context.maneuver.plan().find_node(adapter_context.maneuver.edit_preview().node_id))
                     {
                         cutoff_s = edit_node->time_s;
-                        if (std::isfinite(_state._maneuver.edit_preview().start_time_s))
+                        if (std::isfinite(adapter_context.maneuver.edit_preview().start_time_s))
                         {
                             cutoff_s = std::isfinite(cutoff_s)
-                                               ? std::min(cutoff_s, _state._maneuver.edit_preview().start_time_s)
-                                               : _state._maneuver.edit_preview().start_time_s;
+                                               ? std::min(cutoff_s, adapter_context.maneuver.edit_preview().start_time_s)
+                                               : adapter_context.maneuver.edit_preview().start_time_s;
                         }
                     }
                     return cutoff_s;
@@ -224,7 +232,7 @@ namespace Game
                 if (!std::isfinite(cutoff_s) && out.active_player_track)
                 {
                     if (const ManeuverNode *anchor_node =
-                                _state._maneuver.plan().find_node(_state._maneuver.active_preview_anchor_node_id()))
+                                adapter_context.maneuver.plan().find_node(adapter_context.maneuver.active_preview_anchor_node_id()))
                     {
                         cutoff_s = anchor_node->time_s;
                     }
@@ -233,7 +241,7 @@ namespace Game
                     (live_preview_active || lifecycle.preview_state != PredictionPreviewRuntimeState::Idle))
                 {
                     if (const ManeuverNode *selected_node =
-                                _state._maneuver.plan().find_node(_state._maneuver.plan().selected_node_id))
+                                adapter_context.maneuver.plan().find_node(adapter_context.maneuver.plan().selected_node_id))
                     {
                         cutoff_s = selected_node->time_s;
                     }
@@ -310,8 +318,8 @@ namespace Game
 
         if (out.is_active)
         {
-            _state._prediction->state().orbit_plot_perf.solver_segments_base = static_cast<uint32_t>(out.traj_base_segments->size());
-            _state._prediction->state().orbit_plot_perf.solver_segments_planned =
+            _adapter.prediction_draw_state().orbit_plot_perf.solver_segments_base = static_cast<uint32_t>(out.traj_base_segments->size());
+            _adapter.prediction_draw_state().orbit_plot_perf.solver_segments_planned =
                     out.traj_planned_segments
                             ? static_cast<uint32_t>(out.traj_planned_segments->size())
                             : 0u;
@@ -332,7 +340,7 @@ namespace Game
                                                     out.frame_to_world);
         out.direct_world_polyline = Draw::frame_spec_uses_direct_world_polyline(
                 out.display_cache->display.resolved_frame_spec_valid ? out.display_cache->display.resolved_frame_spec
-                                                                     : _state._prediction->state().frame_selection.spec);
+                                                                     : _adapter.prediction_draw_state().frame_selection.spec);
 
         out.draw_ctx.orbit_plot = global_ctx.orbit_plot;
         out.draw_ctx.ref_body_world = out.ref_body_world;
@@ -345,10 +353,10 @@ namespace Game
         out.draw_ctx.viewport_height_px = std::max(1.0, static_cast<double>(global_ctx.viewport_height_px));
         out.draw_ctx.render_error_px = global_ctx.render_error_px;
         out.draw_ctx.render_max_segments =
-                static_cast<std::size_t>(std::max(1, _state._prediction->budget().render_max_segments_cpu));
+                static_cast<std::size_t>(std::max(1, _adapter.prediction_draw_budget().render_max_segments_cpu));
         out.draw_ctx.line_overlay_boost = out.maneuver_drag_active
                                                   ? 0.0f
-                                                  : std::clamp(_state._prediction->state().line_overlay_boost, 0.0f, 1.0f);
+                                                  : std::clamp(_adapter.prediction_draw_state().line_overlay_boost, 0.0f, 1.0f);
 
         out.identity_frame_transform = Draw::frame_transform_is_identity(out.frame_to_world);
         out.use_base_adaptive_curve = !out.stable_cache->display.render_curve_frame.empty();
@@ -372,7 +380,7 @@ namespace Game
             out.world_basis_draw_ctx.frame_to_world = glm::dmat3(1.0);
         }
 
-        const glm::vec3 track_rgb = prediction_subject_orbit_rgb(track.key);
+        const glm::vec3 track_rgb = _adapter.prediction_subject_orbit_rgb(track.key);
         out.track_color_full = Draw::scale_line_color(glm::vec4(track_rgb, 0.22f), global_ctx.line_alpha_scale);
         out.track_color_future = Draw::scale_line_color(glm::vec4(track_rgb, 0.80f), global_ctx.line_alpha_scale);
         out.track_color_plan = global_ctx.color_orbit_plan;
@@ -382,7 +390,7 @@ namespace Game
         }
         if (!out.maneuver_drag_active && !out.is_active)
         {
-            out.draw_ctx.line_overlay_boost = std::clamp(_state._prediction->state().line_overlay_boost * 0.35f, 0.0f, 1.0f);
+            out.draw_ctx.line_overlay_boost = std::clamp(_adapter.prediction_draw_state().line_overlay_boost * 0.35f, 0.0f, 1.0f);
         }
         out.world_basis_draw_ctx.line_overlay_boost = out.draw_ctx.line_overlay_boost;
 
@@ -474,6 +482,167 @@ namespace Game
             out.planned_exact_window_s = out.planned_window_policy.exact_window_s;
             out.planned_pick_window_s = out.planned_window_policy.pick_window_s;
         }
+        complete_visual_plan(plan);
+        return true;
+    }
+
+    void Draw::PredictionDrawPlanner::complete_visual_plan(Draw::PredictionTrackVisualPlan &plan)
+    {
+        Draw::PredictionTrackDrawContext preserved_track = std::move(plan.track);
+        plan = {};
+        plan.track = std::move(preserved_track);
+        Draw::PredictionTrackDrawContext &track_ctx = plan.track;
+
+        if (!track_ctx.track || !track_ctx.stable_cache || !track_ctx.planned_cache)
+        {
+            return;
+        }
+
+        const GameplayPredictionState &prediction_state = _adapter.prediction_draw_state();
+        OrbitPredictionCache &stable_cache = *track_ctx.stable_cache;
+        OrbitPredictionCache &planned_cache = *track_ctx.planned_cache;
+
+        track_ctx.base_pick_window = {};
+        track_ctx.planned_draw_window = {};
+        track_ctx.planned_pick_window = {};
+
+        plan.lifecycle = PredictionRuntimeDetail::describe_prediction_track_lifecycle(*track_ctx.track);
+        plan.overlay_layers = PredictionRuntimeDetail::describe_prediction_overlay_layers(
+                plan.lifecycle,
+                track_ctx.active_maneuver_track,
+                track_ctx.maneuver_drag_active,
+                track_ctx.track->preview_anchor.valid);
+
+        const bool preview_window_available =
+                plan.overlay_layers.active_maneuver_track &&
+                track_ctx.track->preview_anchor.valid &&
+                plan.overlay_layers.preview_fallback_active &&
+                std::isfinite(track_ctx.track->preview_anchor.anchor_time_s) &&
+                track_ctx.track->preview_anchor.visual_window_s > 0.0;
+        const auto preview_anchor_window = [&]() {
+            Draw::PickWindow window{};
+            if (!preview_window_available)
+            {
+                return window;
+            }
+
+            window.valid = true;
+            window.t0_s = track_ctx.track->preview_anchor.anchor_time_s;
+            window.t1_s = window.t0_s + track_ctx.track->preview_anchor.visual_window_s;
+            window.anchor_time_s = track_ctx.track->preview_anchor.anchor_time_s;
+            return window;
+        };
+        const auto preview_anchor_pick_window = [&]() {
+            Draw::PickWindow window = preview_anchor_window();
+            if (window.valid && track_ctx.track->preview_anchor.exact_window_s > 0.0)
+            {
+                window.t1_s = window.t0_s + track_ctx.track->preview_anchor.exact_window_s;
+            }
+            return window;
+        };
+
+        track_ctx.planned_draw_window =
+                (plan.overlay_layers.active_maneuver_track &&
+                 track_ctx.planned_window_segments && !track_ctx.planned_window_segments->empty())
+                        ? Draw::build_planned_draw_window(*track_ctx.planned_window_segments,
+                                                          prediction_state.draw_config,
+                                                          track_ctx.planned_window_policy)
+                        : preview_anchor_window();
+        track_ctx.planned_pick_window =
+                (plan.overlay_layers.active_maneuver_track &&
+                 track_ctx.planned_window_segments && !track_ctx.planned_window_segments->empty())
+                        ? Draw::build_planned_pick_window(*track_ctx.planned_window_segments,
+                                                          prediction_state.draw_config,
+                                                          track_ctx.planned_window_policy)
+                        : preview_anchor_pick_window();
+
+        if (prediction_state.draw_full_orbit)
+        {
+            double t_full_end = track_ctx.t1_s;
+            if (stable_cache.analysis.orbital_period_s > 0.0 &&
+                std::isfinite(stable_cache.analysis.orbital_period_s))
+            {
+                t_full_end = std::min(track_ctx.t0_s +
+                                              (stable_cache.analysis.orbital_period_s *
+                                               OrbitPredictionTuning::kFullOrbitDrawPeriodScale),
+                                      track_ctx.t1_s);
+            }
+            const double t_full_start =
+                    std::isfinite(track_ctx.now_s) ? std::clamp(track_ctx.now_s, track_ctx.t0_s, t_full_end)
+                                                   : track_ctx.t0_s;
+            if (t_full_end > t_full_start)
+            {
+                plan.base_full_draw_window.valid = true;
+                plan.base_full_draw_window.t0_s = t_full_start;
+                plan.base_full_draw_window.t1_s = t_full_end;
+                if (track_ctx.is_active && !prediction_state.draw_future_segment)
+                {
+                    track_ctx.base_pick_window = plan.base_full_draw_window;
+                }
+            }
+        }
+
+        if (prediction_state.draw_future_segment)
+        {
+            const double t_end =
+                    (track_ctx.future_window_s > 0.0) ? std::min(track_ctx.now_s + track_ctx.future_window_s, track_ctx.t1_s)
+                                                      : track_ctx.t1_s;
+            if (t_end > track_ctx.now_s)
+            {
+                plan.base_future_draw_window.valid = true;
+                plan.base_future_draw_window.t0_s = track_ctx.now_s;
+                plan.base_future_draw_window.t1_s = t_end;
+                if (track_ctx.is_active)
+                {
+                    track_ctx.base_pick_window = plan.base_future_draw_window;
+                }
+            }
+        }
+
+        plan.preview_plan_color = glm::vec4(track_ctx.track_color_plan.r,
+                                           track_ctx.track_color_plan.g,
+                                           track_ctx.track_color_plan.b,
+                                           std::clamp(std::max(track_ctx.track_color_plan.a, 0.98f), 0.0f, 1.0f));
+        plan.preview_assembly =
+                PredictionRuntimeDetail::prediction_preview_overlay_snapshot_for_draw(
+                        *track_ctx.track,
+                        plan.overlay_layers);
+        plan.full_stream_assembly =
+                PredictionRuntimeDetail::prediction_full_stream_overlay_snapshot_for_draw(
+                        *track_ctx.track,
+                        planned_cache.identity,
+                        planned_cache.display,
+                        plan.overlay_layers);
+        plan.preview_overlay_active = plan.preview_assembly.valid && !plan.preview_assembly.chunks.empty();
+        plan.full_stream_overlay_active = plan.full_stream_assembly.valid && !plan.full_stream_assembly.chunks.empty();
+        plan.planned_cache_pickable =
+                track_ctx.planned_cache_current &&
+                planned_cache.display.has_planned_draw_data();
+
+        const auto assembly_has_pick_curve = [](const PredictionChunkAssembly &assembly) {
+            return std::any_of(assembly.chunks.begin(),
+                               assembly.chunks.end(),
+                               [](const OrbitChunk &chunk) { return !chunk.render_curve.empty(); });
+        };
+        const bool overlay_pick_active = plan.preview_overlay_active || plan.full_stream_overlay_active;
+        plan.planned_pick_uses_adaptive_curve =
+                overlay_pick_active
+                        ? ((plan.preview_overlay_active && assembly_has_pick_curve(plan.preview_assembly)) ||
+                           (plan.full_stream_overlay_active && assembly_has_pick_curve(plan.full_stream_assembly)))
+                        : track_ctx.use_planned_adaptive_curve;
+    }
+
+    bool GameplayPredictionAdapter::build_orbit_prediction_track_draw_context(
+            PredictionTrackState &track,
+            const Draw::PredictionGlobalDrawContext &global_ctx,
+            Draw::PredictionTrackDrawContext &out)
+    {
+        Draw::PredictionTrackVisualPlan plan{};
+        if (!Draw::PredictionDrawPlanner(*this).build_track(track, global_ctx, plan))
+        {
+            return false;
+        }
+        out = std::move(plan.track);
         return true;
     }
 } // namespace Game
