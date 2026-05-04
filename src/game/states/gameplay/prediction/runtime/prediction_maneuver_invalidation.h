@@ -1,11 +1,15 @@
 #pragma once
 
-#include "game/orbit/orbit_prediction_service.h"
 #include "game/states/gameplay/prediction/gameplay_prediction_derived_service.h"
 #include "game/states/gameplay/prediction/gameplay_state_prediction_types.h"
 
 #include <cstdint>
 #include <vector>
+
+namespace Game
+{
+    class OrbitPredictionService;
+}
 
 namespace Game::PredictionManeuverInvalidation
 {

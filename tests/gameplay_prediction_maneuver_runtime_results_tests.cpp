@@ -164,7 +164,7 @@ TEST(GameplayPredictionManeuverTests, MarkManeuverPlanDirtyUnblocksPendingManeuv
     EXPECT_FALSE(updated_track.invalidated_while_pending);
     EXPECT_TRUE(updated_track.dirty);
     EXPECT_EQ(updated_track.pending_solve_quality, Game::OrbitPredictionService::SolveQuality::Full);
-    EXPECT_EQ(state.prediction_for_test().service._latest_maneuver_plan_revision_by_track[updated_track.key.track_id()], 1u);
+    EXPECT_EQ(state.prediction_for_test().solver_service()._latest_maneuver_plan_revision_by_track[updated_track.key.track_id()], 1u);
     EXPECT_EQ(state.prediction_for_test().derived_service._latest_maneuver_plan_revision_by_track[updated_track.key.track_id()], 1u);
 }
 
@@ -176,12 +176,12 @@ TEST(GameplayPredictionManeuverTests, ClearManeuverPredictionArtifactsDropsPlann
     track.key = {Game::PredictionSubjectKind::Orbiter, 1};
     track.supports_maneuvers = true;
     track.cache.identity.valid = true;
-    track.cache.solver.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'100'000.0)};
-    track.cache.solver.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'100'000.0)};
-    track.cache.solver.trajectory_inertial_planned = {make_sample(0.0, 7'000'000.0), make_sample(30.0, 7'050'000.0)};
-    track.cache.solver.trajectory_segments_inertial_planned = {make_segment(0.0, 30.0, 7'000'000.0, 7'050'000.0)};
-    track.cache.display.trajectory_frame_planned = track.cache.solver.trajectory_inertial_planned;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.trajectory_segments_inertial_planned;
+    track.cache.solver.base.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'100'000.0)};
+    track.cache.solver.base.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'100'000.0)};
+    track.cache.solver.planned.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(30.0, 7'050'000.0)};
+    track.cache.solver.planned.trajectory_segments_inertial = {make_segment(0.0, 30.0, 7'000'000.0, 7'050'000.0)};
+    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
+    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
     track.cache.identity.maneuver_plan_signature_valid = true;
     track.cache.identity.maneuver_plan_signature = 42u;
     track.authoritative_cache = track.cache;
@@ -210,14 +210,14 @@ TEST(GameplayPredictionManeuverTests, ClearManeuverPredictionArtifactsDropsPlann
     ASSERT_EQ(state.prediction_for_test().tracks.size(), 1u);
     const Game::PredictionTrackState &cleared = state.prediction_for_test().tracks.front();
     EXPECT_TRUE(cleared.cache.identity.valid);
-    EXPECT_FALSE(cleared.cache.solver.trajectory_inertial.empty());
-    EXPECT_FALSE(cleared.cache.solver.trajectory_segments_inertial.empty());
-    EXPECT_TRUE(cleared.cache.solver.trajectory_inertial_planned.empty());
-    EXPECT_TRUE(cleared.cache.solver.trajectory_segments_inertial_planned.empty());
+    EXPECT_FALSE(cleared.cache.solver.base.trajectory_inertial.empty());
+    EXPECT_FALSE(cleared.cache.solver.base.trajectory_segments_inertial.empty());
+    EXPECT_TRUE(cleared.cache.solver.planned.trajectory_inertial.empty());
+    EXPECT_TRUE(cleared.cache.solver.planned.trajectory_segments_inertial.empty());
     EXPECT_TRUE(cleared.cache.display.trajectory_frame_planned.empty());
     EXPECT_TRUE(cleared.cache.display.trajectory_segments_frame_planned.empty());
     EXPECT_FALSE(cleared.cache.identity.maneuver_plan_signature_valid);
-    EXPECT_TRUE(cleared.authoritative_cache.solver.trajectory_inertial_planned.empty());
+    EXPECT_TRUE(cleared.authoritative_cache.solver.planned.trajectory_inertial.empty());
     EXPECT_FALSE(cleared.authoritative_cache.identity.maneuver_plan_signature_valid);
     EXPECT_EQ(cleared.preview_state, Game::PredictionPreviewRuntimeState::Idle);
     EXPECT_FALSE(cleared.preview_anchor.valid);
@@ -249,8 +249,8 @@ TEST(GameplayPredictionManeuverTests, RemovingLastManeuverNodeClearsPlannedArtif
     track.key = {Game::PredictionSubjectKind::Orbiter, 1};
     track.supports_maneuvers = true;
     track.cache.identity.valid = true;
-    track.cache.solver.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'100'000.0)};
-    track.cache.solver.trajectory_inertial_planned = {make_sample(0.0, 7'000'000.0), make_sample(30.0, 7'050'000.0)};
+    track.cache.solver.base.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(60.0, 7'100'000.0)};
+    track.cache.solver.planned.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(30.0, 7'050'000.0)};
     track.cache.identity.maneuver_plan_signature_valid = true;
     track.cache.identity.maneuver_plan_signature = 9u;
     track.preview_overlay.chunk_assembly.valid = true;
@@ -263,8 +263,8 @@ TEST(GameplayPredictionManeuverTests, RemovingLastManeuverNodeClearsPlannedArtif
     ASSERT_EQ(state.prediction_for_test().tracks.size(), 1u);
     const Game::PredictionTrackState &cleared = state.prediction_for_test().tracks.front();
     EXPECT_TRUE(cleared.cache.identity.valid);
-    EXPECT_FALSE(cleared.cache.solver.trajectory_inertial.empty());
-    EXPECT_TRUE(cleared.cache.solver.trajectory_inertial_planned.empty());
+    EXPECT_FALSE(cleared.cache.solver.base.trajectory_inertial.empty());
+    EXPECT_TRUE(cleared.cache.solver.planned.trajectory_inertial.empty());
     EXPECT_FALSE(cleared.cache.identity.maneuver_plan_signature_valid);
     EXPECT_FALSE(cleared.preview_overlay.chunk_assembly.valid);
     EXPECT_EQ(state._maneuver.revision(), 1u);

@@ -17,7 +17,7 @@ namespace Game
     public:
         static PredictionSolverResultApplyResult apply_solver_result(
                 PredictionTrackState &track,
-                OrbitPredictionService::Result result,
+                OrbitPredictionResult result,
                 const PredictionRuntimeContext &context);
     };
 } // namespace Game

@@ -623,10 +623,10 @@ TEST(GameplayPredictionManeuverTests, PredictionSystemClearsLivePreviewStateWith
     track.cache.identity.valid = true;
     track.cache.identity.maneuver_plan_signature_valid = true;
     track.cache.identity.maneuver_plan_signature = 42u;
-    track.cache.solver.trajectory_inertial_planned = {make_sample(0.0, 7'000'000.0)};
-    track.cache.solver.trajectory_segments_inertial_planned = {make_segment(0.0, 10.0, 7'000'000.0, 7'100'000.0)};
-    track.cache.display.trajectory_frame_planned = track.cache.solver.trajectory_inertial_planned;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.trajectory_segments_inertial_planned;
+    track.cache.solver.planned.trajectory_inertial = {make_sample(0.0, 7'000'000.0)};
+    track.cache.solver.planned.trajectory_segments_inertial = {make_segment(0.0, 10.0, 7'000'000.0, 7'100'000.0)};
+    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
+    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
     track.authoritative_cache = track.cache;
     track.preview_state = Game::PredictionPreviewRuntimeState::PreviewStreaming;
     track.preview_anchor.valid = true;
@@ -648,10 +648,10 @@ TEST(GameplayPredictionManeuverTests, PredictionSystemClearsLivePreviewStateWith
     EXPECT_TRUE(cleared.preview_overlay.chunk_assembly.chunks.empty());
     EXPECT_FALSE(cleared.pick_cache.base_valid);
     EXPECT_FALSE(cleared.pick_cache.planned_valid);
-    EXPECT_FALSE(cleared.cache.solver.trajectory_inertial_planned.empty());
-    EXPECT_FALSE(cleared.cache.solver.trajectory_segments_inertial_planned.empty());
+    EXPECT_FALSE(cleared.cache.solver.planned.trajectory_inertial.empty());
+    EXPECT_FALSE(cleared.cache.solver.planned.trajectory_segments_inertial.empty());
     EXPECT_TRUE(cleared.cache.identity.maneuver_plan_signature_valid);
-    EXPECT_FALSE(cleared.authoritative_cache.solver.trajectory_inertial_planned.empty());
+    EXPECT_FALSE(cleared.authoritative_cache.solver.planned.trajectory_inertial.empty());
     EXPECT_TRUE(cleared.authoritative_cache.identity.maneuver_plan_signature_valid);
     EXPECT_TRUE(cleared.full_stream_overlay.chunk_assembly.valid);
     EXPECT_FALSE(cleared.full_stream_overlay.chunk_assembly.chunks.empty());

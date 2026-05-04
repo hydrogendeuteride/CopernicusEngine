@@ -2,7 +2,7 @@
 
 #include "game/states/gameplay/maneuver/gameplay_state_maneuver_types.h"
 #include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
-#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
+#include "game/states/gameplay/prediction/gameplay_prediction_access.h"
 
 #include <functional>
 #include <vector>

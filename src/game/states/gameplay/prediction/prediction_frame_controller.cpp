@@ -10,11 +10,11 @@ namespace Game
 {
     namespace
     {
-        OrbitPredictionService::Result build_prediction_solver_result_from_cache(
+        OrbitPredictionResult build_prediction_solver_result_from_cache(
                 const uint64_t track_id,
                 const OrbitPredictionCache &cache)
         {
-            OrbitPredictionService::Result result{};
+            OrbitPredictionResult result{};
             const auto &base_samples = cache.solver.resolved_trajectory_inertial();
             const auto &base_segments = cache.solver.resolved_trajectory_segments_inertial();
             result.envelope.track_id = track_id;
@@ -23,22 +23,22 @@ namespace Game
             result.envelope.maneuver_plan_signature_valid = cache.identity.maneuver_plan_signature_valid;
             result.envelope.maneuver_plan_signature = cache.identity.maneuver_plan_signature;
             result.envelope.valid = base_samples.size() >= 2 && !base_segments.empty();
-            result.envelope.solve_quality = OrbitPredictionService::SolveQuality::Full;
+            result.envelope.solve_quality = OrbitPredictionSolveQuality::Full;
             result.timing.build_time_s = cache.identity.build_time_s;
-            if (cache.solver.shared_solver_core_data)
+            if (cache.solver.core.shared_solver_core_data)
             {
-                result.set_shared_core_data(cache.solver.shared_solver_core_data);
+                result.set_shared_core_data(cache.solver.core.shared_solver_core_data);
             }
             else
             {
-                result.core.shared_ephemeris = cache.solver.shared_ephemeris;
-                result.core.massive_bodies = cache.solver.massive_bodies;
-                result.core.trajectory_inertial = cache.solver.trajectory_inertial;
-                result.core.trajectory_segments_inertial = cache.solver.trajectory_segments_inertial;
+                result.core.shared_ephemeris = cache.solver.core.shared_ephemeris;
+                result.core.massive_bodies = cache.solver.core.massive_bodies;
+                result.core.trajectory_inertial = cache.solver.base.trajectory_inertial;
+                result.core.trajectory_segments_inertial = cache.solver.base.trajectory_segments_inertial;
             }
-            result.planned.trajectory_inertial = cache.solver.trajectory_inertial_planned;
-            result.planned.trajectory_segments_inertial = cache.solver.trajectory_segments_inertial_planned;
-            result.planned.maneuver_previews = cache.solver.maneuver_previews;
+            result.planned.trajectory_inertial = cache.solver.planned.trajectory_inertial;
+            result.planned.trajectory_segments_inertial = cache.solver.planned.trajectory_segments_inertial;
+            result.planned.maneuver_previews = cache.solver.planned.maneuver_previews;
             return result;
         }
     } // namespace
@@ -105,9 +105,9 @@ namespace Game
         std::vector<orbitsim::TrajectorySegment> player_lookup_segments;
         if (context.subject_is_player && context.subject_is_player(track.key))
         {
-            if (!track.cache.solver.trajectory_segments_inertial_planned.empty())
+            if (!track.cache.solver.planned.trajectory_segments_inertial.empty())
             {
-                player_lookup_segments = track.cache.solver.trajectory_segments_inertial_planned;
+                player_lookup_segments = track.cache.solver.planned.trajectory_segments_inertial;
             }
             else
             {
@@ -120,9 +120,9 @@ namespace Game
             {
                 if (const OrbitPredictionCache *player_cache = context.effective_cache(player))
                 {
-                    if (!player_cache->solver.trajectory_segments_inertial_planned.empty())
+                    if (!player_cache->solver.planned.trajectory_segments_inertial.empty())
                     {
-                        player_lookup_segments = player_cache->solver.trajectory_segments_inertial_planned;
+                        player_lookup_segments = player_cache->solver.planned.trajectory_segments_inertial;
                     }
                     else if (!player_cache->solver.resolved_trajectory_segments_inertial().empty())
                     {

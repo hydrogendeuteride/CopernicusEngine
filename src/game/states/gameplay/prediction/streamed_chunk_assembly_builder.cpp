@@ -13,10 +13,10 @@ namespace Game
     {
         bool build_prediction_streamed_planned_chunk(
                 OrbitChunk &out_chunk,
-                OrbitPredictionService::AdaptiveStageDiagnostics *out_stage_diagnostics,
+                OrbitPredictionAdaptiveStageDiagnostics *out_stage_diagnostics,
                 const PredictionSolverTrajectoryCache &solver,
                 const PredictionDisplayFrameCache &display,
-                const OrbitPredictionService::StreamedPlannedChunk &streamed_chunk,
+                const OrbitPredictionStreamedPlannedChunk &streamed_chunk,
                 const uint64_t generation_id,
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
@@ -31,7 +31,7 @@ namespace Game
                 *out_stage_diagnostics = {};
             }
 
-            const OrbitPredictionService::PublishedChunk &published_chunk = streamed_chunk.published_chunk;
+            const OrbitPredictionPublishedChunk &published_chunk = streamed_chunk.published_chunk;
             if (!published_chunk.includes_planned_path ||
                 streamed_chunk.trajectory_segments_inertial.empty() ||
                 !std::isfinite(published_chunk.t0_s) ||
@@ -49,7 +49,7 @@ namespace Game
                                           std::max<std::size_t>(2u, streamed_chunk.trajectory_segments_inertial.size() + 1u));
             std::vector<double> node_times_s;
             node_times_s.reserve(streamed_chunk.maneuver_previews.size());
-            for (const OrbitPredictionService::ManeuverNodePreview &preview : streamed_chunk.maneuver_previews)
+            for (const OrbitPredictionManeuverNodePreview &preview : streamed_chunk.maneuver_previews)
             {
                 if (std::isfinite(preview.t_s))
                 {
@@ -161,7 +161,7 @@ namespace Game
             PredictionChunkAssembly &out_assembly,
             const PredictionSolverTrajectoryCache &solver,
             const PredictionDisplayFrameCache &display,
-            const std::vector<OrbitPredictionService::StreamedPlannedChunk> &streamed_chunks,
+            const std::vector<OrbitPredictionStreamedPlannedChunk> &streamed_chunks,
             const uint64_t generation_id,
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
@@ -177,12 +177,12 @@ namespace Game
         }
 
         out_assembly.chunks.reserve(streamed_chunks.size());
-        OrbitPredictionService::AdaptiveStageDiagnostics planned_stage_diagnostics{};
+        OrbitPredictionAdaptiveStageDiagnostics planned_stage_diagnostics{};
         bool planned_stage_diagnostics_valid = false;
         std::size_t total_chunk_segment_count = 0;
         std::size_t total_chunk_sample_count = 0;
 
-        for (const OrbitPredictionService::StreamedPlannedChunk &streamed_chunk : streamed_chunks)
+        for (const OrbitPredictionStreamedPlannedChunk &streamed_chunk : streamed_chunks)
         {
             if (cancel_requested && cancel_requested())
             {
@@ -195,7 +195,7 @@ namespace Game
             }
 
             OrbitChunk chunk{};
-            OrbitPredictionService::AdaptiveStageDiagnostics chunk_diagnostics{};
+            OrbitPredictionAdaptiveStageDiagnostics chunk_diagnostics{};
             if (!build_prediction_streamed_planned_chunk(chunk,
                                                          &chunk_diagnostics,
                                                          solver,
@@ -251,7 +251,7 @@ namespace Game
     bool StreamedChunkAssemblyBuilder::rebuild_from_streamed(
             PredictionChunkAssembly &out_assembly,
             const OrbitPredictionCache &cache,
-            const std::vector<OrbitPredictionService::StreamedPlannedChunk> &streamed_chunks,
+            const std::vector<OrbitPredictionStreamedPlannedChunk> &streamed_chunks,
             const uint64_t generation_id,
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
@@ -276,7 +276,7 @@ namespace Game
     bool StreamedChunkAssemblyBuilder::rebuild_from_published(
             PredictionChunkAssembly &out_assembly,
             const PredictionDisplayFrameCache &display,
-            const std::vector<OrbitPredictionService::PublishedChunk> &published_chunks,
+            const std::vector<OrbitPredictionPublishedChunk> &published_chunks,
             const uint64_t generation_id,
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const uint64_t /*display_frame_key*/,
@@ -301,7 +301,7 @@ namespace Game
         std::size_t total_chunk_sample_count = 0;
         double total_chunk_duration_s = 0.0;
 
-        for (const OrbitPredictionService::PublishedChunk &published_chunk : published_chunks)
+        for (const OrbitPredictionPublishedChunk &published_chunk : published_chunks)
         {
             if (cancel_requested && cancel_requested())
             {
@@ -388,7 +388,7 @@ namespace Game
     bool StreamedChunkAssemblyBuilder::rebuild_from_published(
             PredictionChunkAssembly &out_assembly,
             const OrbitPredictionCache &cache,
-            const std::vector<OrbitPredictionService::PublishedChunk> &published_chunks,
+            const std::vector<OrbitPredictionPublishedChunk> &published_chunks,
             const uint64_t generation_id,
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const uint64_t display_frame_key,

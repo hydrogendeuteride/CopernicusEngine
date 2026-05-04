@@ -5,12 +5,26 @@
 #include "game/states/gameplay/prediction/gameplay_state_prediction_types.h"
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace Game
 {
+    class OrbitPredictionService;
+
     struct GameplayPredictionState
     {
+        GameplayPredictionState();
+        ~GameplayPredictionState();
+
+        GameplayPredictionState(const GameplayPredictionState &) = delete;
+        GameplayPredictionState &operator=(const GameplayPredictionState &) = delete;
+        GameplayPredictionState(GameplayPredictionState &&other) noexcept = delete;
+        GameplayPredictionState &operator=(GameplayPredictionState &&other) noexcept = delete;
+
+        [[nodiscard]] OrbitPredictionService &solver_service();
+        [[nodiscard]] const OrbitPredictionService &solver_service() const;
+
         bool enabled{true};
         bool dirty{true};
         bool draw_full_orbit{true};
@@ -24,7 +38,6 @@ namespace Game
 
         OrbitPlotPerfStats orbit_plot_perf{};
         OrbitPredictionDrawConfig draw_config{};
-        OrbitPredictionService service{};
         OrbitPredictionDerivedService derived_service{};
         std::vector<PredictionTrackState> tracks{};
         std::vector<PredictionGroup> groups{};
@@ -32,5 +45,8 @@ namespace Game
         PredictionFrameSelectionState frame_selection{};
         uint64_t display_frame_revision{1};
         PredictionAnalysisSelectionState analysis_selection{};
+
+    private:
+        std::unique_ptr<OrbitPredictionService> service{};
     };
 } // namespace Game

@@ -6,6 +6,7 @@
 #define VULKAN_ENGINE_GAMEPLAY_TEST_ACCESS 1
 #endif
 #include "game/states/gameplay/gameplay_state.h"
+#include "game/orbit/orbit_prediction_service.h"
 #include "game/orbit/orbit_prediction_tuning.h"
 #include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
 #include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
@@ -162,15 +163,15 @@ namespace
         cache.identity.valid = true;
         cache.identity.generation_id = generation_id;
         cache.identity.build_time_s = t0_s;
-        cache.solver.trajectory_inertial = {
+        cache.solver.base.trajectory_inertial = {
                 make_sample(t0_s, x0_m),
                 make_sample(t1_s, x1_m),
         };
-        cache.solver.trajectory_segments_inertial = {
+        cache.solver.base.trajectory_segments_inertial = {
                 make_segment(t0_s, t1_s, x0_m, x1_m),
         };
-        cache.display.trajectory_frame = cache.solver.trajectory_inertial;
-        cache.display.trajectory_segments_frame = cache.solver.trajectory_segments_inertial;
+        cache.display.trajectory_frame = cache.solver.base.trajectory_inertial;
+        cache.display.trajectory_segments_frame = cache.solver.base.trajectory_segments_inertial;
         return cache;
     }
 

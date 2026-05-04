@@ -1,5 +1,6 @@
 #include "game/states/gameplay/prediction/runtime/prediction_invalidation_controller.h"
 
+#include "game/orbit/orbit_prediction_service.h"
 #include "game/states/gameplay/prediction/gameplay_prediction_cache_internal.h"
 #include "game/states/gameplay/prediction/runtime/prediction_lifecycle_reducer.h"
 

@@ -1,6 +1,7 @@
 #include "game/states/gameplay/prediction/runtime/prediction_runtime_controller.h"
 
 #include "core/util/logger.h"
+#include "game/orbit/orbit_prediction_service.h"
 #include "game/orbit/orbit_prediction_tuning.h"
 #include "game/states/gameplay/prediction/prediction_frame_controller.h"
 #include "game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_internal.h"
@@ -53,7 +54,7 @@ namespace Game
         void mark_prediction_request_submitted(PredictionTrackState &track,
                                                const uint64_t generation_id,
                                                const double now_s,
-                                               const OrbitPredictionService::SolveQuality solve_quality,
+                                               const OrbitPredictionSolveQuality solve_quality,
                                                const bool request_has_maneuver_plan,
                                                const uint64_t plan_signature,
                                                const bool preview_request_active = false)
@@ -121,7 +122,7 @@ namespace Game
         }
 
         [[nodiscard]] bool solve_already_reported_horizon_shortfall(
-                const OrbitPredictionService::AdaptiveStageDiagnostics &diag,
+                const OrbitPredictionAdaptiveStageDiagnostics &diag,
                 const double required_ahead_s,
                 const double coverage_epsilon_s)
         {
@@ -201,8 +202,8 @@ namespace Game
 
             accumulate_samples_end(cache.solver.resolved_trajectory_inertial());
             accumulate_segments_end(cache.solver.resolved_trajectory_segments_inertial());
-            accumulate_samples_end(cache.solver.trajectory_inertial_planned);
-            accumulate_segments_end(cache.solver.trajectory_segments_inertial_planned);
+            accumulate_samples_end(cache.solver.planned.trajectory_inertial);
+            accumulate_segments_end(cache.solver.planned.trajectory_segments_inertial);
             return cache_end_s;
         }
     } // namespace
@@ -213,7 +214,7 @@ namespace Game
         {
             PredictionLifecycleReducer::reset_runtime(track, PredictionRuntimeResetMode::Clean);
         }
-        prediction.service.reset();
+        prediction.solver_service().reset();
         prediction.derived_service.reset();
         prediction.dirty = false;
     }
@@ -234,7 +235,7 @@ namespace Game
                                                              const PredictionRuntimeContext &context)
     {
         bool applied_result = false;
-        while (auto completed = prediction.service.poll_completed())
+        while (auto completed = prediction.solver_service().poll_completed())
         {
             apply_completed_solver_result(prediction, context, std::move(*completed));
             applied_result = true;
@@ -243,8 +244,8 @@ namespace Game
         while (auto completed = prediction.derived_service.poll_completed())
         {
             const bool streaming_publish =
-                    completed->publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming ||
-                    completed->publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+                    completed->publish_stage == OrbitPredictionPublishStage::PreviewStreaming ||
+                    completed->publish_stage == OrbitPredictionPublishStage::FullStreaming;
             apply_completed_derived_result(prediction, context, std::move(*completed));
             applied_result = true;
             if (streaming_publish)
@@ -259,7 +260,7 @@ namespace Game
     bool PredictionRuntimeController::apply_completed_solver_result(
             GameplayPredictionState &prediction,
             const PredictionRuntimeContext &context,
-            OrbitPredictionService::Result result)
+            OrbitPredictionResult result)
     {
         PredictionTrackState *track = find_track_by_id(prediction.tracks, result.envelope.track_id);
         if (!track)
@@ -364,7 +365,7 @@ namespace Game
             return false;
         }
 
-        if (track.solver_diagnostics.status == OrbitPredictionService::Status::Success &&
+        if (track.solver_diagnostics.status == OrbitPredictionStatus::Success &&
             solve_already_reported_horizon_shortfall(
                     track.solver_diagnostics.trajectory_base,
                     required_ahead_s,
@@ -414,7 +415,7 @@ namespace Game
             return false;
         }
 
-        const OrbitPredictionService::SolveQuality submitted_quality = build.request.options.solve_quality;
+        const OrbitPredictionSolveQuality submitted_quality = build.request.options.solve_quality;
         const uint64_t submitted_track_id = build.request.envelope.track_id;
         const uint64_t submitted_plan_revision = build.request.envelope.maneuver_plan_revision;
         const bool submitted_plan_signature_valid = build.request.envelope.maneuver_plan_signature_valid;
@@ -426,7 +427,7 @@ namespace Game
         const double submitted_anchor_time_s = build.request.maneuver.preview_patch.anchor_time_s;
         const double submitted_future_window_s = build.request.options.future_window_s;
         const std::size_t submitted_maneuver_count = build.request.maneuver.maneuver_impulses.size();
-        const uint64_t generation_id = prediction.service.request(std::move(build.request));
+        const uint64_t generation_id = prediction.solver_service().request(std::move(build.request));
         mark_prediction_request_submitted(track,
                                           generation_id,
                                           now_s,
@@ -467,18 +468,18 @@ namespace Game
             PredictionTrackState &track,
             const double now_s)
     {
-        OrbitPredictionService::Request request{};
+        OrbitPredictionRequest request{};
         if (!PredictionRequestFactory::build_celestial_request(context, track, now_s, request))
         {
             return false;
         }
 
-        const uint64_t generation_id = prediction.service.request(std::move(request));
+        const uint64_t generation_id = prediction.solver_service().request(std::move(request));
         mark_prediction_request_submitted(
                 track,
                 generation_id,
                 now_s,
-                OrbitPredictionService::SolveQuality::Full,
+                OrbitPredictionSolveQuality::Full,
                 false,
                 0u);
         return true;

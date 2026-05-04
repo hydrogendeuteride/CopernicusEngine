@@ -162,7 +162,7 @@ namespace Game
                                                             const double window_t0_s,
                                                             const double window_t1_s) {
             std::vector<double> anchors;
-            anchors.reserve(cache.solver.maneuver_previews.size() + adapter_context.maneuver.plan().nodes.size() + 4u);
+            anchors.reserve(cache.solver.planned.maneuver_previews.size() + adapter_context.maneuver.plan().nodes.size() + 4u);
             const auto push_anchor_time = [&](const double t_s, const bool allow_endpoint) {
                 if (!std::isfinite(t_s))
                 {
@@ -185,7 +185,7 @@ namespace Game
 
             push_anchor_time(window_t0_s, true);
             push_anchor_time(window_t1_s, true);
-            for (const OrbitPredictionService::ManeuverNodePreview &preview : cache.solver.maneuver_previews)
+            for (const OrbitPredictionManeuverNodePreview &preview : cache.solver.planned.maneuver_previews)
             {
                 if (preview.valid)
                 {

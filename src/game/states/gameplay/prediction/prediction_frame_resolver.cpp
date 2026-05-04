@@ -86,7 +86,7 @@ namespace Game
         const auto body_position_at = [&](const std::size_t i) -> orbitsim::Vec3 {
             const orbitsim::MassiveBody &body = bodies[i];
             const auto &ephemeris = cache ? cache->resolved_shared_ephemeris()
-                                          : OrbitPredictionService::SharedCelestialEphemeris{};
+                                          : OrbitPredictionSharedCelestialEphemeris{};
             if (ephemeris && !ephemeris->empty())
             {
                 return ephemeris->body_state_at_by_id(body.id, query_time_s).position_m;

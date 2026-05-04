@@ -38,7 +38,7 @@ namespace Game
             const PredictionSolverRequestSubmittedEvent &event)
     {
         track.latest_requested_generation_id = event.generation_id;
-        if (event.solve_quality == OrbitPredictionService::SolveQuality::Full)
+        if (event.solve_quality == OrbitPredictionSolveQuality::Full)
         {
             track.latest_requested_authoritative_generation_id = event.generation_id;
         }
@@ -82,8 +82,8 @@ namespace Game
 
     void PredictionLifecycleReducer::mark_solver_result_accepted(
             PredictionTrackState &track,
-            const OrbitPredictionService::SolveQuality solve_quality,
-            const OrbitPredictionService::PublishStage publish_stage,
+            const OrbitPredictionSolveQuality solve_quality,
+            const OrbitPredictionPublishStage publish_stage,
             const PredictionRuntimeDetail::PredictionTrackLifecycleSnapshot &lifecycle_before)
     {
         if (PredictionRuntimeDetail::prediction_track_is_preview_streaming_publish(solve_quality, publish_stage))
@@ -100,7 +100,7 @@ namespace Game
             track.dirty = true;
             track.invalidated_while_pending = false;
         }
-        track.pending_solve_quality = OrbitPredictionService::SolveQuality::Full;
+        track.pending_solve_quality = OrbitPredictionSolveQuality::Full;
     }
 
     void PredictionLifecycleReducer::mark_solver_result_rejected_for_rebuild(
@@ -109,7 +109,7 @@ namespace Game
             const bool clear_invalidated)
     {
         track.request_pending = false;
-        track.pending_solve_quality = OrbitPredictionService::SolveQuality::Full;
+        track.pending_solve_quality = OrbitPredictionSolveQuality::Full;
         if (clear_invalidated)
         {
             track.invalidated_while_pending = false;
@@ -168,7 +168,7 @@ namespace Game
     void PredictionLifecycleReducer::mark_preview_publish_accepted(
             PredictionTrackState &track,
             const PredictionRuntimeDetail::PredictionTrackLifecycleSnapshot &lifecycle_before,
-            const OrbitPredictionService::PublishStage publish_stage,
+            const OrbitPredictionPublishStage publish_stage,
             const bool live_preview_active_now)
     {
         track.preview_state = PredictionRuntimeDetail::prediction_track_preview_state_after_preview_publish(
@@ -215,7 +215,7 @@ namespace Game
         track.latest_requested_derived_display_frame_key = 0;
         track.latest_requested_derived_display_frame_revision = 0;
         track.latest_requested_derived_analysis_body_id = orbitsim::kInvalidBodyId;
-        track.latest_requested_derived_publish_stage = OrbitPredictionService::PublishStage::Final;
+        track.latest_requested_derived_publish_stage = OrbitPredictionPublishStage::Final;
     }
 
     void PredictionLifecycleReducer::clear_pending_maneuver_requests(PredictionTrackState &track,
@@ -223,7 +223,7 @@ namespace Game
     {
         track.request_pending = false;
         track.derived_request_pending = false;
-        track.pending_solve_quality = OrbitPredictionService::SolveQuality::Full;
+        track.pending_solve_quality = OrbitPredictionSolveQuality::Full;
         track.pending_solver_has_maneuver_plan = false;
         track.pending_solver_plan_signature = 0u;
         track.pending_derived_has_maneuver_plan = false;
@@ -240,7 +240,7 @@ namespace Game
         if (track.request_pending && track.pending_solver_has_maneuver_plan)
         {
             track.request_pending = false;
-            track.pending_solve_quality = OrbitPredictionService::SolveQuality::Full;
+            track.pending_solve_quality = OrbitPredictionSolveQuality::Full;
         }
         if (track.derived_request_pending && track.pending_derived_has_maneuver_plan)
         {

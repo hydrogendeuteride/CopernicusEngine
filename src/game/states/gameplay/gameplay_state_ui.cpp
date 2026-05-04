@@ -31,29 +31,29 @@ namespace Game
 
     namespace
     {
-        const char *prediction_solver_status_label(const OrbitPredictionService::Status status)
+        const char *prediction_solver_status_label(const OrbitPredictionStatus status)
         {
             switch (status)
             {
-                case OrbitPredictionService::Status::None:
+                case OrbitPredictionStatus::None:
                     return "None";
-                case OrbitPredictionService::Status::Success:
+                case OrbitPredictionStatus::Success:
                     return "Success";
-                case OrbitPredictionService::Status::InvalidInput:
+                case OrbitPredictionStatus::InvalidInput:
                     return "Invalid input";
-                case OrbitPredictionService::Status::InvalidSubject:
+                case OrbitPredictionStatus::InvalidSubject:
                     return "Invalid subject";
-                case OrbitPredictionService::Status::InvalidSamplingSpec:
+                case OrbitPredictionStatus::InvalidSamplingSpec:
                     return "Invalid sampling spec";
-                case OrbitPredictionService::Status::EphemerisUnavailable:
+                case OrbitPredictionStatus::EphemerisUnavailable:
                     return "Ephemeris unavailable";
-                case OrbitPredictionService::Status::TrajectorySegmentsUnavailable:
+                case OrbitPredictionStatus::TrajectorySegmentsUnavailable:
                     return "Segments unavailable";
-                case OrbitPredictionService::Status::TrajectorySamplesUnavailable:
+                case OrbitPredictionStatus::TrajectorySamplesUnavailable:
                     return "Samples unavailable";
-                case OrbitPredictionService::Status::ContinuityFailed:
+                case OrbitPredictionStatus::ContinuityFailed:
                     return "Continuity failed";
-                case OrbitPredictionService::Status::Cancelled:
+                case OrbitPredictionStatus::Cancelled:
                     return "Cancelled";
             }
 
@@ -85,13 +85,13 @@ namespace Game
             return "Unknown";
         }
 
-        const char *prediction_solve_quality_label(const OrbitPredictionService::SolveQuality quality)
+        const char *prediction_solve_quality_label(const OrbitPredictionSolveQuality quality)
         {
             switch (quality)
             {
-                case OrbitPredictionService::SolveQuality::Full:
+                case OrbitPredictionSolveQuality::Full:
                     return "Full";
-                case OrbitPredictionService::SolveQuality::FastPreview:
+                case OrbitPredictionSolveQuality::FastPreview:
                     return "FastPreview";
             }
 
@@ -121,7 +121,7 @@ namespace Game
         }
 
         void draw_prediction_stage_diag(const char *label,
-                                        const OrbitPredictionService::AdaptiveStageDiagnostics &diag,
+                                        const OrbitPredictionAdaptiveStageDiagnostics &diag,
                                         const std::size_t sample_count)
         {
             std::string extra{};
@@ -878,7 +878,7 @@ namespace Game
                                 perf.solver_segments_planned);
                     if (active_track)
                     {
-                        const OrbitPredictionService::Diagnostics &solver_diag = active_track->solver_diagnostics;
+                        const OrbitPredictionDiagnostics &solver_diag = active_track->solver_diagnostics;
                         const OrbitPredictionDerivedDiagnostics &derived_diag = active_track->derived_diagnostics;
                         ImGui::Text("Prediction status (solver/frame): %s / %s",
                                     prediction_solver_status_label(solver_diag.status),

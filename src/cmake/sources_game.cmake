@@ -29,6 +29,7 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/orbit/orbit_prediction_tuning.h
   game/orbit/trajectory/trajectory_utils.h
   game/orbit/trajectory/trajectory_utils.cpp
+  game/orbit/prediction/orbit_prediction_types.h
   game/orbit/orbit_prediction_service.h
   game/orbit/orbit_prediction_service.cpp
   game/orbit/prediction/prediction_diagnostics_util.h
@@ -116,6 +117,8 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/prediction/streamed_chunk_assembly_builder.h
   game/states/gameplay/prediction/streamed_chunk_assembly_builder.cpp
   game/states/gameplay/prediction/gameplay_prediction_state.h
+  game/states/gameplay/prediction/gameplay_prediction_state.cpp
+  game/states/gameplay/prediction/gameplay_prediction_access.h
   game/states/gameplay/prediction/prediction_host_context.h
   game/states/gameplay/prediction/prediction_host_context_builder.h
   game/states/gameplay/prediction/prediction_host_context_builder.cpp

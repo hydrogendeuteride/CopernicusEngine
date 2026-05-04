@@ -14,7 +14,7 @@ namespace Game
         }
     }
 
-    void GameplayPredictionAdapter::apply_completed_prediction_result(OrbitPredictionService::Result result)
+    void GameplayPredictionAdapter::apply_completed_prediction_result(OrbitPredictionResult result)
     {
         (void) _access.prediction.apply_completed_solver_result(
                 PredictionHostContextBuilder(context()).build(),

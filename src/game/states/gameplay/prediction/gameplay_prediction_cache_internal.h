@@ -126,8 +126,8 @@ namespace Game::PredictionCacheInternal
     inline std::vector<double> collect_maneuver_node_times(const PredictionSolverTrajectoryCache &solver)
     {
         std::vector<double> out;
-        out.reserve(solver.maneuver_previews.size());
-        for (const auto &preview : solver.maneuver_previews)
+        out.reserve(solver.planned.maneuver_previews.size());
+        for (const auto &preview : solver.planned.maneuver_previews)
         {
             if (std::isfinite(preview.t_s))
             {
@@ -319,8 +319,8 @@ namespace Game::PredictionCacheInternal
         update_derived_diagnostics(diagnostics, cache.display, status);
     }
 
-    inline void accumulate_stage_diagnostics(OrbitPredictionService::AdaptiveStageDiagnostics &dst,
-                                             const OrbitPredictionService::AdaptiveStageDiagnostics &src)
+    inline void accumulate_stage_diagnostics(OrbitPredictionAdaptiveStageDiagnostics &dst,
+                                             const OrbitPredictionAdaptiveStageDiagnostics &src)
     {
         const double dst_dt_weight = static_cast<double>(dst.accepted_segments);
         const double src_dt_weight = static_cast<double>(src.accepted_segments);

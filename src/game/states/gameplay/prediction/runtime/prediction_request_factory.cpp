@@ -15,40 +15,40 @@ namespace Game
         constexpr double kPreviewAnchorTimeMatchEpsilonS = 1.0e-6;
         constexpr double kSuffixRefineAnchorTimeMatchEpsilonS = 1.0e-6;
 
-        OrbitPredictionService::RequestPriority classify_prediction_subject_priority(
+        OrbitPredictionRequestPriority classify_prediction_subject_priority(
                 const PredictionSelectionState &selection,
                 const PredictionSubjectKey key,
                 const bool is_celestial)
         {
             if (selection.active_subject == key)
             {
-                return OrbitPredictionService::RequestPriority::ActiveTrack;
+                return OrbitPredictionRequestPriority::ActiveTrack;
             }
 
             for (const PredictionSubjectKey overlay : selection.overlay_subjects)
             {
                 if (overlay == key)
                 {
-                    return OrbitPredictionService::RequestPriority::Overlay;
+                    return OrbitPredictionRequestPriority::Overlay;
                 }
             }
 
             return is_celestial
-                           ? OrbitPredictionService::RequestPriority::BackgroundCelestial
-                           : OrbitPredictionService::RequestPriority::BackgroundOrbiter;
+                           ? OrbitPredictionRequestPriority::BackgroundCelestial
+                           : OrbitPredictionRequestPriority::BackgroundOrbiter;
         }
 
-        OrbitPredictionService::RequestPriority classify_prediction_request_priority(
+        OrbitPredictionRequestPriority classify_prediction_request_priority(
                 const PredictionSelectionState &selection,
                 const PredictionSubjectKey key,
                 const bool is_celestial,
                 const bool interactive)
         {
-            OrbitPredictionService::RequestPriority priority =
+            OrbitPredictionRequestPriority priority =
                     classify_prediction_subject_priority(selection, key, is_celestial);
-            if (interactive && priority == OrbitPredictionService::RequestPriority::ActiveTrack)
+            if (interactive && priority == OrbitPredictionRequestPriority::ActiveTrack)
             {
-                priority = OrbitPredictionService::RequestPriority::ActiveInteractiveTrack;
+                priority = OrbitPredictionRequestPriority::ActiveInteractiveTrack;
             }
             return priority;
         }
@@ -76,13 +76,13 @@ namespace Game
                    std::abs(node.time_s - anchor.anchor_time_s) <= kSuffixRefineAnchorTimeMatchEpsilonS;
         }
 
-        std::vector<OrbitPredictionService::ManeuverNodePreview> collect_prefix_maneuver_previews(
+        std::vector<OrbitPredictionManeuverNodePreview> collect_prefix_maneuver_previews(
                 const PredictionSolverTrajectoryCache &solver,
                 const double anchor_time_s)
         {
-            std::vector<OrbitPredictionService::ManeuverNodePreview> out;
-            out.reserve(solver.maneuver_previews.size());
-            for (const OrbitPredictionService::ManeuverNodePreview &preview : solver.maneuver_previews)
+            std::vector<OrbitPredictionManeuverNodePreview> out;
+            out.reserve(solver.planned.maneuver_previews.size());
+            for (const OrbitPredictionManeuverNodePreview &preview : solver.planned.maneuver_previews)
             {
                 if (preview.valid &&
                     std::isfinite(preview.t_s) &&
@@ -100,7 +100,7 @@ namespace Game
                 const double now_s,
                 const double anchor_time_s,
                 std::vector<orbitsim::TrajectorySegment> &out_prefix_segments,
-                std::vector<OrbitPredictionService::ManeuverNodePreview> &out_prefix_previews)
+                std::vector<OrbitPredictionManeuverNodePreview> &out_prefix_previews)
         {
             out_prefix_segments.clear();
             out_prefix_previews.clear();
@@ -109,14 +109,14 @@ namespace Game
                 !std::isfinite(now_s) ||
                 !std::isfinite(anchor_time_s) ||
                 anchor_time_s <= (now_s + kSuffixRefineAnchorTimeMatchEpsilonS) ||
-                solver.trajectory_segments_inertial_planned.empty() ||
-                !validate_trajectory_segment_continuity(solver.trajectory_segments_inertial_planned))
+                solver.planned.trajectory_segments_inertial.empty() ||
+                !validate_trajectory_segment_continuity(solver.planned.trajectory_segments_inertial))
             {
                 return false;
             }
 
             const double required_duration_s = anchor_time_s - now_s;
-            if (!trajectory_segments_cover_window(solver.trajectory_segments_inertial_planned,
+            if (!trajectory_segments_cover_window(solver.planned.trajectory_segments_inertial,
                                                   now_s,
                                                   required_duration_s))
             {
@@ -124,7 +124,7 @@ namespace Game
             }
 
             std::size_t cursor = 0u;
-            if (!PredictionTrajectorySampler::slice_segments_from_cursor(solver.trajectory_segments_inertial_planned,
+            if (!PredictionTrajectorySampler::slice_segments_from_cursor(solver.planned.trajectory_segments_inertial,
                                                                          now_s,
                                                                          anchor_time_s,
                                                                          cursor,
@@ -159,7 +159,7 @@ namespace Game
                 const double now_s,
                 const double anchor_time_s,
                 std::vector<orbitsim::TrajectorySegment> &out_prefix_segments,
-                std::vector<OrbitPredictionService::ManeuverNodePreview> &out_prefix_previews)
+                std::vector<OrbitPredictionManeuverNodePreview> &out_prefix_previews)
         {
             if (track.authoritative_cache.identity.valid &&
                 try_build_suffix_refine_prefix_from_cache(track.authoritative_cache.identity,
@@ -273,9 +273,9 @@ namespace Game
         }
 
         const auto preview_it =
-                std::find_if(anchor_solver.maneuver_previews.begin(),
-                             anchor_solver.maneuver_previews.end(),
-                             [&track](const OrbitPredictionService::ManeuverNodePreview &preview) {
+                std::find_if(anchor_solver.planned.maneuver_previews.begin(),
+                             anchor_solver.planned.maneuver_previews.end(),
+                             [&track](const OrbitPredictionManeuverNodePreview &preview) {
                                  return preview.valid &&
                                         preview.node_id == track.preview_anchor.anchor_node_id &&
                                         std::isfinite(preview.t_s) &&
@@ -284,7 +284,7 @@ namespace Game
                                         detail::finite_vec3(preview.inertial_position_m) &&
                                         detail::finite_vec3(preview.inertial_velocity_mps);
                              });
-        if (preview_it != anchor_solver.maneuver_previews.end())
+        if (preview_it != anchor_solver.planned.maneuver_previews.end())
         {
             out_state = orbitsim::make_state(preview_it->inertial_position_m,
                                              preview_it->inertial_velocity_mps);
@@ -293,11 +293,11 @@ namespace Game
         }
 
         const bool resolved =
-                PredictionTrajectorySampler::sample_inertial_state(anchor_solver.trajectory_segments_inertial_planned,
+                PredictionTrajectorySampler::sample_inertial_state(anchor_solver.planned.trajectory_segments_inertial,
                                                                    track.preview_anchor.anchor_time_s,
                                                                    out_state,
                                                                    TrajectoryBoundarySide::Before) ||
-                PredictionTrajectorySampler::sample_inertial_state(anchor_solver.trajectory_inertial_planned,
+                PredictionTrajectorySampler::sample_inertial_state(anchor_solver.planned.trajectory_inertial,
                                                                    track.preview_anchor.anchor_time_s,
                                                                    out_state) ||
                 PredictionTrajectorySampler::sample_inertial_state(track.cache.solver.resolved_trajectory_segments_inertial(),
@@ -358,16 +358,16 @@ namespace Game
                 track.supports_maneuvers &&
                 with_maneuvers &&
                 live_preview_active;
-        const OrbitPredictionService::SolveQuality solve_quality =
+        const OrbitPredictionSolveQuality solve_quality =
                 preview_request_active
-                        ? OrbitPredictionService::SolveQuality::FastPreview
-                        : OrbitPredictionService::SolveQuality::Full;
+                        ? OrbitPredictionSolveQuality::FastPreview
+                        : OrbitPredictionSolveQuality::Full;
         const double preview_exact_window_s =
                 preview_request_active
                         ? context.preview_exact_window_s(track, now_s, with_maneuvers)
                         : 0.0;
 
-        OrbitPredictionService::Request request{};
+        OrbitPredictionRequest request{};
         request.envelope.track_id = track.key.track_id();
         request.envelope.maneuver_plan_revision = track.supports_maneuvers ? context.maneuver_plan_revision : 0u;
         request.world.sim_time_s = now_s;
@@ -458,7 +458,7 @@ namespace Game
                     continue;
                 }
 
-                OrbitPredictionService::ManeuverImpulse impulse{};
+                OrbitPredictionManeuverImpulse impulse{};
                 impulse.node_id = node.id;
                 impulse.t_s = node.time_s;
                 impulse.primary_body_id =
@@ -481,7 +481,7 @@ namespace Game
                 track.preview_anchor.valid;
         const ManeuverNode *selected_node =
                 context.maneuver_plan ? context.maneuver_plan->find_node(context.maneuver_plan->selected_node_id) : nullptr;
-        if (solve_quality == OrbitPredictionService::SolveQuality::Full &&
+        if (solve_quality == OrbitPredictionSolveQuality::Full &&
             post_preview_full_refine &&
             track.supports_maneuvers &&
             with_maneuvers &&
@@ -490,7 +490,7 @@ namespace Game
             !request.maneuver.maneuver_impulses.empty())
         {
             std::vector<orbitsim::TrajectorySegment> prefix_segments;
-            std::vector<OrbitPredictionService::ManeuverNodePreview> prefix_previews;
+            std::vector<OrbitPredictionManeuverNodePreview> prefix_previews;
             if (preview_anchor_state_valid &&
                 finite_state(preview_anchor_state) &&
                 try_build_suffix_refine_prefix(track,
@@ -510,7 +510,7 @@ namespace Game
         }
         request.maneuver.full_stream_publish.active =
                 (interactive_request || post_preview_full_refine) &&
-                solve_quality == OrbitPredictionService::SolveQuality::Full &&
+                solve_quality == OrbitPredictionSolveQuality::Full &&
                 track.key == context.selection.active_subject &&
                 subject_is_player &&
                 !request.maneuver.maneuver_impulses.empty();
@@ -525,7 +525,7 @@ namespace Game
     bool PredictionRequestFactory::build_celestial_request(const PredictionRuntimeContext &context,
                                                            const PredictionTrackState &track,
                                                            const double now_s,
-                                                           OrbitPredictionService::Request &out_request)
+                                                           OrbitPredictionRequest &out_request)
     {
         out_request = {};
         if (!context.orbital_scenario || !context.future_window_s)
@@ -540,8 +540,8 @@ namespace Game
             return false;
         }
 
-        OrbitPredictionService::Request request{};
-        request.envelope.kind = OrbitPredictionService::RequestKind::Celestial;
+        OrbitPredictionRequest request{};
+        request.envelope.kind = OrbitPredictionRequestKind::Celestial;
         request.envelope.track_id = track.key.track_id();
         request.world.sim_time_s = now_s;
         request.world.sim_config = context.orbital_scenario->sim.config();
