@@ -236,6 +236,43 @@ namespace Game
 
         struct Request
         {
+            struct Envelope
+            {
+                // The worker handles both spacecraft and celestial prediction jobs.
+                RequestKind kind{RequestKind::Spacecraft};
+                uint64_t track_id{0};
+                uint64_t maneuver_plan_revision{0};
+                bool maneuver_plan_signature_valid{false};
+                uint64_t maneuver_plan_signature{0};
+                RequestPriority priority{RequestPriority::BackgroundOrbiter};
+            };
+
+            struct World
+            {
+                double sim_time_s{0.0};
+                orbitsim::GameSimulation::Config sim_config{};
+                std::vector<orbitsim::MassiveBody> massive_bodies;
+                SharedCelestialEphemeris shared_ephemeris{};
+            };
+
+            struct Subject
+            {
+                // Celestial jobs identify the predicted body directly.
+                orbitsim::BodyId subject_body_id{orbitsim::kInvalidBodyId};
+                orbitsim::Vec3 ship_bary_position_m{0.0, 0.0, 0.0};
+                orbitsim::Vec3 ship_bary_velocity_mps{0.0, 0.0, 0.0};
+                orbitsim::BodyId preferred_primary_body_id{orbitsim::kInvalidBodyId};
+            };
+
+            struct Options
+            {
+                bool thrusting{false};
+                bool lagrange_sensitive{false};
+                SolveQuality solve_quality{SolveQuality::Full};
+                double future_window_s{600.0};
+                double celestial_ephemeris_dt_s{0.0};
+            };
+
             struct PreviewPatchSpec
             {
                 bool active{false};
@@ -263,34 +300,19 @@ namespace Game
                 double min_publish_interval_s{0.0};
             };
 
-            // The worker handles both spacecraft and celestial prediction jobs.
-            RequestKind kind{RequestKind::Spacecraft};
-            uint64_t track_id{0};
-            uint64_t maneuver_plan_revision{0};
-            bool maneuver_plan_signature_valid{false};
-            uint64_t maneuver_plan_signature{0};
-            double sim_time_s{0.0};
-            orbitsim::GameSimulation::Config sim_config{};
-            std::vector<orbitsim::MassiveBody> massive_bodies;
-            SharedCelestialEphemeris shared_ephemeris{};
+            struct ManeuverInput
+            {
+                std::vector<ManeuverImpulse> maneuver_impulses;
+                PreviewPatchSpec preview_patch{};
+                PlannedSuffixRefineSpec planned_suffix_refine{};
+                FullStreamPublishSpec full_stream_publish{};
+            };
 
-            // Celestial jobs identify the predicted body directly.
-            orbitsim::BodyId subject_body_id{orbitsim::kInvalidBodyId};
-
-            orbitsim::Vec3 ship_bary_position_m{0.0, 0.0, 0.0};
-            orbitsim::Vec3 ship_bary_velocity_mps{0.0, 0.0, 0.0};
-
-            bool thrusting{false};
-            bool lagrange_sensitive{false};
-            SolveQuality solve_quality{SolveQuality::Full};
-            RequestPriority priority{RequestPriority::BackgroundOrbiter};
-            double future_window_s{600.0};
-            double celestial_ephemeris_dt_s{0.0};
-            orbitsim::BodyId preferred_primary_body_id{orbitsim::kInvalidBodyId};
-            std::vector<ManeuverImpulse> maneuver_impulses;
-            PreviewPatchSpec preview_patch{};
-            PlannedSuffixRefineSpec planned_suffix_refine{};
-            FullStreamPublishSpec full_stream_publish{};
+            Envelope envelope{};
+            World world{};
+            Subject subject{};
+            Options options{};
+            ManeuverInput maneuver{};
         };
 
         struct Result
@@ -304,58 +326,83 @@ namespace Game
             };
             using SharedCoreData = std::shared_ptr<const CoreData>;
 
-            uint64_t track_id{0};
-            uint64_t generation_id{0};
-            uint64_t maneuver_plan_revision{0};
-            bool maneuver_plan_signature_valid{false};
-            uint64_t maneuver_plan_signature{0};
-            bool valid{false};
-            bool baseline_reused{false};
-            SolveQuality solve_quality{SolveQuality::Full};
-            PublishStage publish_stage{PublishStage::Final};
-            double compute_time_ms{0.0};
+            struct Envelope
+            {
+                uint64_t track_id{0};
+                uint64_t generation_id{0};
+                uint64_t maneuver_plan_revision{0};
+                bool maneuver_plan_signature_valid{false};
+                uint64_t maneuver_plan_signature{0};
+                bool valid{false};
+                bool baseline_reused{false};
+                SolveQuality solve_quality{SolveQuality::Full};
+                PublishStage publish_stage{PublishStage::Final};
+            };
+
+            struct Timing
+            {
+                double build_time_s{0.0};
+                double compute_time_ms{0.0};
+            };
+
+            struct CorePayload
+            {
+                SharedCelestialEphemeris shared_ephemeris{};
+                std::vector<orbitsim::MassiveBody> massive_bodies{};
+                std::vector<orbitsim::TrajectorySample> trajectory_inertial{};
+                std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial{};
+                SharedCoreData shared_core_data{};
+            };
+
+            struct PlannedPayload
+            {
+                std::vector<orbitsim::TrajectorySample> trajectory_inertial{};
+                std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial{};
+                std::vector<ManeuverNodePreview> maneuver_previews{};
+            };
+
+            struct PublishPayload
+            {
+                std::vector<PublishedChunk> published_chunks{};
+                std::vector<StreamedPlannedChunk> streamed_planned_chunks{};
+            };
+
+            Envelope envelope{};
+            Timing timing{};
+            CorePayload core{};
+            PlannedPayload planned{};
+            PublishPayload publish{};
             Diagnostics diagnostics{};
-
-            double build_time_s{0.0};
-            SharedCelestialEphemeris shared_ephemeris{};
-            std::vector<orbitsim::MassiveBody> massive_bodies{};
-
-            std::vector<orbitsim::TrajectorySample> trajectory_inertial;
-            std::vector<orbitsim::TrajectorySample> trajectory_inertial_planned;
-            std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial;
-            std::vector<orbitsim::TrajectorySegment> trajectory_segments_inertial_planned;
-            std::vector<ManeuverNodePreview> maneuver_previews;
-            std::vector<PublishedChunk> published_chunks{};
-            std::vector<StreamedPlannedChunk> streamed_planned_chunks{};
 
             [[nodiscard]] const SharedCelestialEphemeris &resolved_shared_ephemeris() const
             {
-                return _shared_core_data ? _shared_core_data->shared_ephemeris : shared_ephemeris;
+                return core.shared_core_data ? core.shared_core_data->shared_ephemeris : core.shared_ephemeris;
             }
 
             [[nodiscard]] const std::vector<orbitsim::MassiveBody> &resolved_massive_bodies() const
             {
-                return _shared_core_data ? _shared_core_data->massive_bodies : massive_bodies;
+                return core.shared_core_data ? core.shared_core_data->massive_bodies : core.massive_bodies;
             }
 
             [[nodiscard]] const std::vector<orbitsim::TrajectorySample> &resolved_trajectory_inertial() const
             {
-                return _shared_core_data ? _shared_core_data->trajectory_inertial : trajectory_inertial;
+                return core.shared_core_data ? core.shared_core_data->trajectory_inertial : core.trajectory_inertial;
             }
 
             [[nodiscard]] const std::vector<orbitsim::TrajectorySegment> &resolved_trajectory_segments_inertial() const
             {
-                return _shared_core_data ? _shared_core_data->trajectory_segments_inertial : trajectory_segments_inertial;
+                return core.shared_core_data ? core.shared_core_data->trajectory_segments_inertial
+                                             : core.trajectory_segments_inertial;
             }
 
             [[nodiscard]] const SharedCoreData &shared_core_data() const
             {
-                return _shared_core_data;
+                return core.shared_core_data;
             }
 
             [[nodiscard]] bool has_shared_core_data() const
             {
-                return static_cast<bool>(_shared_core_data);
+                return static_cast<bool>(core.shared_core_data);
             }
 
             [[nodiscard]] std::vector<orbitsim::MassiveBody> clone_massive_bodies() const
@@ -375,29 +422,26 @@ namespace Game
 
             [[nodiscard]] std::vector<orbitsim::MassiveBody> take_massive_bodies()
             {
-                assert(!_shared_core_data && "shared core data cannot be taken; use resolved_*(), shared_core_data(), or clone_*()");
-                return std::move(massive_bodies);
+                assert(!core.shared_core_data && "shared core data cannot be taken; use resolved_*(), shared_core_data(), or clone_*()");
+                return std::move(core.massive_bodies);
             }
 
             [[nodiscard]] std::vector<orbitsim::TrajectorySample> take_trajectory_inertial()
             {
-                assert(!_shared_core_data && "shared core data cannot be taken; use resolved_*(), shared_core_data(), or clone_*()");
-                return std::move(trajectory_inertial);
+                assert(!core.shared_core_data && "shared core data cannot be taken; use resolved_*(), shared_core_data(), or clone_*()");
+                return std::move(core.trajectory_inertial);
             }
 
             [[nodiscard]] std::vector<orbitsim::TrajectorySegment> take_trajectory_segments_inertial()
             {
-                assert(!_shared_core_data && "shared core data cannot be taken; use resolved_*(), shared_core_data(), or clone_*()");
-                return std::move(trajectory_segments_inertial);
+                assert(!core.shared_core_data && "shared core data cannot be taken; use resolved_*(), shared_core_data(), or clone_*()");
+                return std::move(core.trajectory_segments_inertial);
             }
 
             void set_shared_core_data(SharedCoreData shared_core_data)
             {
-                _shared_core_data = std::move(shared_core_data);
+                core.shared_core_data = std::move(shared_core_data);
             }
-
-        private:
-            SharedCoreData _shared_core_data{};
         };
 
         struct EphemerisSamplingSpec

@@ -113,7 +113,7 @@ namespace Game
                 const std::size_t suffix_begin_index)
         {
             const OrbitPredictionService::Request::PlannedSuffixRefineSpec &suffix =
-                    request.planned_suffix_refine;
+                    request.maneuver.planned_suffix_refine;
             if (!suffix.active ||
                 suffix_begin_index >= solve_plan.chunks.size() ||
                 !std::isfinite(suffix.anchor_time_s) ||
@@ -124,10 +124,10 @@ namespace Game
                 return false;
             }
 
-            const double start_epsilon_s = continuity_time_epsilon_s(request.sim_time_s);
+            const double start_epsilon_s = continuity_time_epsilon_s(request.world.sim_time_s);
             const double anchor_epsilon_s = continuity_time_epsilon_s(suffix.anchor_time_s);
             const double prefix_end_s = prediction_segment_end_time(suffix.prefix_segments_inertial.back());
-            if (std::abs(suffix.prefix_segments_inertial.front().t0_s - request.sim_time_s) > start_epsilon_s ||
+            if (std::abs(suffix.prefix_segments_inertial.front().t0_s - request.world.sim_time_s) > start_epsilon_s ||
                 std::abs(prefix_end_s - suffix.anchor_time_s) > anchor_epsilon_s)
             {
                 return false;
@@ -146,8 +146,8 @@ namespace Game
                 const OrbitPredictionService::Request &request)
         {
             PlannedSolveOutput output{};
-            output.segments = request.planned_suffix_refine.prefix_segments_inertial;
-            output.previews = request.planned_suffix_refine.prefix_previews;
+            output.segments = request.maneuver.planned_suffix_refine.prefix_segments_inertial;
+            output.previews = request.maneuver.planned_suffix_refine.prefix_previews;
             output.end_state = output.segments.empty() ? orbitsim::State{} : output.segments.back().end;
             output.diagnostics =
                     make_stage_diagnostics_from_segments(output.segments,
@@ -267,7 +267,7 @@ namespace Game
             PlannedPathSolveOutcome outcome{};
             const std::optional<std::size_t> suffix_begin_index =
                     find_planned_suffix_begin_chunk(env.solve_plan,
-                                                    env.request.planned_suffix_refine.anchor_time_s);
+                                                    env.request.maneuver.planned_suffix_refine.anchor_time_s);
             if (!suffix_begin_index.has_value() ||
                 !planned_suffix_refine_prefix_is_valid(env.request,
                                                        env.solve_plan,
@@ -321,7 +321,7 @@ namespace Game
                                               env.solve_plan,
                                               *suffix_begin_index,
                                               env.solve_plan.chunks.size(),
-                                              env.request.planned_suffix_refine.anchor_state_inertial,
+                                              env.request.maneuver.planned_suffix_refine.anchor_state_inertial,
                                               SuffixRefineChunkSink{
                                                       suffix_output,
                                                       suffix_published_chunks,
@@ -421,7 +421,7 @@ namespace Game
                 using Status = OrbitPredictionService::Status;
 
                 PlannedPredictionRouteOutcome route_outcome{};
-                if (env_.request.maneuver_impulses.empty())
+                if (env_.request.maneuver.maneuver_impulses.empty())
                 {
                     return route_outcome;
                 }
@@ -455,8 +455,8 @@ namespace Game
             static Request make_planned_request(const Request &request)
             {
                 Request planned_request = request;
-                std::stable_sort(planned_request.maneuver_impulses.begin(),
-                                 planned_request.maneuver_impulses.end(),
+                std::stable_sort(planned_request.maneuver.maneuver_impulses.begin(),
+                                 planned_request.maneuver.maneuver_impulses.end(),
                                  ManeuverImpulseByTime{});
                 return planned_request;
             }
@@ -579,8 +579,8 @@ namespace Game
             PreviewChunkRange find_preview_chunk_range() const
             {
                 const bool preview_staging_active =
-                        planned_request_.solve_quality == SolveQuality::FastPreview &&
-                        planned_request_.preview_patch.active;
+                        planned_request_.options.solve_quality == SolveQuality::FastPreview &&
+                        planned_request_.maneuver.preview_patch.active;
                 if (!preview_staging_active)
                 {
                     return {};
@@ -588,10 +588,10 @@ namespace Game
 
                 std::size_t preview_begin_index = solve_plan_.chunks.size();
                 std::size_t preview_end_index = solve_plan_.chunks.size();
-                const double preview_t0_s = planned_request_.preview_patch.anchor_time_s;
+                const double preview_t0_s = planned_request_.maneuver.preview_patch.anchor_time_s;
                 const double preview_t1_s =
-                        planned_request_.preview_patch.anchor_time_s +
-                        (2.0 * planned_request_.preview_patch.exact_window_s);
+                        planned_request_.maneuver.preview_patch.anchor_time_s +
+                        (2.0 * planned_request_.maneuver.preview_patch.exact_window_s);
                 const double preview_epsilon_s = continuity_time_epsilon_s(preview_t0_s);
                 for (std::size_t chunk_index = 0; chunk_index < solve_plan_.chunks.size(); ++chunk_index)
                 {
@@ -639,11 +639,11 @@ namespace Game
                 bool prefix_stage_solved = false;
 
                 orbitsim::State preview_start_state = env_.ship_state;
-                if (planned_request_.preview_patch.anchor_state_valid &&
-                    planned_request_.preview_patch.anchor_state_trusted &&
-                    finite_state(planned_request_.preview_patch.anchor_state_inertial))
+                if (planned_request_.maneuver.preview_patch.anchor_state_valid &&
+                    planned_request_.maneuver.preview_patch.anchor_state_trusted &&
+                    finite_state(planned_request_.maneuver.preview_patch.anchor_state_inertial))
                 {
-                    preview_start_state = planned_request_.preview_patch.anchor_state_inertial;
+                    preview_start_state = planned_request_.maneuver.preview_patch.anchor_state_inertial;
                 }
                 else if (preview_range.begin_index > 0u)
                 {
@@ -782,10 +782,10 @@ namespace Game
                 env_.out.diagnostics.trajectory_planned = outcome.output.diagnostics;
                 env_.out.diagnostics.trajectory_sample_count_planned = outcome.output.samples.size();
                 sync_prediction_stage_counts(env_.out);
-                env_.out.trajectory_segments_inertial_planned = std::move(outcome.output.segments);
-                env_.out.trajectory_inertial_planned = std::move(outcome.output.samples);
-                env_.out.maneuver_previews = std::move(outcome.output.previews);
-                env_.out.published_chunks = std::move(outcome.published_chunks);
+                env_.out.planned.trajectory_segments_inertial = std::move(outcome.output.segments);
+                env_.out.planned.trajectory_inertial = std::move(outcome.output.samples);
+                env_.out.planned.maneuver_previews = std::move(outcome.output.previews);
+                env_.out.publish.published_chunks = std::move(outcome.published_chunks);
             }
 
             PlannedPredictionRouteOutcome run_final_or_suffix_refine()
@@ -811,7 +811,7 @@ namespace Game
                 };
 
                 bool planned_path_solved = false;
-                if (planned_request_.planned_suffix_refine.active)
+                if (planned_request_.maneuver.planned_suffix_refine.active)
                 {
                     PlannedPathSolveOutcome suffix_outcome = solve_planned_suffix_refine_path(planned_env);
                     if (suffix_outcome.status == Status::Success)

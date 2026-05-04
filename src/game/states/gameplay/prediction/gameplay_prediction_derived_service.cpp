@@ -15,12 +15,12 @@ namespace Game
 
         bool request_is_full_streaming_stage(const OrbitPredictionDerivedService::Request &request)
         {
-            return request.solver_result.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+            return request.solver_result.envelope.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
         }
 
         bool request_is_preview_streaming_stage(const OrbitPredictionDerivedService::Request &request)
         {
-            return request.solver_result.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+            return request.solver_result.envelope.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
         }
 
         uint8_t derived_request_track_priority_rank(const OrbitPredictionService::RequestPriority priority)
@@ -184,7 +184,7 @@ namespace Game
             cache.identity.maneuver_plan_revision = request.maneuver_plan_revision;
             cache.identity.maneuver_plan_signature_valid = request.maneuver_plan_signature_valid;
             cache.identity.maneuver_plan_signature = request.maneuver_plan_signature;
-            cache.identity.build_time_s = solver.build_time_s;
+            cache.identity.build_time_s = solver.timing.build_time_s;
             cache.identity.build_pos_world = request.build_pos_world;
             cache.identity.build_vel_world = request.build_vel_world;
         }
@@ -198,14 +198,14 @@ namespace Game
             }
             else
             {
-                cache.solver.shared_ephemeris = std::move(solver.shared_ephemeris);
+                cache.solver.shared_ephemeris = std::move(solver.core.shared_ephemeris);
                 cache.solver.massive_bodies = solver.take_massive_bodies();
                 cache.solver.trajectory_inertial = solver.take_trajectory_inertial();
                 cache.solver.trajectory_segments_inertial = solver.take_trajectory_segments_inertial();
             }
-            cache.solver.trajectory_inertial_planned = std::move(solver.trajectory_inertial_planned);
-            cache.solver.trajectory_segments_inertial_planned = std::move(solver.trajectory_segments_inertial_planned);
-            cache.solver.maneuver_previews = std::move(solver.maneuver_previews);
+            cache.solver.trajectory_inertial_planned = std::move(solver.planned.trajectory_inertial);
+            cache.solver.trajectory_segments_inertial_planned = std::move(solver.planned.trajectory_segments_inertial);
+            cache.solver.maneuver_previews = std::move(solver.planned.maneuver_previews);
             cache.identity.valid = true;
         }
 
@@ -242,7 +242,7 @@ namespace Game
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec = request.resolved_frame_spec;
             if (full_streaming_stage)
             {
-                if (solver.streamed_planned_chunks.empty())
+                if (solver.publish.streamed_planned_chunks.empty())
                 {
                     return;
                 }
@@ -252,7 +252,7 @@ namespace Game
                             chunk_assembly,
                             cache.solver,
                             cache.display,
-                            solver.streamed_planned_chunks,
+                            solver.publish.streamed_planned_chunks,
                             generation_id,
                             resolved_frame_spec,
                             request.player_lookup_segments_inertial,
@@ -266,7 +266,7 @@ namespace Game
                 return;
             }
 
-            if (solver.published_chunks.empty())
+            if (solver.publish.published_chunks.empty())
             {
                 return;
             }
@@ -275,7 +275,7 @@ namespace Game
             PredictionChunkAssembly chunk_assembly{};
             if (StreamedChunkAssemblyBuilder::rebuild_from_published(chunk_assembly,
                                                                       cache.display,
-                                                                      solver.published_chunks,
+                                                                       solver.publish.published_chunks,
                                                                       generation_id,
                                                                       resolved_frame_spec,
                                                                       request.display_frame_key,
@@ -357,15 +357,15 @@ namespace Game
                                                OrbitPredictionDerivedService::Request src)
         {
             std::vector<OrbitPredictionService::PublishedChunk> merged_published_chunks =
-                    dst.solver_result.published_chunks;
-            merge_published_chunks(merged_published_chunks, src.solver_result.published_chunks);
+                    dst.solver_result.publish.published_chunks;
+            merge_published_chunks(merged_published_chunks, src.solver_result.publish.published_chunks);
 
             std::vector<OrbitPredictionService::StreamedPlannedChunk> merged_streamed_chunks =
-                    dst.solver_result.streamed_planned_chunks;
-            merge_streamed_planned_chunks(merged_streamed_chunks, src.solver_result.streamed_planned_chunks);
+                    dst.solver_result.publish.streamed_planned_chunks;
+            merge_streamed_planned_chunks(merged_streamed_chunks, src.solver_result.publish.streamed_planned_chunks);
 
-            src.solver_result.published_chunks = std::move(merged_published_chunks);
-            src.solver_result.streamed_planned_chunks = std::move(merged_streamed_chunks);
+            src.solver_result.publish.published_chunks = std::move(merged_published_chunks);
+            src.solver_result.publish.streamed_planned_chunks = std::move(merged_streamed_chunks);
             dst = std::move(src);
         }
     } // namespace
@@ -413,7 +413,7 @@ namespace Game
 
             const auto latest_it = _latest_requested_generation_by_track.find(request.track_id);
             const bool fast_preview_request =
-                    request.solver_result.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
+                    request.solver_result.envelope.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
             if (latest_it != _latest_requested_generation_by_track.end() &&
                 request.generation_id < latest_it->second &&
                 !fast_preview_request)
@@ -632,26 +632,26 @@ namespace Game
                                         generation_id = job.generation_id,
                                         request_epoch = job.request_epoch,
                                         maneuver_plan_revision = job.request.maneuver_plan_revision,
-                                        solve_quality = job.request.solver_result.solve_quality]() {
+                                        solve_quality = job.request.solver_result.envelope.solve_quality]() {
             return !should_continue_job(track_id, generation_id, request_epoch, maneuver_plan_revision, solve_quality);
         };
 
         Request &request = job.request;
         OrbitPredictionService::Result &solver = request.solver_result;
-        out.solve_quality = solver.solve_quality;
-        out.publish_stage = solver.publish_stage;
-        const bool preview_stage = solver.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
+        out.solve_quality = solver.envelope.solve_quality;
+        out.publish_stage = solver.envelope.publish_stage;
+        const bool preview_stage = solver.envelope.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
         const bool preview_streaming_stage =
                 preview_stage &&
-                solver.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
+                solver.envelope.publish_stage == OrbitPredictionService::PublishStage::PreviewStreaming;
         const bool full_streaming_stage =
                 !preview_stage &&
-                solver.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
+                solver.envelope.publish_stage == OrbitPredictionService::PublishStage::FullStreaming;
         const bool rebuild_metrics = !preview_stage && !full_streaming_stage;
         const bool build_planned_render_curve = !preview_streaming_stage && !full_streaming_stage;
         const bool build_chunk_render_curves = full_streaming_stage;
         const bool use_dense_chunk_samples = !preview_stage && !full_streaming_stage;
-        if (!solver.valid ||
+        if (!solver.envelope.valid ||
             solver.resolved_trajectory_inertial().size() < 2 ||
             solver.resolved_trajectory_segments_inertial().empty())
         {
@@ -811,7 +811,7 @@ namespace Game
                                      job.generation_id,
                                      job.request_epoch,
                                      job.request.maneuver_plan_revision,
-                                     job.request.solver_result.solve_quality))
+                                     job.request.solver_result.envelope.solve_quality))
             {
                 {
                     std::lock_guard<std::mutex> lock(_mutex);

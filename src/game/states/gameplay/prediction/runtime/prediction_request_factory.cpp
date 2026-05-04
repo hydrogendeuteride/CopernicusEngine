@@ -368,17 +368,17 @@ namespace Game
                         : 0.0;
 
         OrbitPredictionService::Request request{};
-        request.track_id = track.key.track_id();
-        request.maneuver_plan_revision = track.supports_maneuvers ? context.maneuver_plan_revision : 0u;
-        request.sim_time_s = now_s;
-        request.sim_config = context.orbital_scenario->sim.config();
-        request.shared_ephemeris = track.cache.resolved_shared_ephemeris();
-        request.massive_bodies = context.orbital_scenario->sim.massive_bodies();
-        request.ship_bary_position_m = ship_bary_pos_m;
-        request.ship_bary_velocity_mps = ship_bary_vel_mps;
-        request.thrusting = thrusting;
-        request.solve_quality = solve_quality;
-        request.priority = classify_prediction_request_priority(
+        request.envelope.track_id = track.key.track_id();
+        request.envelope.maneuver_plan_revision = track.supports_maneuvers ? context.maneuver_plan_revision : 0u;
+        request.world.sim_time_s = now_s;
+        request.world.sim_config = context.orbital_scenario->sim.config();
+        request.world.shared_ephemeris = track.cache.resolved_shared_ephemeris();
+        request.world.massive_bodies = context.orbital_scenario->sim.massive_bodies();
+        request.subject.ship_bary_position_m = ship_bary_pos_m;
+        request.subject.ship_bary_velocity_mps = ship_bary_vel_mps;
+        request.options.thrusting = thrusting;
+        request.options.solve_quality = solve_quality;
+        request.envelope.priority = classify_prediction_request_priority(
                 context.selection,
                 track.key,
                 track.is_celestial,
@@ -387,12 +387,12 @@ namespace Game
         if (preview_request_active)
         {
             const double anchor_offset_s = std::max(0.0, track.preview_anchor.anchor_time_s - now_s);
-            request.future_window_s = std::min(track.preview_anchor.request_window_s,
-                                                anchor_offset_s + (2.0 * preview_exact_window_s));
+            request.options.future_window_s = std::min(track.preview_anchor.request_window_s,
+                                                        anchor_offset_s + (2.0 * preview_exact_window_s));
         }
         else
         {
-            request.future_window_s = context.required_window_s(track, now_s, with_maneuvers);
+            request.options.future_window_s = context.required_window_s(track, now_s, with_maneuvers);
         }
 
         orbitsim::State preview_anchor_state{};
@@ -401,15 +401,15 @@ namespace Game
                 resolve_preview_anchor_state(context, track, preview_anchor_state, preview_anchor_state_trusted);
         if (preview_request_active)
         {
-            request.preview_patch.active = true;
-            request.preview_patch.anchor_time_s = track.preview_anchor.anchor_time_s;
-            request.preview_patch.visual_window_s = track.preview_anchor.visual_window_s;
-            request.preview_patch.exact_window_s = preview_exact_window_s;
+            request.maneuver.preview_patch.active = true;
+            request.maneuver.preview_patch.anchor_time_s = track.preview_anchor.anchor_time_s;
+            request.maneuver.preview_patch.visual_window_s = track.preview_anchor.visual_window_s;
+            request.maneuver.preview_patch.exact_window_s = preview_exact_window_s;
             if (preview_anchor_state_valid)
             {
-                request.preview_patch.anchor_state_valid = true;
-                request.preview_patch.anchor_state_trusted = preview_anchor_state_trusted;
-                request.preview_patch.anchor_state_inertial = preview_anchor_state;
+                request.maneuver.preview_patch.anchor_state_valid = true;
+                request.maneuver.preview_patch.anchor_state_trusted = preview_anchor_state_trusted;
+                request.maneuver.preview_patch.anchor_state_inertial = preview_anchor_state;
             }
         }
 
@@ -417,21 +417,21 @@ namespace Game
                 track.cache.display.resolved_frame_spec_valid
                         ? track.cache.display.resolved_frame_spec
                         : context.frame_selection.spec;
-        request.lagrange_sensitive = request_frame_is_lagrange_sensitive(display_frame_spec);
+        request.options.lagrange_sensitive = request_frame_is_lagrange_sensitive(display_frame_spec);
         const bool subject_is_player = context.subject_is_player(track.key);
         const bool auto_primary_may_shift_across_plan = with_maneuvers && subject_is_player;
-        request.preferred_primary_body_id =
+        request.subject.preferred_primary_body_id =
                 auto_primary_may_shift_across_plan ? orbitsim::kInvalidBodyId : track.auto_primary_body_id;
-        if (request.preferred_primary_body_id == orbitsim::kInvalidBodyId &&
+        if (request.subject.preferred_primary_body_id == orbitsim::kInvalidBodyId &&
             context.analysis_selection.spec.mode == PredictionAnalysisMode::FixedBodyBCI &&
             context.analysis_selection.spec.fixed_body_id != orbitsim::kInvalidBodyId)
         {
-            request.preferred_primary_body_id = context.analysis_selection.spec.fixed_body_id;
+            request.subject.preferred_primary_body_id = context.analysis_selection.spec.fixed_body_id;
         }
-        if (request.preferred_primary_body_id == orbitsim::kInvalidBodyId &&
+        if (request.subject.preferred_primary_body_id == orbitsim::kInvalidBodyId &&
             display_frame_spec.primary_body_id != orbitsim::kInvalidBodyId)
         {
-            request.preferred_primary_body_id = display_frame_spec.primary_body_id;
+            request.subject.preferred_primary_body_id = display_frame_spec.primary_body_id;
         }
 
         if (with_maneuvers && context.maneuver_plan)
@@ -439,12 +439,12 @@ namespace Game
             const double maneuver_window_s =
                     preview_request_active
                             ? track.preview_anchor.request_window_s
-                            : request.future_window_s;
+                            : request.options.future_window_s;
             const double request_end_s =
-                    request.sim_time_s +
+                    request.world.sim_time_s +
                     std::max(0.0, std::isfinite(maneuver_window_s) ? maneuver_window_s : 0.0);
             constexpr double kManeuverRequestTimeEpsilonS = 1.0e-6;
-            request.maneuver_impulses.reserve(context.maneuver_plan->nodes.size());
+            request.maneuver.maneuver_impulses.reserve(context.maneuver_plan->nodes.size());
             for (const ManeuverNode &node : context.maneuver_plan->nodes)
             {
                 if (!std::isfinite(node.time_s))
@@ -452,7 +452,7 @@ namespace Game
                     continue;
                 }
 
-                if (node.time_s < (request.sim_time_s - kManeuverRequestTimeEpsilonS) ||
+                if (node.time_s < (request.world.sim_time_s - kManeuverRequestTimeEpsilonS) ||
                     node.time_s > (request_end_s + kManeuverRequestTimeEpsilonS))
                 {
                     continue;
@@ -466,14 +466,14 @@ namespace Game
                                 ? orbitsim::kInvalidBodyId
                                 : context.resolve_maneuver_node_primary_body_id(node, node.time_s);
                 impulse.dv_rtn_mps = orbitsim::Vec3{node.dv_rtn_mps.x, node.dv_rtn_mps.y, node.dv_rtn_mps.z};
-                request.maneuver_impulses.push_back(impulse);
+                request.maneuver.maneuver_impulses.push_back(impulse);
             }
         }
 
-        if (!request.maneuver_impulses.empty())
+        if (!request.maneuver.maneuver_impulses.empty())
         {
-            request.maneuver_plan_signature_valid = true;
-            request.maneuver_plan_signature = context.maneuver_plan_signature;
+            request.envelope.maneuver_plan_signature_valid = true;
+            request.envelope.maneuver_plan_signature = context.maneuver_plan_signature;
         }
 
         const bool post_preview_full_refine =
@@ -487,7 +487,7 @@ namespace Game
             with_maneuvers &&
             selected_node &&
             maneuver_node_matches_preview_anchor(*selected_node, track.preview_anchor) &&
-            !request.maneuver_impulses.empty())
+            !request.maneuver.maneuver_impulses.empty())
         {
             std::vector<orbitsim::TrajectorySegment> prefix_segments;
             std::vector<OrbitPredictionService::ManeuverNodePreview> prefix_previews;
@@ -500,20 +500,20 @@ namespace Game
                                                prefix_previews) &&
                 states_are_continuous(prefix_segments.back().end, preview_anchor_state))
             {
-                request.planned_suffix_refine.active = true;
-                request.planned_suffix_refine.anchor_node_id = track.preview_anchor.anchor_node_id;
-                request.planned_suffix_refine.anchor_time_s = track.preview_anchor.anchor_time_s;
-                request.planned_suffix_refine.anchor_state_inertial = preview_anchor_state;
-                request.planned_suffix_refine.prefix_segments_inertial = std::move(prefix_segments);
-                request.planned_suffix_refine.prefix_previews = std::move(prefix_previews);
+                request.maneuver.planned_suffix_refine.active = true;
+                request.maneuver.planned_suffix_refine.anchor_node_id = track.preview_anchor.anchor_node_id;
+                request.maneuver.planned_suffix_refine.anchor_time_s = track.preview_anchor.anchor_time_s;
+                request.maneuver.planned_suffix_refine.anchor_state_inertial = preview_anchor_state;
+                request.maneuver.planned_suffix_refine.prefix_segments_inertial = std::move(prefix_segments);
+                request.maneuver.planned_suffix_refine.prefix_previews = std::move(prefix_previews);
             }
         }
-        request.full_stream_publish.active =
+        request.maneuver.full_stream_publish.active =
                 (interactive_request || post_preview_full_refine) &&
                 solve_quality == OrbitPredictionService::SolveQuality::Full &&
                 track.key == context.selection.active_subject &&
                 subject_is_player &&
-                !request.maneuver_impulses.empty();
+                !request.maneuver.maneuver_impulses.empty();
 
         out.built = true;
         out.interactive_request = interactive_request;
@@ -541,29 +541,29 @@ namespace Game
         }
 
         OrbitPredictionService::Request request{};
-        request.kind = OrbitPredictionService::RequestKind::Celestial;
-        request.track_id = track.key.track_id();
-        request.sim_time_s = now_s;
-        request.sim_config = context.orbital_scenario->sim.config();
-        request.massive_bodies = context.orbital_scenario->sim.massive_bodies();
-        request.shared_ephemeris = track.cache.resolved_shared_ephemeris();
-        request.subject_body_id = body->id;
-        request.priority = classify_prediction_request_priority(
+        request.envelope.kind = OrbitPredictionService::RequestKind::Celestial;
+        request.envelope.track_id = track.key.track_id();
+        request.world.sim_time_s = now_s;
+        request.world.sim_config = context.orbital_scenario->sim.config();
+        request.world.massive_bodies = context.orbital_scenario->sim.massive_bodies();
+        request.world.shared_ephemeris = track.cache.resolved_shared_ephemeris();
+        request.subject.subject_body_id = body->id;
+        request.envelope.priority = classify_prediction_request_priority(
                 context.selection,
                 track.key,
                 true,
                 false);
-        request.future_window_s = context.future_window_s(track.key);
-        request.lagrange_sensitive = request_frame_is_lagrange_sensitive(context.frame_selection.spec);
+        request.options.future_window_s = context.future_window_s(track.key);
+        request.options.lagrange_sensitive = request_frame_is_lagrange_sensitive(context.frame_selection.spec);
         if (context.analysis_selection.spec.mode == PredictionAnalysisMode::FixedBodyBCI &&
             context.analysis_selection.spec.fixed_body_id != orbitsim::kInvalidBodyId)
         {
-            request.preferred_primary_body_id = context.analysis_selection.spec.fixed_body_id;
+            request.subject.preferred_primary_body_id = context.analysis_selection.spec.fixed_body_id;
         }
-        if (request.preferred_primary_body_id == orbitsim::kInvalidBodyId &&
+        if (request.subject.preferred_primary_body_id == orbitsim::kInvalidBodyId &&
             context.frame_selection.spec.primary_body_id != orbitsim::kInvalidBodyId)
         {
-            request.preferred_primary_body_id = context.frame_selection.spec.primary_body_id;
+            request.subject.preferred_primary_body_id = context.frame_selection.spec.primary_body_id;
         }
 
         out_request = std::move(request);

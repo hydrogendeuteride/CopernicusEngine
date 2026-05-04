@@ -28,8 +28,8 @@ namespace Game
                 orbitsim::GameSimulation &sim,
                 const Request &request)
         {
-            const glm::dvec3 ship_bary_pos_m = request.ship_bary_position_m;
-            const glm::dvec3 ship_bary_vel_mps = request.ship_bary_velocity_mps;
+            const glm::dvec3 ship_bary_pos_m = request.subject.ship_bary_position_m;
+            const glm::dvec3 ship_bary_vel_mps = request.subject.ship_bary_velocity_mps;
             if (!finite_vec3(ship_bary_pos_m) || !finite_vec3(ship_bary_vel_mps))
             {
                 return TransientSpacecraftSetup{.status = Status::InvalidInput};
@@ -64,16 +64,16 @@ namespace Game
             }
 
             const std::optional<ReusableSpacecraftBaseline> reusable_baseline =
-                    env.services.find_reusable_baseline(env.request.track_id, env.job.request_epoch);
+                    env.services.find_reusable_baseline(env.request.envelope.track_id, env.job.request_epoch);
             const double reusable_window_s =
-                    std::isfinite(env.request.future_window_s)
-                            ? std::max(0.0, env.request.future_window_s)
+                    std::isfinite(env.request.options.future_window_s)
+                            ? std::max(0.0, env.request.options.future_window_s)
                             : 0.0;
             if (!reusable_baseline.has_value() ||
                 reusable_baseline->trajectory_inertial.size() < 2 ||
                 !validate_trajectory_segment_continuity(reusable_baseline->trajectory_segments_inertial) ||
                 !trajectory_segments_cover_window(reusable_baseline->trajectory_segments_inertial,
-                                                  env.request.sim_time_s,
+                                                  env.request.world.sim_time_s,
                                                   reusable_window_s))
             {
                 return false;
@@ -85,10 +85,10 @@ namespace Game
                                                          true);
             env.state.out.diagnostics.trajectory_sample_count = reusable_baseline->trajectory_inertial.size();
             sync_prediction_stage_counts(env.state.out);
-            env.state.out.shared_ephemeris = std::move(shared_ephemeris);
-            env.state.out.trajectory_segments_inertial = reusable_baseline->trajectory_segments_inertial;
-            env.state.out.trajectory_inertial = reusable_baseline->trajectory_inertial;
-            env.state.out.baseline_reused = true;
+            env.state.out.core.shared_ephemeris = std::move(shared_ephemeris);
+            env.state.out.core.trajectory_segments_inertial = reusable_baseline->trajectory_segments_inertial;
+            env.state.out.core.trajectory_inertial = reusable_baseline->trajectory_inertial;
+            env.state.out.envelope.baseline_reused = true;
             return true;
         }
     } // namespace
@@ -153,10 +153,10 @@ namespace Game
                 return outcome;
             }
 
-            env.state.out.shared_ephemeris = shared_ephemeris;
+            env.state.out.core.shared_ephemeris = shared_ephemeris;
         }
 
-        if (!env.request.maneuver_impulses.empty())
+        if (!env.request.maneuver.maneuver_impulses.empty())
         {
             PlannedPredictionRouteOutcome planned_outcome =
                     solve_planned_prediction_route(PlannedPredictionRouteEnvironment{
@@ -175,12 +175,12 @@ namespace Game
             }
         }
 
-        env.services.store_reusable_baseline(env.request.track_id,
+        env.services.store_reusable_baseline(env.request.envelope.track_id,
                                              env.job.generation_id,
                                              env.job.request_epoch,
-                                             env.state.out.shared_ephemeris,
-                                             env.state.out.trajectory_inertial,
-                                             env.state.out.trajectory_segments_inertial);
+                                             env.state.out.core.shared_ephemeris,
+                                             env.state.out.core.trajectory_inertial,
+                                             env.state.out.core.trajectory_segments_inertial);
 
         outcome.status = Status::Success;
         return outcome;

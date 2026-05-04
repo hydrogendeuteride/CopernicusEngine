@@ -261,7 +261,7 @@ namespace Game
             const PredictionRuntimeContext &context,
             OrbitPredictionService::Result result)
     {
-        PredictionTrackState *track = find_track_by_id(prediction.tracks, result.track_id);
+        PredictionTrackState *track = find_track_by_id(prediction.tracks, result.envelope.track_id);
         if (!track)
         {
             return false;
@@ -414,18 +414,18 @@ namespace Game
             return false;
         }
 
-        const OrbitPredictionService::SolveQuality submitted_quality = build.request.solve_quality;
-        const uint64_t submitted_track_id = build.request.track_id;
-        const uint64_t submitted_plan_revision = build.request.maneuver_plan_revision;
-        const bool submitted_plan_signature_valid = build.request.maneuver_plan_signature_valid;
-        const uint64_t submitted_plan_signature = build.request.maneuver_plan_signature;
-        const auto submitted_priority = build.request.priority;
-        const bool submitted_preview_patch = build.request.preview_patch.active;
-        const bool submitted_anchor_state_valid = build.request.preview_patch.anchor_state_valid;
-        const bool submitted_anchor_state_trusted = build.request.preview_patch.anchor_state_trusted;
-        const double submitted_anchor_time_s = build.request.preview_patch.anchor_time_s;
-        const double submitted_future_window_s = build.request.future_window_s;
-        const std::size_t submitted_maneuver_count = build.request.maneuver_impulses.size();
+        const OrbitPredictionService::SolveQuality submitted_quality = build.request.options.solve_quality;
+        const uint64_t submitted_track_id = build.request.envelope.track_id;
+        const uint64_t submitted_plan_revision = build.request.envelope.maneuver_plan_revision;
+        const bool submitted_plan_signature_valid = build.request.envelope.maneuver_plan_signature_valid;
+        const uint64_t submitted_plan_signature = build.request.envelope.maneuver_plan_signature;
+        const auto submitted_priority = build.request.envelope.priority;
+        const bool submitted_preview_patch = build.request.maneuver.preview_patch.active;
+        const bool submitted_anchor_state_valid = build.request.maneuver.preview_patch.anchor_state_valid;
+        const bool submitted_anchor_state_trusted = build.request.maneuver.preview_patch.anchor_state_trusted;
+        const double submitted_anchor_time_s = build.request.maneuver.preview_patch.anchor_time_s;
+        const double submitted_future_window_s = build.request.options.future_window_s;
+        const std::size_t submitted_maneuver_count = build.request.maneuver.maneuver_impulses.size();
         const uint64_t generation_id = prediction.service.request(std::move(build.request));
         mark_prediction_request_submitted(track,
                                           generation_id,

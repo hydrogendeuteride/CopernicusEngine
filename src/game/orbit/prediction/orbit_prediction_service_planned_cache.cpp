@@ -131,7 +131,7 @@ namespace Game
                                               const orbitsim::State &start_state)
     {
         uint64_t seed = kPlannedCacheHashSeed;
-        planned_hash_combine(seed, request.track_id);
+        planned_hash_combine(seed, request.envelope.track_id);
         planned_hash_combine(seed, quantized_cache_tick(start_time_s, kBaselineCacheStartTimeQuantumS));
         planned_hash_combine(seed, hash_quantized_state(start_state));
         return seed;
@@ -141,19 +141,19 @@ namespace Game
                                          const std::vector<orbitsim::MassiveBody> &massive_bodies)
     {
         uint64_t seed = kPlannedCacheHashSeed;
-        planned_hash_combine(seed, static_cast<uint8_t>(request.solve_quality));
-        planned_hash_combine(seed, request.thrusting);
-        planned_hash_combine(seed, request.lagrange_sensitive);
-        planned_hash_combine(seed, request.sim_config.gravitational_constant);
-        planned_hash_combine(seed, request.sim_config.softening_length_m);
-        planned_hash_combine(seed, request.sim_config.spacecraft_integrator.adaptive);
-        planned_hash_combine(seed, request.sim_config.spacecraft_integrator.max_step_s);
-        planned_hash_combine(seed, request.sim_config.spacecraft_integrator.abs_tol);
-        planned_hash_combine(seed, request.sim_config.spacecraft_integrator.rel_tol);
-        planned_hash_combine(seed, request.sim_config.spacecraft_integrator.max_substeps);
-        planned_hash_combine(seed, request.sim_config.spacecraft_integrator.max_substeps_hard);
-        planned_hash_combine(seed, request.sim_config.spacecraft_integrator.max_interval_splits);
-        planned_hash_combine(seed, request.preferred_primary_body_id);
+        planned_hash_combine(seed, static_cast<uint8_t>(request.options.solve_quality));
+        planned_hash_combine(seed, request.options.thrusting);
+        planned_hash_combine(seed, request.options.lagrange_sensitive);
+        planned_hash_combine(seed, request.world.sim_config.gravitational_constant);
+        planned_hash_combine(seed, request.world.sim_config.softening_length_m);
+        planned_hash_combine(seed, request.world.sim_config.spacecraft_integrator.adaptive);
+        planned_hash_combine(seed, request.world.sim_config.spacecraft_integrator.max_step_s);
+        planned_hash_combine(seed, request.world.sim_config.spacecraft_integrator.abs_tol);
+        planned_hash_combine(seed, request.world.sim_config.spacecraft_integrator.rel_tol);
+        planned_hash_combine(seed, request.world.sim_config.spacecraft_integrator.max_substeps);
+        planned_hash_combine(seed, request.world.sim_config.spacecraft_integrator.max_substeps_hard);
+        planned_hash_combine(seed, request.world.sim_config.spacecraft_integrator.max_interval_splits);
+        planned_hash_combine(seed, request.subject.preferred_primary_body_id);
         planned_hash_combine(seed, hash_massive_body_set(massive_bodies));
         return seed;
     }
@@ -175,7 +175,7 @@ namespace Game
     {
         const double chunk_cache_time_quantum_s = planned_chunk_cache_time_quantum_s(profile_id);
         return OrbitPredictionService::PlannedChunkCacheKey{
-                .track_id = request.track_id,
+                .track_id = request.envelope.track_id,
                 .baseline_generation_id = baseline_generation_id,
                 .upstream_maneuver_hash = upstream_maneuver_hash,
                 .frame_independent_generation = frame_independent_generation,

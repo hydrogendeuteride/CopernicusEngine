@@ -135,14 +135,15 @@ namespace Game
                                                                    const double chunk_t0_s,
                                                                    const double chunk_t1_s)
         {
-            if (request.preview_patch.active &&
-                request.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
-                std::isfinite(request.preview_patch.anchor_time_s) &&
-                request.preview_patch.exact_window_s > 0.0)
+            if (request.maneuver.preview_patch.active &&
+                request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
+                std::isfinite(request.maneuver.preview_patch.anchor_time_s) &&
+                request.maneuver.preview_patch.exact_window_s > 0.0)
             {
-                const double preview_t0_s = request.preview_patch.anchor_time_s;
+                const double preview_t0_s = request.maneuver.preview_patch.anchor_time_s;
                 const double preview_t1_s =
-                        request.preview_patch.anchor_time_s + (2.0 * request.preview_patch.exact_window_s);
+                        request.maneuver.preview_patch.anchor_time_s +
+                        (2.0 * request.maneuver.preview_patch.exact_window_s);
                 const double epsilon_s = continuity_time_epsilon_s(preview_t0_s);
                 if (chunk_t0_s >= (preview_t0_s - epsilon_s) && chunk_t1_s <= (preview_t1_s + epsilon_s))
                 {
@@ -150,7 +151,7 @@ namespace Game
                 }
             }
 
-            const double elapsed_s = std::max(0.0, chunk_t0_s - request.sim_time_s);
+            const double elapsed_s = std::max(0.0, chunk_t0_s - request.world.sim_time_s);
             if (elapsed_s < OrbitPredictionTuning::kPredictionChunkBandTransferEndS)
             {
                 return PredictionProfileId::Near;
@@ -181,15 +182,16 @@ namespace Game
     PredictionSolvePlan build_prediction_solve_plan(const OrbitPredictionService::Request &request)
     {
         PredictionSolvePlan plan{};
-        if (!std::isfinite(request.sim_time_s))
+        if (!std::isfinite(request.world.sim_time_s))
         {
             return plan;
         }
 
-        const double request_t0_s = request.sim_time_s;
+        const double request_t0_s = request.world.sim_time_s;
         const double request_t1_s = request_end_time_s(request);
         const double requested_window_s =
-                std::max(0.0, std::isfinite(request.future_window_s) ? request.future_window_s : 0.0);
+                std::max(0.0,
+                         std::isfinite(request.options.future_window_s) ? request.options.future_window_s : 0.0);
 
         if (!(request_t1_s > request_t0_s))
         {
@@ -197,7 +199,7 @@ namespace Game
         }
 
         std::vector<PlannerBoundaryPoint> boundaries;
-        boundaries.reserve(request.maneuver_impulses.size() + 16u);
+        boundaries.reserve(request.maneuver.maneuver_impulses.size() + 16u);
         append_planner_boundary(boundaries,
                                 request_t0_s,
                                 request_t1_s,
@@ -209,7 +211,7 @@ namespace Game
                                 request_t1_s,
                                 PredictionChunkBoundaryFlags::RequestEnd);
 
-        for (const OrbitPredictionService::ManeuverImpulse &impulse : request.maneuver_impulses)
+        for (const OrbitPredictionService::ManeuverImpulse &impulse : request.maneuver.maneuver_impulses)
         {
             append_planner_boundary(boundaries,
                                     request_t0_s,
@@ -218,14 +220,17 @@ namespace Game
                                     PredictionChunkBoundaryFlags::Maneuver);
         }
 
-        if (request.preview_patch.active &&
-            request.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
-            std::isfinite(request.preview_patch.anchor_time_s) &&
-            request.preview_patch.exact_window_s > 0.0)
+        if (request.maneuver.preview_patch.active &&
+            request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
+            std::isfinite(request.maneuver.preview_patch.anchor_time_s) &&
+            request.maneuver.preview_patch.exact_window_s > 0.0)
         {
-            const double preview_t0_s = request.preview_patch.anchor_time_s;
-            const double preview_t1_s = request.preview_patch.anchor_time_s + request.preview_patch.exact_window_s;
-            const double preview_t2_s = request.preview_patch.anchor_time_s + (2.0 * request.preview_patch.exact_window_s);
+            const double preview_t0_s = request.maneuver.preview_patch.anchor_time_s;
+            const double preview_t1_s =
+                    request.maneuver.preview_patch.anchor_time_s + request.maneuver.preview_patch.exact_window_s;
+            const double preview_t2_s =
+                    request.maneuver.preview_patch.anchor_time_s +
+                    (2.0 * request.maneuver.preview_patch.exact_window_s);
             append_planner_boundary(boundaries,
                                     request_t0_s,
                                     request_t1_s,
@@ -295,14 +300,15 @@ namespace Game
 
             uint32_t boundary_flags = merged_boundaries[i].flags | merged_boundaries[i + 1u].flags;
             const PredictionProfileId profile_id = resolve_chunk_profile_id(request, chunk_t0_s, chunk_t1_s);
-            if (request.preview_patch.active &&
-                request.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
-                std::isfinite(request.preview_patch.anchor_time_s) &&
-                request.preview_patch.exact_window_s > 0.0)
+            if (request.maneuver.preview_patch.active &&
+                request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview &&
+                std::isfinite(request.maneuver.preview_patch.anchor_time_s) &&
+                request.maneuver.preview_patch.exact_window_s > 0.0)
             {
-                const double preview_t0_s = request.preview_patch.anchor_time_s;
+                const double preview_t0_s = request.maneuver.preview_patch.anchor_time_s;
                 const double preview_t1_s =
-                        request.preview_patch.anchor_time_s + (2.0 * request.preview_patch.exact_window_s);
+                        request.maneuver.preview_patch.anchor_time_s +
+                        (2.0 * request.maneuver.preview_patch.exact_window_s);
                 const double epsilon_s = continuity_time_epsilon_s(preview_t0_s);
                 if (chunk_t0_s >= (preview_t0_s - epsilon_s) && chunk_t1_s <= (preview_t1_s + epsilon_s))
                 {
