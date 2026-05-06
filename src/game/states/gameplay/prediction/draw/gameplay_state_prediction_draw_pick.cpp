@@ -47,14 +47,11 @@ namespace Game
         OrbitRenderCurve::PickSettings pick_settings{};
         pick_settings.frustum_margin_ratio = pick_frustum_margin_ratio;
 
-        std::vector<double> pick_anchor_times = Draw::collect_maneuver_node_times(adapter_context.maneuver.plan().nodes);
-        pick_anchor_times.insert(pick_anchor_times.begin(), track_ctx.now_s);
-        if (track_ctx.planned_pick_window.valid && std::isfinite(track_ctx.planned_pick_window.anchor_time_s))
-        {
-            pick_anchor_times.push_back(track_ctx.planned_pick_window.anchor_time_s);
-        }
-        std::sort(pick_anchor_times.begin(), pick_anchor_times.end());
-        pick_anchor_times.erase(std::unique(pick_anchor_times.begin(), pick_anchor_times.end()), pick_anchor_times.end());
+        const std::vector<double> pick_anchor_times =
+                Draw::collect_pick_anchor_times(adapter_context.maneuver.plan().nodes,
+                                                track_ctx.base_pick_window,
+                                                track_ctx.planned_pick_window,
+                                                track_ctx.now_s);
         const std::span<const double> pick_anchor_times_span(pick_anchor_times);
 
         const auto make_pick_selection_context = [&]() {

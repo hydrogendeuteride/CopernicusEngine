@@ -167,6 +167,22 @@ namespace Game
         }
     };
 
+    struct PredictionTimeAnchorCache
+    {
+        uint64_t generation_id{0};
+        uint64_t revision{std::numeric_limits<uint64_t>::max()};
+        std::size_t source_count{std::numeric_limits<std::size_t>::max()};
+        std::vector<double> times_s{};
+
+        void clear()
+        {
+            generation_id = 0;
+            revision = std::numeric_limits<uint64_t>::max();
+            source_count = std::numeric_limits<std::size_t>::max();
+            times_s.clear();
+        }
+    };
+
     struct PredictionSolverTrajectoryCache
     {
         using ManeuverNodePreview = OrbitPredictionManeuverNodePreview;
@@ -787,6 +803,8 @@ namespace Game
         PredictionPreviewAnchor preview_anchor{};
         PredictionPreviewOverlay preview_overlay{};
         PredictionFrameBoundChunkOverlay full_stream_overlay{};
+        PredictionTimeAnchorCache planned_curve_preview_time_cache{};
+        PredictionTimeAnchorCache stale_planned_curve_preview_time_cache{};
         double preview_entered_at_s{std::numeric_limits<double>::quiet_NaN()};
         double preview_last_anchor_refresh_at_s{std::numeric_limits<double>::quiet_NaN()};
         double preview_last_request_at_s{std::numeric_limits<double>::quiet_NaN()};
@@ -821,6 +839,8 @@ namespace Game
             preview_anchor = {};
             preview_overlay.clear();
             full_stream_overlay.clear();
+            planned_curve_preview_time_cache.clear();
+            stale_planned_curve_preview_time_cache.clear();
             preview_entered_at_s = std::numeric_limits<double>::quiet_NaN();
             preview_last_anchor_refresh_at_s = std::numeric_limits<double>::quiet_NaN();
             preview_last_request_at_s = std::numeric_limits<double>::quiet_NaN();

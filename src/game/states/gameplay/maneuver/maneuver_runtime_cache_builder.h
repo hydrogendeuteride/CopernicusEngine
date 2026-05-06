@@ -27,6 +27,7 @@ namespace Game
         WorldVec3 align_delta{0.0, 0.0, 0.0};
         int active_preview_anchor_node_id{-1};
         bool hold_cached_release_state{false};
+        bool force_display_basis_refresh{false};
         std::function<orbitsim::BodyId(const ManeuverNode &, double)> resolve_primary_body_id{};
     };
 

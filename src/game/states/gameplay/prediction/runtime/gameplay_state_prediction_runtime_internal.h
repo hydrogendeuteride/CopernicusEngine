@@ -292,7 +292,6 @@ namespace Game::PredictionRuntimeDetail
                 prediction_track_preview_overlay_draw_active(snapshot, preview_anchor_valid);
         out.full_stream_overlay_draw_active =
                 !maneuver_drag_active &&
-                !out.preview_fallback_active &&
                 (snapshot.full_stream_overlay_active ||
                  snapshot.preview_state == PredictionPreviewRuntimeState::AwaitFullRefine ||
                  !active_maneuver_track);

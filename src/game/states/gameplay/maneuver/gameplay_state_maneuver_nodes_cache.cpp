@@ -11,7 +11,8 @@
 
 namespace Game
 {
-    void GameplayState::refresh_maneuver_node_runtime_cache(GameStateContext &ctx)
+    void GameplayState::refresh_maneuver_node_runtime_cache(GameStateContext &ctx,
+                                                            const bool force_display_basis_refresh)
     {
         GameplayPredictionAdapter prediction(build_prediction_access());
         ManeuverPredictionBridge::Context maneuver_prediction = build_maneuver_prediction_context();
@@ -94,6 +95,7 @@ namespace Game
                 .align_delta = align_delta,
                 .active_preview_anchor_node_id = _maneuver.active_preview_anchor_node_id(),
                 .hold_cached_release_state = hold_cached_release_state,
+                .force_display_basis_refresh = force_display_basis_refresh,
                 .resolve_primary_body_id = [maneuver_prediction](const ManeuverNode &node, const double query_time_s) {
                     return ManeuverPredictionBridge::resolve_node_primary_body_id(maneuver_prediction, node, query_time_s);
                 },

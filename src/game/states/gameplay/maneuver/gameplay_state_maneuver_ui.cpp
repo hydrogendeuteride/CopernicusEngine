@@ -40,8 +40,9 @@ namespace Game
             .apply_maneuver_command = [this](const ManeuverCommand &command) {
                 return apply_maneuver_command(command);
             },
-            .refresh_maneuver_node_runtime_cache = [this](GameStateContext &refresh_ctx) {
-                refresh_maneuver_node_runtime_cache(refresh_ctx);
+            .refresh_maneuver_node_runtime_cache = [this](GameStateContext &refresh_ctx,
+                                                          const bool force_display_basis_refresh) {
+                refresh_maneuver_node_runtime_cache(refresh_ctx, force_display_basis_refresh);
             },
             .current_sim_time_s = [this]() {
                 return current_sim_time_s();
@@ -254,8 +255,9 @@ namespace Game
         auto apply_maneuver_command = [&](const ManeuverCommand &command) {
             return context.apply_maneuver_command(command);
         };
-        auto refresh_maneuver_node_runtime_cache = [&](GameStateContext &refresh_ctx) {
-            context.refresh_maneuver_node_runtime_cache(refresh_ctx);
+        auto refresh_maneuver_node_runtime_cache = [&](GameStateContext &refresh_ctx,
+                                                       const bool force_display_basis_refresh = false) {
+            context.refresh_maneuver_node_runtime_cache(refresh_ctx, force_display_basis_refresh);
         };
         auto current_sim_time_s = [&]() {
             return context.current_sim_time_s();

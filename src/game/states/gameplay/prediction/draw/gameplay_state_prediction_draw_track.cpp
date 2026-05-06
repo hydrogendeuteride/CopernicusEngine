@@ -158,49 +158,33 @@ namespace Game
             return !cache.display.trajectory_segments_frame_planned.empty();
         };
 
-        const auto collect_planned_curve_anchor_times = [&](const OrbitPredictionCache &cache,
+        PredictionTimeAnchorCache local_preview_time_cache{};
+        const auto preview_time_cache_for = [&](const OrbitPredictionCache &cache) -> PredictionTimeAnchorCache & {
+            if (!track_ctx.track)
+            {
+                return local_preview_time_cache;
+            }
+            return (&cache == track_ctx.stale_planned_cache)
+                           ? track_ctx.track->stale_planned_curve_preview_time_cache
+                           : track_ctx.track->planned_curve_preview_time_cache;
+        };
+        const auto collect_planned_curve_anchor_times = [&](OrbitPredictionCache &cache,
                                                             const double window_t0_s,
                                                             const double window_t1_s) {
-            std::vector<double> anchors;
-            anchors.reserve(cache.solver.planned.maneuver_previews.size() + adapter_context.maneuver.plan().nodes.size() + 4u);
-            const auto push_anchor_time = [&](const double t_s, const bool allow_endpoint) {
-                if (!std::isfinite(t_s))
-                {
-                    return;
-                }
-                if (allow_endpoint)
-                {
-                    if (t_s < window_t0_s || t_s > window_t1_s)
-                    {
-                        return;
-                    }
-                }
-                else if (t_s <= (window_t0_s + 1.0e-6) ||
-                         t_s >= (window_t1_s - 1.0e-6))
-                {
-                    return;
-                }
-                anchors.push_back(t_s);
-            };
-
-            push_anchor_time(window_t0_s, true);
-            push_anchor_time(window_t1_s, true);
-            for (const OrbitPredictionManeuverNodePreview &preview : cache.solver.planned.maneuver_previews)
-            {
-                if (preview.valid)
-                {
-                    push_anchor_time(preview.t_s, false);
-                }
-            }
-            for (const ManeuverNode &node : adapter_context.maneuver.plan().nodes)
-            {
-                push_anchor_time(node.time_s, false);
-            }
-            if (track_ctx.track && track_ctx.track->preview_anchor.valid)
-            {
-                push_anchor_time(track_ctx.track->preview_anchor.anchor_time_s, false);
-            }
-            return anchors;
+            const bool preview_anchor_valid = track_ctx.track && track_ctx.track->preview_anchor.valid;
+            const double preview_anchor_time_s =
+                    preview_anchor_valid
+                            ? track_ctx.track->preview_anchor.anchor_time_s
+                            : std::numeric_limits<double>::quiet_NaN();
+            return Draw::collect_planned_curve_anchor_times(prediction_state.maneuver_node_time_cache,
+                                                            preview_time_cache_for(cache),
+                                                            adapter_context.maneuver.plan().nodes,
+                                                            adapter_context.maneuver.revision(),
+                                                            cache,
+                                                            preview_anchor_time_s,
+                                                            preview_anchor_valid,
+                                                            window_t0_s,
+                                                            window_t1_s);
         };
 
         const auto draw_planned_window_from_cache = [&](OrbitPredictionCache &cache,

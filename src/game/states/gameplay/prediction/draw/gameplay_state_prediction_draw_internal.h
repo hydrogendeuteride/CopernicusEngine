@@ -190,6 +190,19 @@ namespace Game::PredictionDrawDetail
     double meters_per_px_at_world(const OrbitDrawWindowContext &ctx, const WorldVec3 &p_world);
     double snap_time_past_straddling_segment(const std::vector<orbitsim::TrajectorySegment> &traj_segments, double t_s);
     std::vector<double> collect_maneuver_node_times(const std::vector<ManeuverNode> &nodes);
+    std::vector<double> collect_pick_anchor_times(const std::vector<ManeuverNode> &nodes,
+                                                  const PickWindow &base_pick_window,
+                                                  const PickWindow &planned_pick_window,
+                                                  double now_s);
+    std::vector<double> collect_planned_curve_anchor_times(PredictionTimeAnchorCache &maneuver_node_cache,
+                                                           PredictionTimeAnchorCache &preview_time_cache,
+                                                           const std::vector<ManeuverNode> &nodes,
+                                                           uint64_t maneuver_revision,
+                                                           const OrbitPredictionCache &cache,
+                                                           double preview_anchor_time_s,
+                                                           bool preview_anchor_valid,
+                                                           double window_t0_s,
+                                                           double window_t1_s);
     std::size_t lower_bound_sample_index(const std::vector<orbitsim::TrajectorySample> &traj, double t_s);
     bool frame_transform_is_identity(const glm::dmat3 &frame_to_world);
     const std::vector<orbitsim::TrajectorySegment> &base_segments_world_basis(PredictionTrackDrawContext &track_ctx);

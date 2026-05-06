@@ -112,7 +112,7 @@ namespace Game
         ManeuverPredictionBridgeContext build_maneuver_prediction_context();
         ManeuverUiControllerContext build_maneuver_ui_context(GameStateContext &ctx);
         void draw_orbit_drag_debug_window(GameStateContext &ctx);
-        void refresh_maneuver_node_runtime_cache(GameStateContext &ctx);
+        void refresh_maneuver_node_runtime_cache(GameStateContext &ctx, bool force_display_basis_refresh = false);
         void update_maneuver_nodes_time_warp(GameStateContext &ctx, float fixed_dt);
         void update_maneuver_nodes_execution(GameStateContext &ctx);
         ManeuverCommandResult apply_maneuver_command(const ManeuverCommand &command);

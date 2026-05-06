@@ -240,7 +240,7 @@ namespace Game
             if (result.applied)
             {
                 _maneuver.clear_gizmo_interaction();
-                context.refresh_maneuver_node_runtime_cache(ctx);
+                context.refresh_maneuver_node_runtime_cache(ctx, false);
             }
             return result;
         };
@@ -432,7 +432,7 @@ namespace Game
                     {
                         _maneuver.settings().gizmo_basis_mode = new_mode;
                         _maneuver.clear_gizmo_interaction();
-                        context.refresh_maneuver_node_runtime_cache(ctx);
+                        context.refresh_maneuver_node_runtime_cache(ctx, true);
                     }
                 }
                 ImGui::PopStyleColor(3);
