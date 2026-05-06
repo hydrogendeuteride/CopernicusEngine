@@ -1355,6 +1355,51 @@ TEST(GameplayPredictionManeuverTests, DrawPlannerBuildsRenderAndPickWindowsBefor
     GameplayTestHooks::clear_entities();
 }
 
+TEST(GameplayPredictionManeuverTests, DrawPlannerUsesPlannedAdaptiveCurveDuringPreviewFallback)
+{
+    Game::GameplayState state{};
+    state._orbit.scenario_owner() = make_reference_orbitsim(100.0);
+    ASSERT_TRUE(state._orbit.scenario_owner());
+    Game::Entity player_entity{Game::EntityId{1}, "player"};
+    register_player_draw_subject(state, player_entity);
+
+    Game::ManeuverNode node{};
+    node.id = 7;
+    node.time_s = 240.0;
+    node.dv_rtn_mps = glm::dvec3(0.0, 5.0, 0.0);
+    state._maneuver.plan().selected_node_id = node.id;
+    state._maneuver.plan().nodes.push_back(node);
+    const uint64_t plan_signature = make_prediction_adapter(state).current_maneuver_plan_signature();
+
+    Game::PredictionTrackState track{};
+    track.key = state.prediction_for_test().selection.active_subject;
+    track.supports_maneuvers = true;
+    track.preview_state = Game::PredictionPreviewRuntimeState::PreviewStreaming;
+    track.preview_anchor.valid = true;
+    track.preview_anchor.anchor_node_id = node.id;
+    track.preview_anchor.anchor_time_s = node.time_s;
+    track.preview_anchor.visual_window_s = 120.0;
+    track.preview_anchor.exact_window_s = 60.0;
+    track.cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
+    set_planned_path(track.cache, node.time_s, 320.0, 500.0);
+    track.cache.display.render_curve_frame_planned =
+            Game::OrbitRenderCurve::build(track.cache.display.trajectory_segments_frame_planned);
+    track.cache.identity.maneuver_plan_signature_valid = true;
+    track.cache.identity.maneuver_plan_signature = plan_signature;
+
+    Game::GameplayPredictionAdapter adapter = make_prediction_adapter(state);
+    Game::PredictionDrawDetail::PredictionTrackVisualPlan plan{};
+    ASSERT_TRUE(Game::PredictionDrawDetail::PredictionDrawPlanner(adapter)
+                        .build_track(track, make_draw_global_context(100.0), plan));
+
+    EXPECT_TRUE(plan.overlay_layers.preview_fallback_active);
+    EXPECT_TRUE(plan.track.planned_cache_drawable);
+    EXPECT_TRUE(plan.track.use_planned_adaptive_curve);
+    EXPECT_TRUE(plan.track.planned_draw_window.valid);
+
+    GameplayTestHooks::clear_entities();
+}
+
 TEST(GameplayPredictionManeuverTests, PickAnchorTimesOnlyIncludeNodesInsidePickWindows)
 {
     std::vector<Game::ManeuverNode> nodes;

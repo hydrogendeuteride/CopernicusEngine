@@ -270,7 +270,7 @@ TEST(GameplayPredictionManeuverTests, RemovingLastManeuverNodeClearsPlannedArtif
     EXPECT_EQ(state._maneuver.revision(), 1u);
 }
 
-TEST(GameplayPredictionManeuverTests, DerivedPreviewStreamingBuildSkipsPlannedRenderCurve)
+TEST(GameplayPredictionManeuverTests, DerivedPreviewStreamingBuildsPlannedRenderCurve)
 {
     Game::OrbitPredictionDerivedService service{};
 
@@ -281,7 +281,7 @@ TEST(GameplayPredictionManeuverTests, DerivedPreviewStreamingBuildSkipsPlannedRe
     ASSERT_TRUE(result.valid);
     EXPECT_TRUE(result.cache.identity.valid);
     EXPECT_FALSE(result.cache.display.trajectory_segments_frame_planned.empty());
-    EXPECT_TRUE(result.cache.display.render_curve_frame_planned.empty());
+    EXPECT_FALSE(result.cache.display.render_curve_frame_planned.empty());
 }
 
 TEST(GameplayPredictionManeuverTests, DerivedPreviewFinalizingBuildRestoresPlannedRenderCurve)
@@ -343,6 +343,46 @@ TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildUsesStreamedChunk
     EXPECT_DOUBLE_EQ(result.chunk_assembly.chunks.front().t1_s, 10.0);
     EXPECT_FALSE(result.chunk_assembly.chunks.front().render_curve.empty());
     EXPECT_EQ(result.diagnostics.status, Game::PredictionDerivedStatus::Success);
+}
+
+TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildsPlannedRenderCurveAndStreamedChunkRenderCurve)
+{
+    Game::OrbitPredictionDerivedService service{};
+    Game::OrbitPredictionDerivedService::PendingJob job = make_prediction_derived_job(
+            Game::OrbitPredictionService::SolveQuality::Full,
+            Game::OrbitPredictionService::PublishStage::FullStreaming);
+
+    Game::OrbitPredictionService::Result &solver = job.request.solver_result;
+    solver.publish.published_chunks = {
+            Game::OrbitPredictionService::PublishedChunk{
+                    .chunk_id = 3u,
+                    .quality_state = Game::OrbitPredictionService::ChunkQualityState::Final,
+                    .t0_s = 0.0,
+                    .t1_s = 10.0,
+                    .includes_planned_path = true,
+            },
+    };
+
+    Game::OrbitPredictionService::StreamedPlannedChunk streamed_chunk{};
+    streamed_chunk.published_chunk = solver.publish.published_chunks.front();
+    streamed_chunk.trajectory_inertial = {
+            make_sample(0.0, 7'000'000.0),
+            make_sample(10.0, 7'150'000.0),
+    };
+    streamed_chunk.trajectory_segments_inertial = {
+            make_segment(0.0, 10.0, 7'000'000.0, 7'150'000.0),
+    };
+    solver.publish.streamed_planned_chunks = {std::move(streamed_chunk)};
+
+    Game::OrbitPredictionDerivedService::Result result = service.build_cache(std::move(job));
+
+    ASSERT_TRUE(result.valid);
+    EXPECT_TRUE(result.cache.identity.valid);
+    EXPECT_FALSE(result.cache.display.trajectory_segments_frame_planned.empty());
+    EXPECT_FALSE(result.cache.display.render_curve_frame_planned.empty());
+    ASSERT_TRUE(result.chunk_assembly.valid);
+    ASSERT_EQ(result.chunk_assembly.chunks.size(), 1u);
+    EXPECT_FALSE(result.chunk_assembly.chunks.front().render_curve.empty());
 }
 
 TEST(GameplayPredictionManeuverTests, DerivedFullStreamingRequestMergesPendingChunksForSameGeneration)

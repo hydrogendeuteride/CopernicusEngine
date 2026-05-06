@@ -368,7 +368,6 @@ namespace Game
 
         out.identity_frame_transform = Draw::frame_transform_is_identity(out.frame_to_world);
         out.use_base_adaptive_curve = !out.stable_cache->display.render_curve_frame.empty();
-        const bool planned_preview_like = PredictionRuntimeDetail::prediction_track_planned_preview_like(lifecycle);
         const bool stale_planned_curve_drawable =
                 out.stale_planned_cache_drawable &&
                 out.stale_planned_cache &&
@@ -379,9 +378,7 @@ namespace Game
                 !out.planned_cache->display.render_curve_frame_planned.empty();
         const bool planned_curve_drawable =
                 current_planned_curve_drawable || stale_planned_curve_drawable;
-        out.use_planned_adaptive_curve =
-                planned_curve_drawable &&
-                (!planned_preview_like || stale_planned_curve_drawable || actual_maneuver_drag_active);
+        out.use_planned_adaptive_curve = planned_curve_drawable;
 
         out.world_basis_draw_ctx = out.draw_ctx;
         if (!out.identity_frame_transform)

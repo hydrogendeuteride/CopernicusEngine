@@ -45,6 +45,12 @@ namespace Game
         const bool disable_planned_overlay_boost =
                 track_ctx.active_player_track &&
                 long_or_dense_planned_plan;
+        const bool interactive_maneuver_edit_active =
+                track_ctx.maneuver_drag_active ||
+                adapter_context.maneuver.edit_preview().state != ManeuverNodeEditPreview::State::Idle;
+        const bool planned_render_line_cache_allowed =
+                !interactive_maneuver_edit_active &&
+                plan.lifecycle.state == PredictionTrackLifecycleState::Stable;
 
         const auto resolve_planned_dash_focus_window = [&]() {
             Draw::PickWindow window{};
@@ -315,6 +321,8 @@ namespace Game
         };
 
         PredictionTimeAnchorCache local_preview_time_cache{};
+        PredictionRenderLinePacketCache local_planned_render_line_cache{};
+        PredictionRenderLinePacketCache local_stale_planned_render_line_cache{};
         const auto preview_time_cache_for = [&](const OrbitPredictionCache &cache) -> PredictionTimeAnchorCache & {
             if (!track_ctx.track)
             {
@@ -323,6 +331,17 @@ namespace Game
             return (&cache == track_ctx.stale_planned_cache)
                            ? track_ctx.track->stale_planned_curve_preview_time_cache
                            : track_ctx.track->planned_curve_preview_time_cache;
+        };
+        const auto render_line_cache_for = [&](const OrbitPredictionCache &cache) -> PredictionRenderLinePacketCache & {
+            if (!track_ctx.track)
+            {
+                return (&cache == track_ctx.stale_planned_cache)
+                               ? local_stale_planned_render_line_cache
+                               : local_planned_render_line_cache;
+            }
+            return (&cache == track_ctx.stale_planned_cache)
+                           ? track_ctx.track->stale_planned_render_line_cache
+                           : track_ctx.track->planned_render_line_cache;
         };
         const auto collect_planned_curve_anchor_times = [&](OrbitPredictionCache &cache,
                                                             const double window_t0_s,
@@ -403,16 +422,40 @@ namespace Game
                             collect_planned_curve_anchor_times(cache, range_t0_s, range_t1_s);
                     const Draw::OrbitDrawWindowContext planned_ctx =
                             planned_draw_context_for(track_ctx.draw_ctx, dashed);
-                    Draw::draw_adaptive_curve_window(planned_ctx,
-                                                     prediction_state.draw_config,
-                                                     prediction_state.orbit_plot_perf,
-                                                     cache.display.render_curve_frame_planned,
-                                                     range_t0_s,
-                                                     range_t1_s,
-                                                     color,
-                                                     dashed,
-                                                     anchors,
-                                                     kPlannedAdaptiveSelectionErrorScale);
+                    if (!planned_render_line_cache_allowed)
+                    {
+                        render_line_cache_for(cache).clear();
+                        Draw::draw_adaptive_curve_window(planned_ctx,
+                                                         prediction_state.draw_config,
+                                                         prediction_state.orbit_plot_perf,
+                                                         cache.display.render_curve_frame_planned,
+                                                         range_t0_s,
+                                                         range_t1_s,
+                                                         color,
+                                                         dashed,
+                                                         anchors,
+                                                         kPlannedAdaptiveSelectionErrorScale);
+                        return true;
+                    }
+
+                    Draw::draw_cached_adaptive_curve_window(planned_ctx,
+                                                            prediction_state.draw_config,
+                                                            prediction_state.orbit_plot_perf,
+                                                            cache.display.render_curve_frame_planned,
+                                                            range_t0_s,
+                                                            range_t1_s,
+                                                            color,
+                                                            dashed,
+                                                            anchors,
+                                                            kPlannedAdaptiveSelectionErrorScale,
+                                                            render_line_cache_for(cache),
+                                                            cache.identity.generation_id,
+                                                            cache.display.display_frame_key,
+                                                            cache.display.display_frame_revision,
+                                                            cache.identity.maneuver_plan_revision,
+                                                            cache.identity.maneuver_plan_signature_valid
+                                                                    ? cache.identity.maneuver_plan_signature
+                                                                    : 0u);
                     return true;
                 }
 

@@ -248,6 +248,22 @@ namespace Game::PredictionDrawDetail
                                     bool dashed,
                                     std::span<const double> anchor_times_s = {},
                                     double selection_error_scale = 1.0);
+    void draw_cached_adaptive_curve_window(const OrbitDrawWindowContext &ctx,
+                                           const OrbitPredictionDrawConfig &draw_config,
+                                           OrbitPlotPerfStats &perf,
+                                           const OrbitRenderCurve &curve,
+                                           double t_start_s,
+                                           double t_end_s,
+                                           const glm::vec4 &color,
+                                           bool dashed,
+                                           std::span<const double> anchor_times_s,
+                                           double selection_error_scale,
+                                           PredictionRenderLinePacketCache &cache,
+                                           uint64_t generation_id,
+                                           uint64_t display_frame_key,
+                                           uint64_t display_frame_revision,
+                                           uint64_t maneuver_plan_revision,
+                                           uint64_t maneuver_plan_signature);
     std::vector<std::pair<double, double>> compute_uncovered_ranges(
             double t_start_s,
             double t_end_s,

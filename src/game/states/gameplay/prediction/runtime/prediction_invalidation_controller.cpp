@@ -86,6 +86,8 @@ namespace Game
             track.preview_overlay.clear();
             track.full_stream_overlay.clear();
             track.pick_cache.clear();
+            track.planned_render_line_cache.clear();
+            track.stale_planned_render_line_cache.clear();
 
             PredictionLifecycleReducer::clear_maneuver_scoped_pending_requests(track);
         }

@@ -86,6 +86,8 @@ public:
                   const WorldVec3 &b_world,
                   const glm::vec4 &color,
                   OrbitPlotDepth depth = OrbitPlotDepth::DepthTested);
+    void add_lines(std::span<const LineCommand> lines);
+    void add_lines_translated(std::span<const LineCommand> lines, const WorldVec3 &delta_world);
 
     bool has_active_lines() const;
     std::span<const LineCommand> active_lines() const;

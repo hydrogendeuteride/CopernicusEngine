@@ -641,14 +641,11 @@ namespace Game
         out.solve_quality = solver.envelope.solve_quality;
         out.publish_stage = solver.envelope.publish_stage;
         const bool preview_stage = solver.envelope.solve_quality == OrbitPredictionSolveQuality::FastPreview;
-        const bool preview_streaming_stage =
-                preview_stage &&
-                solver.envelope.publish_stage == OrbitPredictionPublishStage::PreviewStreaming;
         const bool full_streaming_stage =
                 !preview_stage &&
                 solver.envelope.publish_stage == OrbitPredictionPublishStage::FullStreaming;
         const bool rebuild_metrics = !preview_stage && !full_streaming_stage;
-        const bool build_planned_render_curve = !preview_streaming_stage && !full_streaming_stage;
+        const bool build_planned_render_curve = true;
         const bool build_chunk_render_curves = full_streaming_stage;
         const bool use_dense_chunk_samples = !preview_stage && !full_streaming_stage;
         if (!solver.envelope.valid ||

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/orbit_plot/orbit_plot.h"
 #include "core/picking/line_pick_segment.h"
 #include "core/world.h"
 #include "game/orbit/prediction/orbit_prediction_types.h"
@@ -585,6 +586,66 @@ namespace Game
         }
     };
 
+    struct PredictionRenderLinePacketCache
+    {
+        bool valid{false};
+        uint64_t generation_id{0};
+        uint64_t display_frame_key{0};
+        uint64_t display_frame_revision{0};
+        uint64_t maneuver_plan_revision{0};
+        uint64_t maneuver_plan_signature{0};
+        uint64_t anchor_hash{0};
+        WorldVec3 line_origin_world{0.0, 0.0, 0.0};
+        WorldVec3 ref_body_world{0.0, 0.0, 0.0};
+        WorldVec3 align_delta_world{0.0, 0.0, 0.0};
+        glm::dmat3 frame_to_world{1.0};
+        bool render_frustum_valid{false};
+        glm::mat4 render_frustum_viewproj{1.0f};
+        WorldVec3 render_frustum_origin_world{0.0, 0.0, 0.0};
+        glm::dvec3 camera_world{0.0, 0.0, 0.0};
+        double tan_half_fov{0.0};
+        double viewport_height_px{1.0};
+        double render_error_px{0.75};
+        double selection_error_scale{1.0};
+        double t0_s{std::numeric_limits<double>::quiet_NaN()};
+        double t1_s{std::numeric_limits<double>::quiet_NaN()};
+        std::size_t render_max_segments{0};
+        float line_overlay_boost{0.0f};
+        glm::vec4 color{1.0f};
+        bool cap_hit{false};
+        std::vector<OrbitPlotSystem::LineCommand> lines{};
+
+        void clear()
+        {
+            valid = false;
+            generation_id = 0;
+            display_frame_key = 0;
+            display_frame_revision = 0;
+            maneuver_plan_revision = 0;
+            maneuver_plan_signature = 0;
+            anchor_hash = 0;
+            line_origin_world = WorldVec3(0.0, 0.0, 0.0);
+            ref_body_world = WorldVec3(0.0, 0.0, 0.0);
+            align_delta_world = WorldVec3(0.0, 0.0, 0.0);
+            frame_to_world = glm::dmat3(1.0);
+            render_frustum_valid = false;
+            render_frustum_viewproj = glm::mat4(1.0f);
+            render_frustum_origin_world = WorldVec3(0.0, 0.0, 0.0);
+            camera_world = glm::dvec3(0.0, 0.0, 0.0);
+            tan_half_fov = 0.0;
+            viewport_height_px = 1.0;
+            render_error_px = 0.75;
+            selection_error_scale = 1.0;
+            t0_s = std::numeric_limits<double>::quiet_NaN();
+            t1_s = std::numeric_limits<double>::quiet_NaN();
+            render_max_segments = 0;
+            line_overlay_boost = 0.0f;
+            color = glm::vec4(1.0f);
+            cap_hit = false;
+            lines.clear();
+        }
+    };
+
     struct PredictionFrameOption
     {
         orbitsim::TrajectoryFrameSpec spec{};
@@ -806,6 +867,8 @@ namespace Game
         PredictionFrameBoundChunkOverlay full_stream_overlay{};
         PredictionTimeAnchorCache planned_curve_preview_time_cache{};
         PredictionTimeAnchorCache stale_planned_curve_preview_time_cache{};
+        PredictionRenderLinePacketCache planned_render_line_cache{};
+        PredictionRenderLinePacketCache stale_planned_render_line_cache{};
         double preview_entered_at_s{std::numeric_limits<double>::quiet_NaN()};
         double preview_last_anchor_refresh_at_s{std::numeric_limits<double>::quiet_NaN()};
         double preview_last_request_at_s{std::numeric_limits<double>::quiet_NaN()};
@@ -842,6 +905,8 @@ namespace Game
             full_stream_overlay.clear();
             planned_curve_preview_time_cache.clear();
             stale_planned_curve_preview_time_cache.clear();
+            planned_render_line_cache.clear();
+            stale_planned_render_line_cache.clear();
             preview_entered_at_s = std::numeric_limits<double>::quiet_NaN();
             preview_last_anchor_refresh_at_s = std::numeric_limits<double>::quiet_NaN();
             preview_last_request_at_s = std::numeric_limits<double>::quiet_NaN();

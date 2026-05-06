@@ -74,6 +74,34 @@ void OrbitPlotSystem::add_line(const WorldVec3 &a_world,
     _stats.pending_line_count = static_cast<uint32_t>(_pending_lines.size());
 }
 
+void OrbitPlotSystem::add_lines(std::span<const LineCommand> lines)
+{
+    if (lines.empty())
+    {
+        return;
+    }
+
+    _pending_lines.insert(_pending_lines.end(), lines.begin(), lines.end());
+    _stats.pending_line_count = static_cast<uint32_t>(_pending_lines.size());
+}
+
+void OrbitPlotSystem::add_lines_translated(std::span<const LineCommand> lines, const WorldVec3 &delta_world)
+{
+    if (lines.empty())
+    {
+        return;
+    }
+
+    _pending_lines.reserve(_pending_lines.size() + lines.size());
+    for (LineCommand cmd : lines)
+    {
+        cmd.a_world += delta_world;
+        cmd.b_world += delta_world;
+        _pending_lines.push_back(cmd);
+    }
+    _stats.pending_line_count = static_cast<uint32_t>(_pending_lines.size());
+}
+
 bool OrbitPlotSystem::has_active_lines() const
 {
     return !_active_lines.empty();
