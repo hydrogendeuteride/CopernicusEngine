@@ -11,6 +11,52 @@ namespace Game
 
     namespace
     {
+        bool segment_layout_matches(const orbitsim::TrajectorySegment &a,
+                                    const orbitsim::TrajectorySegment &b)
+        {
+            if (!std::isfinite(a.t0_s) ||
+                !std::isfinite(a.dt_s) ||
+                !std::isfinite(b.t0_s) ||
+                !std::isfinite(b.dt_s))
+            {
+                return false;
+            }
+
+            const double t0_scale = std::max(std::abs(a.t0_s), std::abs(b.t0_s));
+            const double dt_scale = std::max(std::abs(a.dt_s), std::abs(b.dt_s));
+            const double t0_epsilon = std::max(1.0e-6, t0_scale * 1.0e-12);
+            const double dt_epsilon = std::max(1.0e-6, dt_scale * 1.0e-12);
+            return std::abs(a.t0_s - b.t0_s) <= t0_epsilon &&
+                   std::abs(a.dt_s - b.dt_s) <= dt_epsilon &&
+                   a.flags == b.flags;
+        }
+
+        bool chunk_assembly_segment_layout_matches_display(
+                const PredictionDisplayFrameCache &display,
+                const PredictionChunkAssembly &assembly,
+                const std::size_t total_segment_count)
+        {
+            if (total_segment_count == 0u ||
+                total_segment_count != display.trajectory_segments_frame_planned.size())
+            {
+                return false;
+            }
+
+            std::size_t cursor = 0;
+            for (const OrbitChunk &chunk : assembly.chunks)
+            {
+                for (const orbitsim::TrajectorySegment &segment : chunk.frame_segments)
+                {
+                    if (!segment_layout_matches(display.trajectory_segments_frame_planned[cursor], segment))
+                    {
+                        return false;
+                    }
+                    ++cursor;
+                }
+            }
+            return cursor == display.trajectory_segments_frame_planned.size();
+        }
+
         bool build_prediction_streamed_planned_chunk(
                 OrbitChunk &out_chunk,
                 OrbitPredictionAdaptiveStageDiagnostics *out_stage_diagnostics,
@@ -440,6 +486,47 @@ namespace Game
                                                            chunk.frame_segments.begin(),
                                                            chunk.frame_segments.end());
 
+            for (const orbitsim::TrajectorySample &sample : chunk.frame_samples)
+            {
+                append_unique_prediction_sample(display.trajectory_frame_planned, sample);
+            }
+        }
+
+        if (build_render_curve && !display.trajectory_segments_frame_planned.empty())
+        {
+            display.render_curve_frame_planned = OrbitRenderCurve::build(display.trajectory_segments_frame_planned);
+        }
+    }
+
+    void StreamedChunkAssemblyBuilder::flatten_preserving_segments(PredictionDisplayFrameCache &display,
+                                                                   const PredictionChunkAssembly &assembly,
+                                                                   const bool build_render_curve)
+    {
+        if (!assembly.valid)
+        {
+            flatten(display, assembly, build_render_curve);
+            return;
+        }
+
+        std::size_t total_segment_count = 0;
+        std::size_t total_sample_count = 0;
+        for (const OrbitChunk &chunk : assembly.chunks)
+        {
+            total_segment_count += chunk.frame_segments.size();
+            total_sample_count += chunk.frame_samples.size();
+        }
+
+        if (!chunk_assembly_segment_layout_matches_display(display, assembly, total_segment_count))
+        {
+            flatten(display, assembly, build_render_curve);
+            return;
+        }
+
+        display.trajectory_frame_planned.clear();
+        display.render_curve_frame_planned.clear();
+        display.trajectory_frame_planned.reserve(total_sample_count);
+        for (const OrbitChunk &chunk : assembly.chunks)
+        {
             for (const orbitsim::TrajectorySample &sample : chunk.frame_samples)
             {
                 append_unique_prediction_sample(display.trajectory_frame_planned, sample);

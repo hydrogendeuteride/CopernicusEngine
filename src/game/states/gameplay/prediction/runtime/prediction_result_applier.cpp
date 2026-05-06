@@ -221,7 +221,9 @@ namespace Game
             return;
         }
 
-        if (track.supports_maneuvers && result.maneuver_plan_revision != context.current_maneuver_plan_revision)
+        if (track.supports_maneuvers &&
+            result.maneuver_plan_revision != context.current_maneuver_plan_revision &&
+            !live_fast_preview_result)
         {
             Logger::warn("Dropping stale maneuver derived result: track={} gen={} result_plan_rev={} current_plan_rev={} "
                          "latest_derived_gen={} frame_key={} frame_rev={} analysis_body={} "

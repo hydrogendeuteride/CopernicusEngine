@@ -25,7 +25,8 @@ namespace Game
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
                 OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true);
+                bool build_planned_render_curve = true,
+                bool build_planned_samples = true);
 
         static bool rebuild(
                 OrbitPredictionCache &cache,
@@ -33,7 +34,8 @@ namespace Game
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
                 OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true);
+                bool build_planned_render_curve = true,
+                bool build_planned_samples = true);
 
         static bool rebuild_planned(
                 const PredictionSolverTrajectoryCache &solver,
@@ -42,7 +44,8 @@ namespace Game
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
                 OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true);
+                bool build_planned_render_curve = true,
+                bool build_planned_samples = true);
 
         static bool rebuild_planned(
                 OrbitPredictionCache &cache,
@@ -50,6 +53,7 @@ namespace Game
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
                 OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true);
+                bool build_planned_render_curve = true,
+                bool build_planned_samples = true);
     };
 } // namespace Game

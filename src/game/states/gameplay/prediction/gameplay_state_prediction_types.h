@@ -784,7 +784,11 @@ namespace Game
         uint64_t drag_session_id{0};
         uint64_t drag_update_count{0};
         uint64_t request_count{0};
+        uint64_t full_request_count{0};
+        uint64_t fast_preview_request_count{0};
         uint64_t solver_result_count{0};
+        uint64_t full_solver_result_count{0};
+        uint64_t fast_preview_solver_result_count{0};
         uint64_t derived_result_count{0};
         uint64_t publish_count{0};
         uint64_t last_request_generation_id{0};
@@ -820,7 +824,12 @@ namespace Game
         std::size_t flattened_planned_segments_last{0};
         std::size_t flattened_planned_samples_last{0};
 
+        OrbitPredictionSolveQuality last_request_solve_quality{OrbitPredictionSolveQuality::Full};
         OrbitPredictionSolveQuality last_result_solve_quality{OrbitPredictionSolveQuality::Full};
+        double last_request_future_window_s{0.0};
+        std::size_t last_request_maneuver_count{0};
+        bool last_request_preview_patch{false};
+        bool last_request_full_stream_publish{false};
         bool drag_active{false};
 
         static bool has_time(const TimePoint &tp)

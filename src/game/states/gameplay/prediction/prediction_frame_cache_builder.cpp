@@ -23,7 +23,8 @@ namespace Game
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
             OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            const bool build_planned_render_curve,
+            const bool build_planned_samples)
     {
         if (diagnostics)
         {
@@ -52,7 +53,10 @@ namespace Game
         if (resolved_frame_spec.type == orbitsim::TrajectoryFrameType::Inertial)
         {
             display.trajectory_frame = base_samples;
-            display.trajectory_frame_planned = solver.planned.trajectory_inertial;
+            if (build_planned_samples)
+            {
+                display.trajectory_frame_planned = solver.planned.trajectory_inertial;
+            }
             display.trajectory_segments_frame = base_segments;
             display.trajectory_segments_frame_planned = solver.planned.trajectory_segments_inertial;
             if (!validate_trajectory_segment_continuity(display.trajectory_segments_frame))
@@ -175,10 +179,13 @@ namespace Game
                         diagnostics->frame_planned.frame_resegmentation_count =
                                 planned_frame_diag.frame_resegmentation_count;
                     }
-                    display.trajectory_frame_planned = sample_prediction_segments(
-                            display.trajectory_segments_frame_planned,
-                            planned_sample_budget,
-                            node_times);
+                    if (build_planned_samples)
+                    {
+                        display.trajectory_frame_planned = sample_prediction_segments(
+                                display.trajectory_segments_frame_planned,
+                                planned_sample_budget,
+                                node_times);
+                    }
                 }
             }
         }
@@ -206,7 +213,8 @@ namespace Game
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
             OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            const bool build_planned_render_curve,
+            const bool build_planned_samples)
     {
         return rebuild(cache.solver,
                        cache.display,
@@ -215,7 +223,8 @@ namespace Game
                        player_lookup_segments_inertial,
                        cancel_requested,
                        diagnostics,
-                       build_planned_render_curve);
+                       build_planned_render_curve,
+                       build_planned_samples);
     }
 
     bool PredictionFrameCacheBuilder::rebuild_planned(
@@ -225,7 +234,8 @@ namespace Game
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
             OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            const bool build_planned_render_curve,
+            const bool build_planned_samples)
     {
         if (diagnostics)
         {
@@ -262,12 +272,15 @@ namespace Game
                 return false;
             }
 
-            display.trajectory_frame_planned =
-                    solver.planned.trajectory_inertial.size() >= 2
-                            ? solver.planned.trajectory_inertial
-                            : sample_prediction_segments(display.trajectory_segments_frame_planned,
-                                                          planned_sample_budget,
-                                                          node_times);
+            if (build_planned_samples)
+            {
+                display.trajectory_frame_planned =
+                        solver.planned.trajectory_inertial.size() >= 2
+                                ? solver.planned.trajectory_inertial
+                                : sample_prediction_segments(display.trajectory_segments_frame_planned,
+                                                              planned_sample_budget,
+                                                              node_times);
+            }
             if (diagnostics)
             {
                 diagnostics->frame_planned = make_stage_diagnostics_from_segments(
@@ -324,10 +337,13 @@ namespace Game
                         prediction_segment_span_s(display.trajectory_segments_frame_planned);
                 diagnostics->frame_planned.frame_resegmentation_count = planned_frame_diag.frame_resegmentation_count;
             }
-            display.trajectory_frame_planned = sample_prediction_segments(
-                    display.trajectory_segments_frame_planned,
-                    planned_sample_budget,
-                    node_times);
+            if (build_planned_samples)
+            {
+                display.trajectory_frame_planned = sample_prediction_segments(
+                        display.trajectory_segments_frame_planned,
+                        planned_sample_budget,
+                        node_times);
+            }
         }
 
         display.render_curve_frame_planned =
@@ -346,7 +362,8 @@ namespace Game
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
             OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            const bool build_planned_render_curve,
+            const bool build_planned_samples)
     {
         return rebuild_planned(cache.solver,
                                cache.display,
@@ -354,6 +371,7 @@ namespace Game
                                player_lookup_segments_inertial,
                                cancel_requested,
                                diagnostics,
-                               build_planned_render_curve);
+                               build_planned_render_curve,
+                               build_planned_samples);
     }
 } // namespace Game

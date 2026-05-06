@@ -74,7 +74,16 @@ namespace Game
             const auto now_tp = PredictionDragDebugTelemetry::Clock::now();
             debug.last_request_tp = now_tp;
             debug.last_request_generation_id = generation_id;
+            debug.last_request_solve_quality = solve_quality;
             ++debug.request_count;
+            if (solve_quality == OrbitPredictionSolveQuality::FastPreview)
+            {
+                ++debug.fast_preview_request_count;
+            }
+            else
+            {
+                ++debug.full_request_count;
+            }
             if (debug.drag_active && PredictionDragDebugTelemetry::has_time(debug.last_drag_update_tp))
             {
                 PredictionRuntimeDetail::update_last_and_peak(
@@ -243,15 +252,11 @@ namespace Game
 
         while (auto completed = prediction.derived_service.poll_completed())
         {
-            const bool streaming_publish =
-                    completed->publish_stage == OrbitPredictionPublishStage::PreviewStreaming ||
-                    completed->publish_stage == OrbitPredictionPublishStage::FullStreaming;
             apply_completed_derived_result(prediction, context, std::move(*completed));
             applied_result = true;
-            if (streaming_publish)
-            {
-                break;
-            }
+            // Applying long-horizon derived caches can move/copy large vectors into track state.
+            // Keep one derived publish per frame so multiple completed jobs do not stack into one hitch.
+            break;
         }
 
         return applied_result;
@@ -427,6 +432,7 @@ namespace Game
         const double submitted_anchor_time_s = build.request.maneuver.preview_patch.anchor_time_s;
         const double submitted_future_window_s = build.request.options.future_window_s;
         const std::size_t submitted_maneuver_count = build.request.maneuver.maneuver_impulses.size();
+        const bool submitted_full_stream_publish = build.request.maneuver.full_stream_publish.active;
         const uint64_t generation_id = prediction.solver_service().request(std::move(build.request));
         mark_prediction_request_submitted(track,
                                           generation_id,
@@ -435,6 +441,11 @@ namespace Game
                                           submitted_plan_signature_valid,
                                           submitted_plan_signature,
                                           build.preview_request_active);
+        PredictionDragDebugTelemetry &debug = track.drag_debug;
+        debug.last_request_future_window_s = submitted_future_window_s;
+        debug.last_request_maneuver_count = submitted_maneuver_count;
+        debug.last_request_preview_patch = submitted_preview_patch;
+        debug.last_request_full_stream_publish = submitted_full_stream_publish;
         if (track.supports_maneuvers)
         {
             Logger::debug("Maneuver prediction request: track={} gen={} plan_rev={} plan_sig={} plan_sig_valid={} "

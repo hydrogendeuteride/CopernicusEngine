@@ -74,7 +74,7 @@ namespace Game
         void reset();
         // Reuse a compatible cached ephemeris when possible, otherwise build and cache one.
         SharedCelestialEphemeris get_or_build_ephemeris(const EphemerisBuildRequest &request);
-        // Derive spacecraft prediction horizon and cadence from the current orbital state.
+        // Derive spacecraft prediction horizon and sample spacing from the current orbital state.
         static EphemerisSamplingSpec build_ephemeris_sampling_spec(const Request &request);
 
         using PlannedChunkCacheKey = OrbitPredictionPlannedChunkCacheKey;

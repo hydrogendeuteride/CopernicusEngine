@@ -69,6 +69,10 @@ namespace Game
                             const PredictionChunkAssembly &assembly,
                             bool build_render_curve = true);
 
+        static void flatten_preserving_segments(PredictionDisplayFrameCache &display,
+                                                const PredictionChunkAssembly &assembly,
+                                                bool build_render_curve = true);
+
         static void flatten(OrbitPredictionCache &cache,
                             const PredictionChunkAssembly &assembly,
                             bool build_render_curve = true);

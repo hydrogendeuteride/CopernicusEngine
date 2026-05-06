@@ -43,6 +43,11 @@ namespace Game
         {
             GameplayPredictionAdapter(build_prediction_access()).mark_maneuver_plan_dirty();
         }
+        else if (result.plan_changed)
+        {
+            const uint64_t revision = _maneuver.increment_revision();
+            _prediction->invalidate_maneuver_plan_revision(revision);
+        }
 
         return result;
     }
