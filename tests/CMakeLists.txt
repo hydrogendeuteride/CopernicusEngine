@@ -7,27 +7,27 @@ if(NOT TARGET gtest)
 endif()
 
 set(ORBIT_PREDICTION_POLICY_SOURCES
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_policy_integrator.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_policy_chunking.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_policy_profile.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_policy_adaptive.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_policy_ephemeris.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/policy_integrator.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/policy_chunking.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/policy_profile.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/policy_adaptive.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/policy_ephemeris.cpp"
 )
 
 set(ORBIT_PREDICTION_SERVICE_SOURCES
   "${PROJECT_SOURCE_DIR}/src/game/orbit/trajectory/trajectory_utils.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/orbit_prediction_service.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_compute.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_route_solvers.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_spacecraft_route.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_route.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_stage_publisher.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_cache.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_maneuver.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned_chunk_attempt.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_planned.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_trajectory.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_sampling.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/service.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/compute.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/routes.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/spacecraft.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/planned_route.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/stage_publish.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/planned_cache.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/planned_maneuver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/chunk_attempt.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/planned.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/trajectory.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/sampling.cpp"
   ${ORBIT_PREDICTION_POLICY_SOURCES}
 )
 
@@ -302,7 +302,7 @@ add_executable(gameplay_prediction_maneuver_tests
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_trajectory_sampler.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_frame_cache_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_metrics_builder.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/streamed_chunk_assembly_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/nbody/chunk_assembly.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_prediction_derived_service.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_plan_model.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver/maneuver_commands.cpp"
@@ -353,13 +353,13 @@ add_executable(prediction_cache_internal_tests
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve_render.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve_pick.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_trajectory.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/prediction/orbit_prediction_service_sampling.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/trajectory.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/nbody/prediction/sampling.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/trajectory/trajectory_utils.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/gameplay_prediction_cache_internal.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_frame_cache_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/prediction_metrics_builder.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/streamed_chunk_assembly_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction/nbody/chunk_assembly.cpp"
 )
 
 set_property(TARGET prediction_cache_internal_tests PROPERTY CXX_STANDARD 20)

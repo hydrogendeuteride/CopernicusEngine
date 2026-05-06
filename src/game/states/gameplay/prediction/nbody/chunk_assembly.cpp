@@ -1,4 +1,4 @@
-#include "game/states/gameplay/prediction/streamed_chunk_assembly_builder.h"
+#include "game/states/gameplay/prediction/nbody/chunk_assembly.h"
 #include "game/states/gameplay/prediction/gameplay_prediction_cache_internal.h"
 
 #include <algorithm>

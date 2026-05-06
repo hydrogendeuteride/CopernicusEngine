@@ -1,4 +1,4 @@
-#include "game/orbit/prediction/orbit_prediction_service_internal.h"
+#include "game/orbit/nbody/internal.h"
 
 #include <iterator>
 

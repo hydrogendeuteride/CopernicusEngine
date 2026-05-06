@@ -1,7 +1,7 @@
 #include "game/states/gameplay/prediction/gameplay_prediction_derived_service.h"
 #include "game/states/gameplay/prediction/prediction_frame_cache_builder.h"
 #include "game/states/gameplay/prediction/prediction_metrics_builder.h"
-#include "game/states/gameplay/prediction/streamed_chunk_assembly_builder.h"
+#include "game/states/gameplay/prediction/nbody/chunk_assembly.h"
 
 #include <algorithm>
 #include <chrono>

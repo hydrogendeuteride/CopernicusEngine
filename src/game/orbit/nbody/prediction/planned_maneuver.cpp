@@ -1,4 +1,4 @@
-#include "game/orbit/prediction/orbit_prediction_service_internal.h"
+#include "game/orbit/nbody/internal.h"
 
 #include "orbitsim/frame_utils.hpp"
 #include "orbitsim/trajectory_transforms.hpp"

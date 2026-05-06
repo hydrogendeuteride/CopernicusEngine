@@ -11,7 +11,9 @@ prediction/
   prediction_trajectory_sampler.h / .cpp         # public sampling, player lookup, and segment-slice helpers
   prediction_frame_cache_builder.h / .cpp        # display-frame cache rebuild entry point
   prediction_metrics_builder.h / .cpp            # orbital metrics/analysis cache rebuild entry point
-  streamed_chunk_assembly_builder.h / .cpp       # streamed/published chunk assembly entry point
+  streamed_chunk_assembly_builder.h              # compatibility shim for nbody/chunk_assembly.h
+  nbody/
+    chunk_assembly.h / .cpp                      # streamed/published chunk assembly entry point
   gameplay_prediction_derived_service.h / .cpp   # background-threaded derived cache builder
   prediction_system.h / .cpp                     # facade over runtime, invalidation, solver, and derived services
   prediction_subject_state_provider.h / .cpp     # world-state resolution for prediction subjects
@@ -56,8 +58,11 @@ prediction/
 - `prediction_metrics_builder.h`
   `PredictionMetricsBuilder` -- named entry point for rebuilding analysis samples and orbital HUD metrics from solver/display cache data.
 
-- `streamed_chunk_assembly_builder.h`
+- `nbody/chunk_assembly.h`
   `StreamedChunkAssemblyBuilder` -- named entry point for turning solver published/streamed chunk metadata into display-frame planned chunk assemblies used directly by draw and pick.
+
+- `streamed_chunk_assembly_builder.h`
+  Compatibility shim for the previous include path.
 
 - `gameplay_prediction_derived_service.h`
   `OrbitPredictionDerivedService` -- a background-threaded worker that takes solver results from `OrbitPredictionService` and builds display-frame caches (frame transforms, resampling, render curves, orbital metrics). Supports per-track generation-based staleness detection and request coalescing, similar to the solver service.
@@ -159,7 +164,7 @@ The feature is driven from `GameplayState` like this:
   Start in `gameplay_state_prediction_types.h`.
 
 - Hermite sampling, frame cache rebuild logic, or orbital metrics computation:
-  Start in `prediction_frame_cache_builder.h/.cpp`, `prediction_metrics_builder.h/.cpp`, or `streamed_chunk_assembly_builder.h/.cpp`. Drop to `gameplay_prediction_cache_internal.h/.cpp` for the low-level sampling and transform helpers.
+  Start in `prediction_frame_cache_builder.h/.cpp`, `prediction_metrics_builder.h/.cpp`, or `nbody/chunk_assembly.h/.cpp`. Drop to `gameplay_prediction_cache_internal.h/.cpp` for the low-level sampling and transform helpers.
 
 - Derived service threading, request coalescing, or cache build workflow:
   Start in `gameplay_prediction_derived_service.h/.cpp`.

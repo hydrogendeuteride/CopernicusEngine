@@ -31,25 +31,30 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/orbit/trajectory/trajectory_utils.cpp
   game/orbit/prediction/orbit_prediction_types.h
   game/orbit/orbit_prediction_service.h
-  game/orbit/orbit_prediction_service.cpp
   game/orbit/prediction/prediction_diagnostics_util.h
   game/orbit/prediction/orbit_prediction_service_internal.h
-  game/orbit/prediction/orbit_prediction_service_compute.cpp
-  game/orbit/prediction/orbit_prediction_service_route_solvers.cpp
-  game/orbit/prediction/orbit_prediction_service_spacecraft_route.cpp
-  game/orbit/prediction/orbit_prediction_service_planned_route.cpp
-  game/orbit/prediction/orbit_prediction_service_planned_stage_publisher.cpp
-  game/orbit/prediction/orbit_prediction_service_planned_cache.cpp
-  game/orbit/prediction/orbit_prediction_service_planned_maneuver.cpp
-  game/orbit/prediction/orbit_prediction_service_planned_chunk_attempt.cpp
-  game/orbit/prediction/orbit_prediction_service_planned.cpp
-  game/orbit/prediction/orbit_prediction_service_trajectory.cpp
-  game/orbit/prediction/orbit_prediction_service_sampling.cpp
-  game/orbit/prediction/orbit_prediction_service_policy_integrator.cpp
-  game/orbit/prediction/orbit_prediction_service_policy_chunking.cpp
-  game/orbit/prediction/orbit_prediction_service_policy_profile.cpp
-  game/orbit/prediction/orbit_prediction_service_policy_adaptive.cpp
-  game/orbit/prediction/orbit_prediction_service_policy_ephemeris.cpp
+  game/orbit/nbody/tuning.h
+  game/orbit/nbody/types.h
+  game/orbit/nbody/service.h
+  game/orbit/nbody/service.cpp
+  game/orbit/nbody/diagnostics.h
+  game/orbit/nbody/internal.h
+  game/orbit/nbody/prediction/compute.cpp
+  game/orbit/nbody/prediction/routes.cpp
+  game/orbit/nbody/prediction/spacecraft.cpp
+  game/orbit/nbody/prediction/planned_route.cpp
+  game/orbit/nbody/prediction/stage_publish.cpp
+  game/orbit/nbody/prediction/planned_cache.cpp
+  game/orbit/nbody/prediction/planned_maneuver.cpp
+  game/orbit/nbody/prediction/chunk_attempt.cpp
+  game/orbit/nbody/prediction/planned.cpp
+  game/orbit/nbody/prediction/trajectory.cpp
+  game/orbit/nbody/prediction/sampling.cpp
+  game/orbit/nbody/prediction/policy_integrator.cpp
+  game/orbit/nbody/prediction/policy_chunking.cpp
+  game/orbit/nbody/prediction/policy_profile.cpp
+  game/orbit/nbody/prediction/policy_adaptive.cpp
+  game/orbit/nbody/prediction/policy_ephemeris.cpp
 
   # game root
   game/main_game.h
@@ -115,7 +120,8 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/prediction/prediction_metrics_builder.h
   game/states/gameplay/prediction/prediction_metrics_builder.cpp
   game/states/gameplay/prediction/streamed_chunk_assembly_builder.h
-  game/states/gameplay/prediction/streamed_chunk_assembly_builder.cpp
+  game/states/gameplay/prediction/nbody/chunk_assembly.h
+  game/states/gameplay/prediction/nbody/chunk_assembly.cpp
   game/states/gameplay/prediction/gameplay_prediction_state.h
   game/states/gameplay/prediction/gameplay_prediction_state.cpp
   game/states/gameplay/prediction/gameplay_prediction_access.h

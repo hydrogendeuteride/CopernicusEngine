@@ -1,5 +1,5 @@
-#include "game/orbit/orbit_prediction_service.h"
-#include "game/orbit/prediction/orbit_prediction_service_internal.h"
+#include "game/orbit/nbody/service.h"
+#include "game/orbit/nbody/internal.h"
 
 #include <algorithm>
 
