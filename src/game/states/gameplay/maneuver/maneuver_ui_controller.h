@@ -24,7 +24,7 @@ namespace Game
         GameplayPredictionAccess prediction_access;
         ManeuverPredictionBridge::Context maneuver_prediction;
         std::function<ManeuverCommandResult(const ManeuverCommand &)> apply_maneuver_command;
-        std::function<void(GameStateContext &)> refresh_maneuver_node_runtime_cache;
+        std::function<void(GameStateContext &, bool)> refresh_maneuver_node_runtime_cache;
         std::function<double()> current_sim_time_s;
     };
 

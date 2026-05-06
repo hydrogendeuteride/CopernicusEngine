@@ -15,6 +15,121 @@ namespace Game::PredictionDrawDetail
         constexpr double kPickMatrixRebuildEpsilon = 1.0e-6;
         constexpr double kPickScalarRebuildEpsilon = 1.0e-6;
         constexpr float kPickViewprojRebuildEpsilon = 1.0e-5f;
+        constexpr double kPickAnchorWindowEpsilonS = 1.0e-6;
+
+        bool time_in_pick_window(const PickWindow &window, const double t_s)
+        {
+            return window.valid &&
+                   std::isfinite(t_s) &&
+                   std::isfinite(window.t0_s) &&
+                   std::isfinite(window.t1_s) &&
+                   window.t1_s >= window.t0_s &&
+                   t_s >= (window.t0_s - kPickAnchorWindowEpsilonS) &&
+                   t_s <= (window.t1_s + kPickAnchorWindowEpsilonS);
+        }
+
+        void normalize_time_cache(PredictionTimeAnchorCache &cache)
+        {
+            std::sort(cache.times_s.begin(), cache.times_s.end());
+            cache.times_s.erase(std::unique(cache.times_s.begin(), cache.times_s.end()), cache.times_s.end());
+        }
+
+        void rebuild_maneuver_node_time_cache(PredictionTimeAnchorCache &cache,
+                                              const std::vector<ManeuverNode> &nodes,
+                                              const uint64_t maneuver_revision)
+        {
+            if (cache.generation_id == 0 &&
+                cache.revision == maneuver_revision &&
+                cache.source_count == nodes.size())
+            {
+                return;
+            }
+
+            cache.generation_id = 0;
+            cache.revision = maneuver_revision;
+            cache.source_count = nodes.size();
+            cache.times_s.clear();
+            cache.times_s.reserve(nodes.size());
+            for (const ManeuverNode &node : nodes)
+            {
+                if (std::isfinite(node.time_s))
+                {
+                    cache.times_s.push_back(node.time_s);
+                }
+            }
+            normalize_time_cache(cache);
+        }
+
+        void rebuild_preview_time_cache(PredictionTimeAnchorCache &cache,
+                                        const OrbitPredictionCache &prediction_cache)
+        {
+            const std::vector<OrbitPredictionManeuverNodePreview> &previews =
+                    prediction_cache.solver.planned.maneuver_previews;
+            const uint64_t generation_id = prediction_cache.identity.generation_id;
+            const uint64_t revision = prediction_cache.identity.maneuver_plan_revision;
+            if (cache.generation_id == generation_id &&
+                cache.revision == revision &&
+                cache.source_count == previews.size())
+            {
+                return;
+            }
+
+            cache.generation_id = generation_id;
+            cache.revision = revision;
+            cache.source_count = previews.size();
+            cache.times_s.clear();
+            cache.times_s.reserve(previews.size());
+            for (const OrbitPredictionManeuverNodePreview &preview : previews)
+            {
+                if (preview.valid && std::isfinite(preview.t_s))
+                {
+                    cache.times_s.push_back(preview.t_s);
+                }
+            }
+            normalize_time_cache(cache);
+        }
+
+        void append_interior_anchor_times(const std::vector<double> &sorted_times,
+                                          const double window_t0_s,
+                                          const double window_t1_s,
+                                          std::vector<double> &anchors)
+        {
+            if (sorted_times.empty() ||
+                !std::isfinite(window_t0_s) ||
+                !std::isfinite(window_t1_s) ||
+                !(window_t1_s > window_t0_s))
+            {
+                return;
+            }
+
+            const double lo_s = window_t0_s + kPickAnchorWindowEpsilonS;
+            const double hi_s = window_t1_s - kPickAnchorWindowEpsilonS;
+            if (!(hi_s > lo_s))
+            {
+                return;
+            }
+
+            const auto first = std::upper_bound(sorted_times.begin(), sorted_times.end(), lo_s);
+            const auto last = std::lower_bound(first, sorted_times.end(), hi_s);
+            anchors.insert(anchors.end(), first, last);
+        }
+
+        void append_interior_anchor_time(const double t_s,
+                                         const double window_t0_s,
+                                         const double window_t1_s,
+                                         std::vector<double> &anchors)
+        {
+            if (!std::isfinite(t_s))
+            {
+                return;
+            }
+            if (t_s <= (window_t0_s + kPickAnchorWindowEpsilonS) ||
+                t_s >= (window_t1_s - kPickAnchorWindowEpsilonS))
+            {
+                return;
+            }
+            anchors.push_back(t_s);
+        }
     }
 
     const std::vector<orbitsim::TrajectorySegment> &base_segments_world_basis(PredictionTrackDrawContext &track_ctx)
@@ -33,27 +148,65 @@ namespace Game::PredictionDrawDetail
         return track_ctx.traj_base_segments_world_basis;
     }
 
-    const std::vector<orbitsim::TrajectorySegment> &planned_segments_world_basis(PredictionTrackDrawContext &track_ctx,
-                                                                                 const PredictionDisplayFrameCache &display)
+    std::vector<double> collect_pick_anchor_times(const std::vector<ManeuverNode> &nodes,
+                                                  const PickWindow &base_pick_window,
+                                                  const PickWindow &planned_pick_window,
+                                                  const double now_s)
     {
-        if (track_ctx.identity_frame_transform)
+        std::vector<double> anchor_times;
+        anchor_times.reserve(nodes.size() + 2u);
+
+        const auto push_anchor_if_in_window = [&](const double t_s) {
+            if (time_in_pick_window(base_pick_window, t_s) || time_in_pick_window(planned_pick_window, t_s))
+            {
+                anchor_times.push_back(t_s);
+            }
+        };
+
+        push_anchor_if_in_window(now_s);
+        for (const ManeuverNode &node : nodes)
         {
-            return display.trajectory_segments_frame_planned;
+            push_anchor_if_in_window(node.time_s);
+        }
+        push_anchor_if_in_window(planned_pick_window.anchor_time_s);
+
+        std::sort(anchor_times.begin(), anchor_times.end());
+        anchor_times.erase(std::unique(anchor_times.begin(), anchor_times.end()), anchor_times.end());
+        return anchor_times;
+    }
+
+    std::vector<double> collect_planned_curve_anchor_times(PredictionTimeAnchorCache &maneuver_node_cache,
+                                                           PredictionTimeAnchorCache &preview_time_cache,
+                                                           const std::vector<ManeuverNode> &nodes,
+                                                           const uint64_t maneuver_revision,
+                                                           const OrbitPredictionCache &cache,
+                                                           const double preview_anchor_time_s,
+                                                           const bool preview_anchor_valid,
+                                                           const double window_t0_s,
+                                                           const double window_t1_s)
+    {
+        std::vector<double> anchors;
+        if (!std::isfinite(window_t0_s) || !std::isfinite(window_t1_s) || !(window_t1_s > window_t0_s))
+        {
+            return anchors;
         }
 
-        std::vector<orbitsim::TrajectorySegment> &world_basis_segments =
-                track_ctx.traj_stable_planned_segments_world_basis;
-        if (track_ctx.traj_planned_segments_world_basis_source != &display)
+        rebuild_maneuver_node_time_cache(maneuver_node_cache, nodes, maneuver_revision);
+        rebuild_preview_time_cache(preview_time_cache, cache);
+
+        anchors.reserve(8u);
+        anchors.push_back(window_t0_s);
+        append_interior_anchor_times(preview_time_cache.times_s, window_t0_s, window_t1_s, anchors);
+        append_interior_anchor_times(maneuver_node_cache.times_s, window_t0_s, window_t1_s, anchors);
+        if (preview_anchor_valid)
         {
-            world_basis_segments.clear();
-            track_ctx.traj_planned_segments_world_basis_source = &display;
+            append_interior_anchor_time(preview_anchor_time_s, window_t0_s, window_t1_s, anchors);
         }
-        if (world_basis_segments.empty() && !display.trajectory_segments_frame_planned.empty())
-        {
-            world_basis_segments =
-                    transform_segments_to_world_basis(display.trajectory_segments_frame_planned, track_ctx.frame_to_world);
-        }
-        return world_basis_segments;
+        anchors.push_back(window_t1_s);
+
+        std::sort(anchors.begin(), anchors.end());
+        anchors.erase(std::unique(anchors.begin(), anchors.end()), anchors.end());
+        return anchors;
     }
 
     bool same_matrix(const glm::dmat3 &a, const glm::dmat3 &b, const double epsilon)

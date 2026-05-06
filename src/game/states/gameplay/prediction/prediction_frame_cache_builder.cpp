@@ -22,8 +22,7 @@ namespace Game
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
-            OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            OrbitPredictionDerivedDiagnostics *diagnostics)
     {
         if (diagnostics)
         {
@@ -31,11 +30,9 @@ namespace Game
         }
 
         display.trajectory_frame.clear();
-        display.trajectory_frame_planned.clear();
         display.trajectory_segments_frame.clear();
-        display.trajectory_segments_frame_planned.clear();
         display.render_curve_frame.clear();
-        display.render_curve_frame_planned.clear();
+        display.clear_planned();
         display.resolved_frame_spec = {};
         display.resolved_frame_spec_valid = false;
         analysis.trajectory_analysis_bci.clear();
@@ -52,16 +49,8 @@ namespace Game
         if (resolved_frame_spec.type == orbitsim::TrajectoryFrameType::Inertial)
         {
             display.trajectory_frame = base_samples;
-            display.trajectory_frame_planned = solver.planned.trajectory_inertial;
             display.trajectory_segments_frame = base_segments;
-            display.trajectory_segments_frame_planned = solver.planned.trajectory_segments_inertial;
             if (!validate_trajectory_segment_continuity(display.trajectory_segments_frame))
-            {
-                update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::ContinuityFailed);
-                return false;
-            }
-            if (!display.trajectory_segments_frame_planned.empty() &&
-                !validate_trajectory_segment_continuity(display.trajectory_segments_frame_planned))
             {
                 update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::ContinuityFailed);
                 return false;
@@ -71,9 +60,6 @@ namespace Game
                 diagnostics->frame_base = make_stage_diagnostics_from_segments(
                         display.trajectory_segments_frame,
                         prediction_segment_span_s(base_segments));
-                diagnostics->frame_planned = make_stage_diagnostics_from_segments(
-                        display.trajectory_segments_frame_planned,
-                        prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
             }
         }
         else
@@ -86,11 +72,6 @@ namespace Game
 
             const auto player_lookup = build_player_lookup(player_lookup_segments_inertial);
             const std::size_t base_sample_budget = std::max<std::size_t>(base_samples.size(), 2);
-            const std::size_t planned_sample_budget =
-                    solver.planned.trajectory_inertial.size() >= 2 ? solver.planned.trajectory_inertial.size()
-                                                                   : base_sample_budget;
-            const std::vector<double> node_times = collect_maneuver_node_times(solver);
-
             const orbitsim::FrameSegmentTransformOptions base_opt =
                     PredictionCacheInternal::build_frame_segment_transform_options(
                             resolved_frame_spec,
@@ -136,51 +117,6 @@ namespace Game
                 return false;
             }
 
-            if (!solver.planned.trajectory_segments_inertial.empty())
-            {
-                const orbitsim::FrameSegmentTransformOptions planned_opt =
-                        PredictionCacheInternal::build_frame_segment_transform_options(
-                                resolved_frame_spec,
-                                solver.planned.trajectory_segments_inertial,
-                                cancel_requested);
-                orbitsim::FrameSegmentTransformDiagnostics planned_frame_diag{};
-                display.trajectory_segments_frame_planned = orbitsim::transform_trajectory_segments_to_frame_spec(
-                        solver.planned.trajectory_segments_inertial,
-                        *base_ephemeris,
-                        base_bodies,
-                        resolved_frame_spec,
-                        planned_opt,
-                        player_lookup,
-                        &planned_frame_diag);
-                if (cancel_requested && cancel_requested())
-                {
-                    update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::Cancelled);
-                    return false;
-                }
-                if (!display.trajectory_segments_frame_planned.empty())
-                {
-                    if (!validate_trajectory_segment_continuity(display.trajectory_segments_frame_planned))
-                    {
-                        update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::ContinuityFailed);
-                        return false;
-                    }
-                    if (diagnostics)
-                    {
-                        diagnostics->frame_planned = make_stage_diagnostics_from_adaptive(
-                                planned_frame_diag,
-                                prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
-                        diagnostics->frame_planned.accepted_segments = display.trajectory_segments_frame_planned.size();
-                        diagnostics->frame_planned.covered_duration_s =
-                                prediction_segment_span_s(display.trajectory_segments_frame_planned);
-                        diagnostics->frame_planned.frame_resegmentation_count =
-                                planned_frame_diag.frame_resegmentation_count;
-                    }
-                    display.trajectory_frame_planned = sample_prediction_segments(
-                            display.trajectory_segments_frame_planned,
-                            planned_sample_budget,
-                            node_times);
-                }
-            }
         }
 
         if (display.trajectory_frame.size() < 2 || display.trajectory_segments_frame.empty())
@@ -190,10 +126,6 @@ namespace Game
         }
 
         display.render_curve_frame = OrbitRenderCurve::build(display.trajectory_segments_frame);
-        display.render_curve_frame_planned =
-                (build_planned_render_curve && !display.trajectory_segments_frame_planned.empty())
-                        ? OrbitRenderCurve::build(display.trajectory_segments_frame_planned)
-                        : OrbitRenderCurve{};
         display.resolved_frame_spec = resolved_frame_spec;
         display.resolved_frame_spec_valid = true;
         update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::Success);
@@ -205,8 +137,7 @@ namespace Game
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
-            OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            OrbitPredictionDerivedDiagnostics *diagnostics)
     {
         return rebuild(cache.solver,
                        cache.display,
@@ -214,8 +145,7 @@ namespace Game
                        resolved_frame_spec,
                        player_lookup_segments_inertial,
                        cancel_requested,
-                       diagnostics,
-                       build_planned_render_curve);
+                       diagnostics);
     }
 
     bool PredictionFrameCacheBuilder::rebuild_planned(
@@ -224,9 +154,11 @@ namespace Game
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
-            OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            OrbitPredictionDerivedDiagnostics *diagnostics)
     {
+        (void) solver;
+        (void) player_lookup_segments_inertial;
+        (void) cancel_requested;
         if (diagnostics)
         {
             *diagnostics = {};
@@ -236,104 +168,6 @@ namespace Game
         display.resolved_frame_spec = {};
         display.resolved_frame_spec_valid = false;
 
-        if (solver.planned.trajectory_segments_inertial.empty())
-        {
-            display.resolved_frame_spec = resolved_frame_spec;
-            display.resolved_frame_spec_valid = true;
-            update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::Success);
-            return true;
-        }
-
-        const auto &base_ephemeris = solver.resolved_shared_ephemeris();
-        const auto &base_bodies = solver.resolved_massive_bodies();
-        const auto &base_samples = solver.resolved_trajectory_inertial();
-        const std::size_t base_sample_budget = std::max<std::size_t>(base_samples.size(), 2);
-        const std::size_t planned_sample_budget =
-                solver.planned.trajectory_inertial.size() >= 2 ? solver.planned.trajectory_inertial.size()
-                                                               : base_sample_budget;
-        const std::vector<double> node_times = collect_maneuver_node_times(solver);
-
-        if (resolved_frame_spec.type == orbitsim::TrajectoryFrameType::Inertial)
-        {
-            display.trajectory_segments_frame_planned = solver.planned.trajectory_segments_inertial;
-            if (!validate_trajectory_segment_continuity(display.trajectory_segments_frame_planned))
-            {
-                update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::ContinuityFailed);
-                return false;
-            }
-
-            display.trajectory_frame_planned =
-                    solver.planned.trajectory_inertial.size() >= 2
-                            ? solver.planned.trajectory_inertial
-                            : sample_prediction_segments(display.trajectory_segments_frame_planned,
-                                                          planned_sample_budget,
-                                                          node_times);
-            if (diagnostics)
-            {
-                diagnostics->frame_planned = make_stage_diagnostics_from_segments(
-                        display.trajectory_segments_frame_planned,
-                        prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
-            }
-        }
-        else
-        {
-            if (!base_ephemeris || base_ephemeris->empty())
-            {
-                update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::MissingEphemeris);
-                return false;
-            }
-
-            const auto player_lookup = build_player_lookup(player_lookup_segments_inertial);
-            const orbitsim::FrameSegmentTransformOptions planned_opt =
-                    PredictionCacheInternal::build_frame_segment_transform_options(
-                            resolved_frame_spec,
-                            solver.planned.trajectory_segments_inertial,
-                            cancel_requested);
-            orbitsim::FrameSegmentTransformDiagnostics planned_frame_diag{};
-            display.trajectory_segments_frame_planned = orbitsim::transform_trajectory_segments_to_frame_spec(
-                    solver.planned.trajectory_segments_inertial,
-                    *base_ephemeris,
-                    base_bodies,
-                    resolved_frame_spec,
-                    planned_opt,
-                    player_lookup,
-                    &planned_frame_diag);
-            if (cancel_requested && cancel_requested())
-            {
-                update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::Cancelled);
-                return false;
-            }
-            if (display.trajectory_segments_frame_planned.empty())
-            {
-                update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::FrameTransformFailed);
-                return false;
-            }
-
-            if (!validate_trajectory_segment_continuity(display.trajectory_segments_frame_planned))
-            {
-                update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::ContinuityFailed);
-                return false;
-            }
-            if (diagnostics)
-            {
-                diagnostics->frame_planned = make_stage_diagnostics_from_adaptive(
-                        planned_frame_diag,
-                        prediction_segment_span_s(solver.planned.trajectory_segments_inertial));
-                diagnostics->frame_planned.accepted_segments = display.trajectory_segments_frame_planned.size();
-                diagnostics->frame_planned.covered_duration_s =
-                        prediction_segment_span_s(display.trajectory_segments_frame_planned);
-                diagnostics->frame_planned.frame_resegmentation_count = planned_frame_diag.frame_resegmentation_count;
-            }
-            display.trajectory_frame_planned = sample_prediction_segments(
-                    display.trajectory_segments_frame_planned,
-                    planned_sample_budget,
-                    node_times);
-        }
-
-        display.render_curve_frame_planned =
-                (build_planned_render_curve && !display.trajectory_segments_frame_planned.empty())
-                        ? OrbitRenderCurve::build(display.trajectory_segments_frame_planned)
-                        : OrbitRenderCurve{};
         display.resolved_frame_spec = resolved_frame_spec;
         display.resolved_frame_spec_valid = true;
         update_derived_diagnostics(diagnostics, display, PredictionDerivedStatus::Success);
@@ -345,15 +179,13 @@ namespace Game
             const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
             const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
             const CancelCheck &cancel_requested,
-            OrbitPredictionDerivedDiagnostics *diagnostics,
-            const bool build_planned_render_curve)
+            OrbitPredictionDerivedDiagnostics *diagnostics)
     {
         return rebuild_planned(cache.solver,
                                cache.display,
                                resolved_frame_spec,
                                player_lookup_segments_inertial,
                                cancel_requested,
-                               diagnostics,
-                               build_planned_render_curve);
+                               diagnostics);
     }
 } // namespace Game

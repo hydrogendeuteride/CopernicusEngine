@@ -42,7 +42,7 @@ orbit/
 
 - `orbit_prediction_tuning.h`
   Compile-time tuning constants for every stage of the orbit prediction pipeline.
-  Horizon limits, sample budgets, multi-band density settings, integrator step caps, ephemeris cadence, thrust-mode overrides, and maneuver-gizmo rebuild rate all live here.
+  Horizon limits, sample budgets, multi-band density settings, integrator step caps, ephemeris sample spacing, thrust-mode overrides, and maneuver-gizmo rebuild rate all live here.
 
 - `orbit_prediction_math.h / .cpp`
   Pure math helpers for orbital mechanics.

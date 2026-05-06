@@ -2,6 +2,7 @@
 
 #include "game/states/gameplay/maneuver/gameplay_state_maneuver_util.h"
 
+#include "game/orbit/orbit_plot_util.h"
 #include "game/orbit/orbit_prediction_math.h"
 
 #include "orbitsim/frame_utils.hpp"
@@ -103,19 +104,19 @@ namespace Game
         }
 
         template<typename PosSampler>
-        bool sample_tangent_world_from(const std::vector<orbitsim::TrajectorySample> &ref_traj,
-                                       const double sample_time_s,
-                                       PosSampler &&pos_sampler,
-                                       glm::dvec3 &out_tangent_world)
+        bool sample_tangent_world_in_span(const double traj_t0,
+                                          const double traj_t1,
+                                          const double sample_time_s,
+                                          PosSampler &&pos_sampler,
+                                          glm::dvec3 &out_tangent_world)
         {
             out_tangent_world = glm::dvec3(0.0, 0.0, 0.0);
-            if (ref_traj.size() < 2 || !std::isfinite(sample_time_s))
+            if (!std::isfinite(traj_t0) || !std::isfinite(traj_t1) ||
+                !(traj_t1 > traj_t0) || !std::isfinite(sample_time_s))
             {
                 return false;
             }
 
-            const double traj_t0 = ref_traj.front().t_s;
-            const double traj_t1 = ref_traj.back().t_s;
             const double backward_dt_s = std::min(0.25, std::max(0.0, sample_time_s - traj_t0));
             const double forward_dt_s = std::min(0.25, std::max(0.0, traj_t1 - sample_time_s));
 
@@ -144,6 +145,24 @@ namespace Game
 
             out_tangent_world = normalized_or(glm::dvec3(p1_world - p0_world), glm::dvec3(0.0, 1.0, 0.0));
             return finite3(out_tangent_world);
+        }
+
+        template<typename PosSampler>
+        bool sample_tangent_world_from(const std::vector<orbitsim::TrajectorySample> &ref_traj,
+                                       const double sample_time_s,
+                                       PosSampler &&pos_sampler,
+                                       glm::dvec3 &out_tangent_world)
+        {
+            if (ref_traj.size() < 2 || !std::isfinite(sample_time_s))
+            {
+                return false;
+            }
+
+            return sample_tangent_world_in_span(ref_traj.front().t_s,
+                                                ref_traj.back().t_s,
+                                                sample_time_s,
+                                                std::forward<PosSampler>(pos_sampler),
+                                                out_tangent_world);
         }
 
         using PreviewMap = std::unordered_map<int, const OrbitPredictionManeuverNodePreview *>;
@@ -308,6 +327,161 @@ namespace Game
             return finite3(out_tangent_world);
         }
 
+        bool trajectory_contains_time(const std::vector<orbitsim::TrajectorySample> *traj,
+                                      const double t_s)
+        {
+            return traj &&
+                   traj->size() >= 2 &&
+                   std::isfinite(t_s) &&
+                   t_s >= traj->front().t_s &&
+                   t_s <= traj->back().t_s;
+        }
+
+        bool chunk_assembly_contains_time(const PredictionChunkAssembly *assembly,
+                                          const double t_s)
+        {
+            if (!assembly || !assembly->drawable() || !std::isfinite(t_s))
+            {
+                return false;
+            }
+
+            for (const OrbitChunk &chunk : assembly->chunks)
+            {
+                if (chunk.drawable() &&
+                    std::isfinite(chunk.t0_s) &&
+                    std::isfinite(chunk.t1_s) &&
+                    t_s >= chunk.t0_s &&
+                    t_s <= chunk.t1_s)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool sample_chunk_segments_world_at(const ManeuverRuntimeCacheInput &input,
+                                            const OrbitPredictionCache &sample_cache,
+                                            const std::vector<orbitsim::TrajectorySegment> &segments,
+                                            const double sample_time_s,
+                                            const WorldVec3 &align_delta,
+                                            WorldVec3 &out_world)
+        {
+            out_world = WorldVec3(0.0, 0.0, 0.0);
+            if (segments.empty() || !std::isfinite(sample_time_s))
+            {
+                return false;
+            }
+
+            const orbitsim::TrajectorySegment *selected = nullptr;
+            constexpr double kTimeEpsilonS = 1.0e-6;
+            for (const orbitsim::TrajectorySegment &segment : segments)
+            {
+                if (!(segment.dt_s > 0.0) || !std::isfinite(segment.t0_s))
+                {
+                    continue;
+                }
+
+                const double segment_t1_s = segment.t0_s + segment.dt_s;
+                if (!std::isfinite(segment_t1_s))
+                {
+                    continue;
+                }
+                if (sample_time_s + kTimeEpsilonS >= segment.t0_s &&
+                    sample_time_s <= segment_t1_s + kTimeEpsilonS)
+                {
+                    selected = &segment;
+                    break;
+                }
+            }
+            if (!selected)
+            {
+                return false;
+            }
+
+            WorldVec3 display_origin_world{0.0, 0.0, 0.0};
+            glm::dmat3 display_frame_to_world(1.0);
+            if (!PredictionFrameResolver::build_display_transform(input.frame_context,
+                                                                  sample_cache,
+                                                                  display_origin_world,
+                                                                  display_frame_to_world,
+                                                                  input.display_time_s))
+            {
+                return false;
+            }
+
+            const double segment_t1_s = selected->t0_s + selected->dt_s;
+            const double t_clamped = std::clamp(sample_time_s, selected->t0_s, segment_t1_s);
+            out_world = display_origin_world +
+                        WorldVec3(display_frame_to_world *
+                                  OrbitPlotUtil::eval_segment_local_position(*selected, t_clamped)) +
+                        align_delta;
+            return finite3(glm::dvec3(out_world));
+        }
+
+        bool sample_chunk_assembly_world_at(const ManeuverRuntimeCacheInput &input,
+                                            const OrbitPredictionCache &sample_cache,
+                                            const PredictionChunkAssembly &assembly,
+                                            const double sample_time_s,
+                                            const WorldVec3 &align_delta,
+                                            WorldVec3 &out_world)
+        {
+            out_world = WorldVec3(0.0, 0.0, 0.0);
+            if (!assembly.drawable() || !std::isfinite(sample_time_s))
+            {
+                return false;
+            }
+
+            const auto hermite_sampler = [&input, &sample_cache](
+                    const orbitsim::TrajectorySample &a,
+                    const orbitsim::TrajectorySample &b,
+                    const double t_s) -> WorldVec3 {
+                return PredictionFrameResolver::sample_hermite_world(
+                        input.frame_context,
+                        sample_cache,
+                        a,
+                        b,
+                        t_s,
+                        input.display_time_s);
+            };
+            const auto position_sampler = [&input, &sample_cache](
+                    const orbitsim::TrajectorySample &sample) -> WorldVec3 {
+                return PredictionFrameResolver::sample_position_world(
+                        input.frame_context,
+                        sample_cache,
+                        sample,
+                        input.display_time_s);
+            };
+
+            for (const OrbitChunk &chunk : assembly.chunks)
+            {
+                if (!chunk.drawable() ||
+                    !std::isfinite(chunk.t0_s) ||
+                    !std::isfinite(chunk.t1_s) ||
+                    sample_time_s < chunk.t0_s ||
+                    sample_time_s > chunk.t1_s)
+                {
+                    continue;
+                }
+
+                if (sample_chunk_segments_world_at(input,
+                                                   sample_cache,
+                                                   chunk.frame_segments,
+                                                   sample_time_s,
+                                                   align_delta,
+                                                   out_world) ||
+                    sample_traj_world_at(hermite_sampler,
+                                         position_sampler,
+                                         chunk.frame_samples,
+                                         sample_time_s,
+                                         align_delta,
+                                         out_world))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         orbitsim::BodyId resolve_node_primary(const ManeuverRuntimeCacheInput &input,
                                               const OrbitPredictionCache &sample_cache,
                                               const ManeuverNode &node,
@@ -355,6 +529,14 @@ namespace Game
                    finite3(node.basis_r_world) && finite3(node.basis_t_world) && finite3(node.basis_n_world) &&
                    finite3(node.maneuver_basis_r_world) && finite3(node.maneuver_basis_t_world) &&
                    finite3(node.maneuver_basis_n_world);
+        }
+
+        bool display_basis_valid(const glm::dvec3 &basis_r,
+                                 const glm::dvec3 &basis_t,
+                                 const glm::dvec3 &basis_n)
+        {
+            return finite3(basis_r) && finite3(basis_t) && finite3(basis_n) &&
+                   safe_length(basis_r) > 0.0 && safe_length(basis_t) > 0.0 && safe_length(basis_n) > 0.0;
         }
 
         void set_rtn_display_basis(ManeuverNode &node)
@@ -407,6 +589,35 @@ namespace Game
                                                       normal_candidate_world);
         }
 
+        void set_held_display_basis(ManeuverNode &node,
+                                    const ManeuverGizmoBasisMode basis_mode,
+                                    const glm::dvec3 &cached_basis_r_world,
+                                    const glm::dvec3 &cached_basis_t_world,
+                                    const glm::dvec3 &cached_basis_n_world,
+                                    const glm::dvec3 &prograde_candidate_world,
+                                    const glm::dvec3 &normal_candidate_world)
+        {
+            if (basis_mode == ManeuverGizmoBasisMode::RTN)
+            {
+                set_rtn_display_basis(node);
+                return;
+            }
+
+            if (display_basis_valid(cached_basis_r_world,
+                                    cached_basis_t_world,
+                                    cached_basis_n_world))
+            {
+                node.basis_r_world = cached_basis_r_world;
+                node.basis_t_world = cached_basis_t_world;
+                node.basis_n_world = cached_basis_n_world;
+                return;
+            }
+
+            set_prograde_outward_normal_display_basis(node,
+                                                      prograde_candidate_world,
+                                                      normal_candidate_world);
+        }
+
         void invalidate_runtime_nodes(ManeuverPlanState &plan)
         {
             for (ManeuverNode &node : plan.nodes)
@@ -423,6 +634,8 @@ namespace Game
 
         const bool interaction_idle =
                 input.gizmo_interaction.state != ManeuverGizmoInteraction::State::DragAxis;
+        const bool hold_cached_release_state =
+                input.hold_cached_release_state && !input.force_display_basis_refresh;
 
         for (ManeuverNode &node : input.plan.nodes)
         {
@@ -433,7 +646,7 @@ namespace Game
         const OrbitPredictionCache *pred_cache = display_cache;
         if (!display_cache || !display_cache->identity.valid || display_cache->display.trajectory_frame.size() < 2)
         {
-            if (!input.hold_cached_release_state)
+            if (!hold_cached_release_state)
             {
                 invalidate_runtime_nodes(input.plan);
             }
@@ -441,7 +654,7 @@ namespace Game
         }
         if (!pred_cache || !pred_cache->identity.valid)
         {
-            if (!input.hold_cached_release_state)
+            if (!hold_cached_release_state)
             {
                 invalidate_runtime_nodes(input.plan);
             }
@@ -449,12 +662,11 @@ namespace Game
         }
 
         const auto &traj_base = display_cache->display.trajectory_frame;
-        const auto &traj_planned = display_cache->display.trajectory_frame_planned;
         const double t0 = traj_base.front().t_s;
         const double t1 = traj_base.back().t_s;
         if (!std::isfinite(input.display_time_s) || !(t1 > t0))
         {
-            if (!input.hold_cached_release_state)
+            if (!hold_cached_release_state)
             {
                 invalidate_runtime_nodes(input.plan);
             }
@@ -471,9 +683,13 @@ namespace Game
         {
             stable_preview_by_node_id = build_preview_map(input.stable_cache->solver);
         }
-        const auto *stable_traj_node_world =
-                (input.stable_cache && input.stable_cache->display.trajectory_frame_planned.size() >= 2)
-                        ? &input.stable_cache->display.trajectory_frame_planned
+        const PredictionChunkAssembly *active_chunk_node_world =
+                display_cache->display.planned_chunk_assembly.drawable()
+                        ? &display_cache->display.planned_chunk_assembly
+                        : nullptr;
+        const PredictionChunkAssembly *stable_chunk_node_world =
+                (input.stable_cache && input.stable_cache->display.planned_chunk_assembly.drawable())
+                        ? &input.stable_cache->display.planned_chunk_assembly
                         : nullptr;
         const auto *stable_traj_node_inertial =
                 (input.stable_cache && input.stable_cache->solver.planned.trajectory_inertial.size() >= 2)
@@ -485,6 +701,7 @@ namespace Game
                 input.stable_cache != pred_cache &&
                 input.stable_cache->identity.valid &&
                 input.stable_cache->has_planned_frame_draw_data() &&
+                stable_chunk_node_world &&
                 input.stable_cache->solver.planned.trajectory_inertial.size() >= 2;
         double stable_prefix_cutoff_s =
                 input.player_track && input.player_track->preview_anchor.valid
@@ -516,10 +733,13 @@ namespace Game
         for (ManeuverNode &node : input.plan.nodes)
         {
             const bool cached_node_state_valid = node.gizmo_valid && node_runtime_state_valid(node);
+            const glm::dvec3 cached_basis_r = node.basis_r_world;
+            const glm::dvec3 cached_basis_t = node.basis_t_world;
+            const glm::dvec3 cached_basis_n = node.basis_n_world;
             const glm::dvec3 cached_mbasis_r = node.maneuver_basis_r_world;
             const glm::dvec3 cached_mbasis_t = node.maneuver_basis_t_world;
             const glm::dvec3 cached_mbasis_n = node.maneuver_basis_n_world;
-            if (!input.hold_cached_release_state)
+            if (!hold_cached_release_state)
             {
                 node.gizmo_valid = false;
             }
@@ -537,11 +757,11 @@ namespace Game
                         ? find_display_snapshot(input.gizmo_interaction.drag_display_snapshots, node.id)
                         : nullptr;
             const bool can_fallback_drag = active_drag_node && cached_drag_snapshot != nullptr;
-            const bool can_fallback_release = input.hold_cached_release_state && cached_node_state_valid;
+            const bool can_fallback_release = hold_cached_release_state && cached_node_state_valid;
 
             const bool release_refine_in_flight =
                     interaction_idle &&
-                    input.hold_cached_release_state &&
+                    hold_cached_release_state &&
                     (input.lifecycle.preview_state == PredictionPreviewRuntimeState::AwaitFullRefine ||
                      input.lifecycle.dirty ||
                      input.lifecycle.invalidated_while_pending ||
@@ -561,10 +781,13 @@ namespace Game
                 node.maneuver_basis_r_world = cached_mbasis_r;
                 node.maneuver_basis_t_world = cached_mbasis_t;
                 node.maneuver_basis_n_world = cached_mbasis_n;
-                set_display_basis(node,
-                                  input.basis_mode,
-                                  node.maneuver_basis_t_world,
-                                  node.maneuver_basis_n_world);
+                set_held_display_basis(node,
+                                       input.basis_mode,
+                                       cached_basis_r,
+                                       cached_basis_t,
+                                       cached_basis_n,
+                                       node.maneuver_basis_t_world,
+                                       node.maneuver_basis_n_world);
 
                 const glm::dvec3 dv_world = compose_basis_vector(node.dv_rtn_mps,
                                                                  node.maneuver_basis_r_world,
@@ -594,33 +817,46 @@ namespace Game
             const OrbitPredictionCache *node_disp_cache = use_stable_prefix ? input.stable_cache : display_cache;
             const PreviewMap *node_preview_map =
                     use_stable_prefix ? &stable_preview_by_node_id : &preview_by_node_id;
-            const std::vector<orbitsim::TrajectorySample> *node_traj_world =
-                    time_edit_uses_unplanned_source
-                            ? &traj_base
-                    : use_stable_prefix
-                            ? stable_traj_node_world
-                            : (traj_planned.size() >= 2
-                                       ? &traj_planned
-                                       : (stable_traj_node_world
-                                                  ? stable_traj_node_world
-                                                  : (allow_base_fallback ? &traj_base : nullptr)));
-            const std::vector<orbitsim::TrajectorySample> *node_traj_inertial =
-                    time_edit_uses_unplanned_source
-                            ? &pred_base_traj_inertial
-                    : use_stable_prefix
-                            ? stable_traj_node_inertial
-                            : (pred_cache->solver.planned.trajectory_inertial.size() >= 2
-                                       ? &pred_cache->solver.planned.trajectory_inertial
-                                       : (stable_traj_node_inertial
-                                                  ? stable_traj_node_inertial
-                                                  : (allow_base_fallback ? &pred_base_traj_inertial : nullptr)));
+            const std::vector<orbitsim::TrajectorySample> *node_traj_world = nullptr;
+            const PredictionChunkAssembly *node_chunk_world = nullptr;
+            const std::vector<orbitsim::TrajectorySample> *node_traj_inertial = nullptr;
+            if (time_edit_uses_unplanned_source)
+            {
+                node_traj_world = &traj_base;
+                node_traj_inertial = &pred_base_traj_inertial;
+            }
+            else if (use_stable_prefix)
+            {
+                node_chunk_world = stable_chunk_node_world;
+                node_traj_inertial = stable_traj_node_inertial;
+            }
+            else if (active_chunk_node_world && pred_cache->solver.planned.trajectory_inertial.size() >= 2)
+            {
+                node_chunk_world = active_chunk_node_world;
+                node_traj_inertial = &pred_cache->solver.planned.trajectory_inertial;
+            }
+            else if (stable_chunk_node_world && stable_traj_node_inertial)
+            {
+                node_pred_cache = input.stable_cache;
+                node_disp_cache = input.stable_cache;
+                node_preview_map = &stable_preview_by_node_id;
+                node_chunk_world = stable_chunk_node_world;
+                node_traj_inertial = stable_traj_node_inertial;
+            }
+            else if (allow_base_fallback)
+            {
+                node_traj_world = &traj_base;
+                node_traj_inertial = &pred_base_traj_inertial;
+            }
             const bool selected_uncached_node =
                     node.id == input.plan.selected_node_id &&
                     !cached_node_state_valid;
+            const bool node_display_path_available =
+                    chunk_assembly_contains_time(node_chunk_world, node.time_s) ||
+                    trajectory_contains_time(node_traj_world, node.time_s);
             const bool planned_unavailable =
-                    !node_traj_world ||
                     !node_traj_inertial ||
-                    node_traj_world->size() < 2 ||
+                    !node_display_path_available ||
                     node_traj_inertial->size() < 2;
             if (selected_uncached_node &&
                 planned_unavailable &&
@@ -630,6 +866,7 @@ namespace Game
                 node_pred_cache = pred_cache;
                 node_disp_cache = display_cache;
                 node_traj_world = &traj_base;
+                node_chunk_world = nullptr;
                 node_traj_inertial = &pred_base_traj_inertial;
                 node_preview_map = &preview_by_node_id;
             }
@@ -650,19 +887,17 @@ namespace Game
                 const bool stable_ok =
                         stable_it != stable_preview_by_node_id.end() && stable_it->second && stable_it->second->valid;
                 const bool active_traj_ok =
-                        node_traj_world && !node_traj_world->empty() &&
-                        node.time_s >= node_traj_world->front().t_s &&
-                        node.time_s <= node_traj_world->back().t_s;
+                        chunk_assembly_contains_time(node_chunk_world, node.time_s) ||
+                        trajectory_contains_time(node_traj_world, node.time_s);
                 const bool stable_traj_ok =
-                        stable_traj_node_world && !stable_traj_node_world->empty() &&
-                        node.time_s >= stable_traj_node_world->front().t_s &&
-                        node.time_s <= stable_traj_node_world->back().t_s;
+                        chunk_assembly_contains_time(stable_chunk_node_world, node.time_s);
                 if ((!active_ok && stable_ok) || (!active_ok && !active_traj_ok && stable_traj_ok))
                 {
                     node_pred_cache = input.stable_cache;
                     node_disp_cache = input.stable_cache;
                     node_preview_map = &stable_preview_by_node_id;
-                    node_traj_world = stable_traj_node_world;
+                    node_traj_world = nullptr;
+                    node_chunk_world = stable_chunk_node_world;
                     node_traj_inertial = stable_traj_node_inertial;
                     preview_it = node_preview_map->find(node.id);
                     preview = (preview_it != node_preview_map->end()) ? preview_it->second : nullptr;
@@ -701,7 +936,14 @@ namespace Game
             bool have_runtime_state = false;
             bool use_cached_basis = false;
             double basis_time_s = node.time_s;
-            if (node_traj_world && !node_traj_world->empty() && basis_time_s > node_traj_world->front().t_s)
+            double node_chunk_t0_s = std::numeric_limits<double>::quiet_NaN();
+            double node_chunk_t1_s = std::numeric_limits<double>::quiet_NaN();
+            if (node_chunk_world && node_chunk_world->time_span(node_chunk_t0_s, node_chunk_t1_s) &&
+                basis_time_s > node_chunk_t0_s)
+            {
+                basis_time_s = std::max(node_chunk_t0_s, basis_time_s - 1e-3);
+            }
+            else if (node_traj_world && !node_traj_world->empty() && basis_time_s > node_traj_world->front().t_s)
             {
                 basis_time_s = std::max(node_traj_world->front().t_s, basis_time_s - 1e-3);
             }
@@ -710,18 +952,31 @@ namespace Game
                     preview_time_valid &&
                     sample_preview_node_world(input,
                                               *node_disp_cache,
-                                              node.time_s,
-                                              glm::dvec3(preview->inertial_position_m),
-                                              glm::dvec3(preview->inertial_velocity_mps),
-                                              node_position_world);
+                                               node.time_s,
+                                               glm::dvec3(preview->inertial_position_m),
+                                               glm::dvec3(preview->inertial_velocity_mps),
+                                               node_position_world);
+            bool have_path_pos = false;
+            if (!have_preview_pos && node_chunk_world)
+            {
+                have_path_pos = sample_chunk_assembly_world_at(input,
+                                                               *node_disp_cache,
+                                                               *node_chunk_world,
+                                                               node.time_s,
+                                                               input.align_delta,
+                                                               node_position_world);
+            }
+            if (!have_preview_pos && !have_path_pos && node_traj_world)
+            {
+                have_path_pos = sample_traj_world_at(hermite_sampler,
+                                                     position_sampler,
+                                                     *node_traj_world,
+                                                     node.time_s,
+                                                     input.align_delta,
+                                                     node_position_world);
+            }
             if (!have_preview_pos &&
-                (!node_traj_world ||
-                 !sample_traj_world_at(hermite_sampler,
-                                        position_sampler,
-                                        *node_traj_world,
-                                        node.time_s,
-                                        input.align_delta,
-                                        node_position_world)))
+                !have_path_pos)
             {
                 if (can_fallback_drag)
                 {
@@ -801,10 +1056,13 @@ namespace Game
                 node.maneuver_basis_r_world = cached_mbasis_r;
                 node.maneuver_basis_t_world = cached_mbasis_t;
                 node.maneuver_basis_n_world = cached_mbasis_n;
-                set_display_basis(node,
-                                  input.basis_mode,
-                                  node.maneuver_basis_t_world,
-                                  node.maneuver_basis_n_world);
+                set_held_display_basis(node,
+                                       input.basis_mode,
+                                       cached_basis_r,
+                                       cached_basis_t,
+                                       cached_basis_n,
+                                       node.maneuver_basis_t_world,
+                                       node.maneuver_basis_n_world);
             }
             else
             {
@@ -832,6 +1090,28 @@ namespace Game
                                                      tangent_world))
                     {
                         prograde_world = tangent_world;
+                    }
+                    else if (node_chunk_world)
+                    {
+                        double path_t0_s = std::numeric_limits<double>::quiet_NaN();
+                        double path_t1_s = std::numeric_limits<double>::quiet_NaN();
+                        const auto chunk_pos_sampler = [&](double t, WorldVec3 &out) {
+                            return sample_chunk_assembly_world_at(input,
+                                                                  *node_disp_cache,
+                                                                  *node_chunk_world,
+                                                                  t,
+                                                                  input.align_delta,
+                                                                  out);
+                        };
+                        if (node_chunk_world->time_span(path_t0_s, path_t1_s) &&
+                            sample_tangent_world_in_span(path_t0_s,
+                                                         path_t1_s,
+                                                         basis_time_s,
+                                                         chunk_pos_sampler,
+                                                         tangent_world))
+                        {
+                            prograde_world = tangent_world;
+                        }
                     }
                     else if (node_traj_world)
                     {

@@ -307,9 +307,9 @@ namespace Game::PredictionCacheInternal
                                                               : display.trajectory_segments_frame.size();
         diagnostics->frame_segment_count_planned =
                 diagnostics->frame_planned.accepted_segments > 0 ? diagnostics->frame_planned.accepted_segments
-                                                                 : display.trajectory_segments_frame_planned.size();
+                                                                 : display.planned_chunk_assembly.segment_count();
         diagnostics->frame_sample_count = display.trajectory_frame.size();
-        diagnostics->frame_sample_count_planned = display.trajectory_frame_planned.size();
+        diagnostics->frame_sample_count_planned = display.planned_chunk_assembly.sample_count();
     }
 
     inline void update_derived_diagnostics(OrbitPredictionDerivedDiagnostics *diagnostics,

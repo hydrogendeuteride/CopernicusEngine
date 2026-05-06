@@ -19,6 +19,7 @@
 #include <memory>
 #include <mutex>
 #include <unordered_map>
+#include <utility>
 
 namespace GameplayTestHooks
 {
@@ -151,6 +152,58 @@ namespace
         chunk.render_curve = Game::OrbitRenderCurve::build(chunk.frame_segments);
         chunk.valid = true;
         return chunk;
+    }
+
+    orbitsim::TrajectorySample make_segment_endpoint_sample(const orbitsim::TrajectorySegment &segment,
+                                                            const bool end)
+    {
+        orbitsim::TrajectorySample sample{};
+        sample.t_s = end ? (segment.t0_s + segment.dt_s) : segment.t0_s;
+        const orbitsim::State &state = end ? segment.end : segment.start;
+        sample.position_m = state.position_m;
+        sample.velocity_mps = state.velocity_mps;
+        return sample;
+    }
+
+    void seed_planned_chunk_assembly(Game::OrbitPredictionCache &cache)
+    {
+        cache.display.planned_chunk_assembly.clear();
+        const auto &segments = cache.solver.planned.trajectory_segments_inertial;
+        if (segments.empty())
+        {
+            return;
+        }
+
+        Game::OrbitChunk chunk{};
+        chunk.chunk_id = 0u;
+        chunk.generation_id = cache.identity.generation_id;
+        chunk.quality_state = Game::OrbitPredictionService::ChunkQualityState::Final;
+        chunk.t0_s = segments.front().t0_s;
+        chunk.t1_s = segments.back().t0_s + segments.back().dt_s;
+        chunk.frame_segments = segments;
+        if (cache.solver.planned.trajectory_inertial.size() >= 2)
+        {
+            chunk.frame_samples = cache.solver.planned.trajectory_inertial;
+        }
+        else
+        {
+            chunk.frame_samples.reserve(segments.size() + 1u);
+            chunk.frame_samples.push_back(make_segment_endpoint_sample(segments.front(), false));
+            for (const orbitsim::TrajectorySegment &segment : segments)
+            {
+                chunk.frame_samples.push_back(make_segment_endpoint_sample(segment, true));
+            }
+        }
+        chunk.render_curve = Game::OrbitRenderCurve::build(chunk.frame_segments);
+        chunk.valid = chunk.frame_samples.size() >= 2 && !chunk.frame_segments.empty();
+        if (!chunk.valid)
+        {
+            return;
+        }
+
+        cache.display.planned_chunk_assembly.generation_id = cache.identity.generation_id;
+        cache.display.planned_chunk_assembly.valid = true;
+        cache.display.planned_chunk_assembly.chunks.push_back(std::move(chunk));
     }
 
     Game::OrbitPredictionCache make_prediction_cache(const uint64_t generation_id,
@@ -336,6 +389,15 @@ namespace
         solver.planned.trajectory_segments_inertial = {
                 make_segment(0.0, 10.0, 7'000'000.0, 7'150'000.0),
                 make_segment(10.0, 20.0, 7'150'000.0, 7'300'000.0),
+        };
+        solver.publish.published_chunks = {
+                Game::OrbitPredictionService::PublishedChunk{
+                        .chunk_id = 0u,
+                        .quality_state = Game::OrbitPredictionService::ChunkQualityState::Final,
+                        .t0_s = 0.0,
+                        .t1_s = 20.0,
+                        .includes_planned_path = true,
+                },
         };
         return job;
     }

@@ -57,7 +57,7 @@ prediction/
   `PredictionMetricsBuilder` -- named entry point for rebuilding analysis samples and orbital HUD metrics from solver/display cache data.
 
 - `streamed_chunk_assembly_builder.h`
-  `StreamedChunkAssemblyBuilder` -- named entry point for turning solver published/streamed chunk metadata into display-frame chunk overlays and flattened planned display caches.
+  `StreamedChunkAssemblyBuilder` -- named entry point for turning solver published/streamed chunk metadata into display-frame planned chunk assemblies used directly by draw and pick.
 
 - `gameplay_prediction_derived_service.h`
   `OrbitPredictionDerivedService` -- a background-threaded worker that takes solver results from `OrbitPredictionService` and builds display-frame caches (frame transforms, resampling, render curves, orbital metrics). Supports per-track generation-based staleness detection and request coalescing, similar to the solver service.

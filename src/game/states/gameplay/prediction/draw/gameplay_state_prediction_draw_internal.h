@@ -40,6 +40,7 @@ namespace Game::PredictionDrawDetail
         double render_error_px{0.75};
         std::size_t render_max_segments{1};
         float line_overlay_boost{0.0f};
+        int *dash_chunks_remaining{nullptr};
     };
 
     struct PickWindow
@@ -75,10 +76,8 @@ namespace Game::PredictionDrawDetail
         OrbitPredictionCache *stale_planned_cache{nullptr};
         OrbitPredictionCache *display_cache{nullptr};
         const std::vector<orbitsim::TrajectorySample> *traj_base{nullptr};
-        const std::vector<orbitsim::TrajectorySample> *traj_planned{nullptr};
         const std::vector<orbitsim::TrajectorySegment> *traj_base_segments{nullptr};
-        const std::vector<orbitsim::TrajectorySegment> *traj_planned_segments{nullptr};
-        const std::vector<orbitsim::TrajectorySegment> *planned_window_segments{nullptr};
+        const PredictionChunkAssembly *planned_window_assembly{nullptr};
         WorldVec3 ref_body_world{0.0, 0.0, 0.0};
         glm::dmat3 frame_to_world{1.0};
         WorldVec3 align_delta{0.0, 0.0, 0.0};
@@ -118,8 +117,6 @@ namespace Game::PredictionDrawDetail
         PickWindow planned_draw_window{};
         PickWindow planned_pick_window{};
         std::vector<orbitsim::TrajectorySegment> traj_base_segments_world_basis{};
-        const PredictionDisplayFrameCache *traj_planned_segments_world_basis_source{nullptr};
-        std::vector<orbitsim::TrajectorySegment> traj_stable_planned_segments_world_basis{};
     };
 
     struct PredictionTrackVisualPlan
@@ -190,11 +187,22 @@ namespace Game::PredictionDrawDetail
     double meters_per_px_at_world(const OrbitDrawWindowContext &ctx, const WorldVec3 &p_world);
     double snap_time_past_straddling_segment(const std::vector<orbitsim::TrajectorySegment> &traj_segments, double t_s);
     std::vector<double> collect_maneuver_node_times(const std::vector<ManeuverNode> &nodes);
+    std::vector<double> collect_pick_anchor_times(const std::vector<ManeuverNode> &nodes,
+                                                  const PickWindow &base_pick_window,
+                                                  const PickWindow &planned_pick_window,
+                                                  double now_s);
+    std::vector<double> collect_planned_curve_anchor_times(PredictionTimeAnchorCache &maneuver_node_cache,
+                                                           PredictionTimeAnchorCache &preview_time_cache,
+                                                           const std::vector<ManeuverNode> &nodes,
+                                                           uint64_t maneuver_revision,
+                                                           const OrbitPredictionCache &cache,
+                                                           double preview_anchor_time_s,
+                                                           bool preview_anchor_valid,
+                                                           double window_t0_s,
+                                                           double window_t1_s);
     std::size_t lower_bound_sample_index(const std::vector<orbitsim::TrajectorySample> &traj, double t_s);
     bool frame_transform_is_identity(const glm::dmat3 &frame_to_world);
     const std::vector<orbitsim::TrajectorySegment> &base_segments_world_basis(PredictionTrackDrawContext &track_ctx);
-    const std::vector<orbitsim::TrajectorySegment> &planned_segments_world_basis(PredictionTrackDrawContext &track_ctx,
-                                                                                 const PredictionDisplayFrameCache &display);
     std::vector<orbitsim::TrajectorySegment> transform_segments_to_world_basis(
             const std::vector<orbitsim::TrajectorySegment> &traj_segments,
             const glm::dmat3 &frame_to_world);
@@ -234,16 +242,32 @@ namespace Game::PredictionDrawDetail
                                     bool dashed,
                                     std::span<const double> anchor_times_s = {},
                                     double selection_error_scale = 1.0);
+    void draw_cached_adaptive_curve_window(const OrbitDrawWindowContext &ctx,
+                                           const OrbitPredictionDrawConfig &draw_config,
+                                           OrbitPlotPerfStats &perf,
+                                           const OrbitRenderCurve &curve,
+                                           double t_start_s,
+                                           double t_end_s,
+                                           const glm::vec4 &color,
+                                           bool dashed,
+                                           std::span<const double> anchor_times_s,
+                                           double selection_error_scale,
+                                           PredictionRenderLinePacketCache &cache,
+                                           uint64_t generation_id,
+                                           uint64_t display_frame_key,
+                                           uint64_t display_frame_revision,
+                                           uint64_t maneuver_plan_revision,
+                                           uint64_t maneuver_plan_signature);
     std::vector<std::pair<double, double>> compute_uncovered_ranges(
             double t_start_s,
             double t_end_s,
             std::vector<std::pair<double, double>> covered_ranges);
-    PickWindow build_planned_draw_window(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
-                                         const OrbitPredictionDrawConfig &draw_config,
-                                         const PredictionWindowPolicyResult &policy);
-    PickWindow build_planned_pick_window(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
-                                         const OrbitPredictionDrawConfig &draw_config,
-                                         const PredictionWindowPolicyResult &policy);
+    PickWindow build_planned_draw_window(const PredictionChunkAssembly &planned_assembly,
+                                          const OrbitPredictionDrawConfig &draw_config,
+                                          const PredictionWindowPolicyResult &policy);
+    PickWindow build_planned_pick_window(const PredictionChunkAssembly &planned_assembly,
+                                          const OrbitPredictionDrawConfig &draw_config,
+                                          const PredictionWindowPolicyResult &policy);
     std::size_t build_pick_segment_cache(const std::vector<orbitsim::TrajectorySegment> &traj_segments,
                                          const WorldVec3 &ref_body_world,
                                          const glm::dmat3 &frame_to_world,

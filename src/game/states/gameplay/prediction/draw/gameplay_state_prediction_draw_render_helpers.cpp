@@ -40,12 +40,58 @@ namespace Game::PredictionDrawDetail
             }
         }
 
-        void emit_render_lod_segments(const OrbitDrawWindowContext &ctx,
-                                      const OrbitPredictionDrawConfig &draw_config,
-                                      OrbitPlotPerfStats &perf,
-                                      const OrbitRenderCurve::RenderResult &lod,
-                                      const glm::vec4 &color,
-                                      const bool dashed)
+        void append_orbit_line_commands(std::vector<OrbitPlotSystem::LineCommand> &lines,
+                                        const OrbitDrawWindowContext &ctx,
+                                        const glm::vec4 &color,
+                                        const WorldVec3 &a_world,
+                                        const WorldVec3 &b_world)
+        {
+            lines.push_back(OrbitPlotSystem::LineCommand{
+                    .a_world = a_world,
+                    .b_world = b_world,
+                    .color = color,
+                    .depth = OrbitPlotDepth::DepthTested,
+            });
+
+            if (ctx.line_overlay_boost <= 0.0f)
+            {
+                return;
+            }
+
+            glm::vec4 overlay_color = color;
+            overlay_color.a = std::clamp(overlay_color.a * ctx.line_overlay_boost, 0.0f, 1.0f);
+            if (overlay_color.a > 0.0f)
+            {
+                lines.push_back(OrbitPlotSystem::LineCommand{
+                        .a_world = a_world,
+                        .b_world = b_world,
+                        .color = overlay_color,
+                        .depth = OrbitPlotDepth::AlwaysOnTop,
+                });
+            }
+        }
+
+        bool dash_budget_available(const OrbitDrawWindowContext &ctx)
+        {
+            return ctx.dash_chunks_remaining == nullptr || *ctx.dash_chunks_remaining > 0;
+        }
+
+        void consume_dash_budget(const OrbitDrawWindowContext &ctx)
+        {
+            if (ctx.dash_chunks_remaining && *ctx.dash_chunks_remaining > 0)
+            {
+                --(*ctx.dash_chunks_remaining);
+            }
+        }
+
+        template<typename EmitLineFn>
+        void emit_render_lod_segments_to(const OrbitDrawWindowContext &ctx,
+                                         const OrbitPredictionDrawConfig &draw_config,
+                                         OrbitPlotPerfStats &perf,
+                                         const OrbitRenderCurve::RenderResult &lod,
+                                         const glm::vec4 &color,
+                                         const bool dashed,
+                                         EmitLineFn &&emit_line)
         {
             if (lod.cap_hit)
             {
@@ -61,7 +107,7 @@ namespace Game::PredictionDrawDetail
             {
                 for (const OrbitRenderCurve::LineSegment &segment : lod.segments)
                 {
-                    emit_orbit_line(ctx, color, segment.a_world, segment.b_world);
+                    emit_line(segment.a_world, segment.b_world);
                 }
                 return;
             }
@@ -69,10 +115,29 @@ namespace Game::PredictionDrawDetail
             const double dash_on_px = draw_config.dashed_segment_on_px;
             const double dash_off_px = draw_config.dashed_segment_off_px;
             const double dash_period_px = dash_on_px + dash_off_px;
+            const int max_dash_chunks_per_segment = draw_config.dash_max_chunks_per_segment;
+            if (!std::isfinite(dash_on_px) || !std::isfinite(dash_off_px) ||
+                !std::isfinite(dash_period_px) ||
+                !(dash_on_px > 0.0) ||
+                !(dash_period_px > dash_on_px) ||
+                max_dash_chunks_per_segment <= 0)
+            {
+                for (const OrbitRenderCurve::LineSegment &segment : lod.segments)
+                {
+                    emit_line(segment.a_world, segment.b_world);
+                }
+                return;
+            }
 
             double dash_phase_px = 0.0;
             for (const OrbitRenderCurve::LineSegment &segment : lod.segments)
             {
+                if (!dash_budget_available(ctx))
+                {
+                    emit_line(segment.a_world, segment.b_world);
+                    continue;
+                }
+
                 const double seg_m = glm::length(glm::dvec3(segment.b_world - segment.a_world));
                 const double seg_dt_s = segment.t1_s - segment.t0_s;
                 if (!std::isfinite(seg_m) || !(seg_m > 1.0e-9) || !std::isfinite(seg_dt_s) || !(seg_dt_s > 0.0))
@@ -96,8 +161,19 @@ namespace Game::PredictionDrawDetail
                 double cursor_px = 0.0;
                 int dash_chunks = 0;
                 while ((cursor_px + 1.0e-6) < seg_px &&
-                       dash_chunks < draw_config.dash_max_chunks_per_segment)
+                       dash_chunks < max_dash_chunks_per_segment)
                 {
+                    if (!dash_budget_available(ctx))
+                    {
+                        const double u0 = std::clamp(cursor_px / seg_px, 0.0, 1.0);
+                        if (1.0 > u0)
+                        {
+                            emit_line(glm::mix(segment.a_world, segment.b_world, u0), segment.b_world);
+                        }
+                        cursor_px = seg_px;
+                        break;
+                    }
+
                     const bool phase_on = dash_phase_px < dash_on_px;
                     double phase_remaining_px =
                             phase_on ? (dash_on_px - dash_phase_px) : (dash_period_px - dash_phase_px);
@@ -117,7 +193,8 @@ namespace Game::PredictionDrawDetail
                         {
                             const WorldVec3 a_world = glm::mix(segment.a_world, segment.b_world, u0);
                             const WorldVec3 b_world = glm::mix(segment.a_world, segment.b_world, u1);
-                            emit_orbit_line(ctx, color, a_world, b_world);
+                            emit_line(a_world, b_world);
+                            consume_dash_budget(ctx);
                         }
                     }
 
@@ -136,6 +213,179 @@ namespace Game::PredictionDrawDetail
                     dash_phase_px = std::fmod(dash_phase_px + remaining_px, dash_period_px);
                 }
             }
+        }
+
+        void emit_render_lod_segments(const OrbitDrawWindowContext &ctx,
+                                      const OrbitPredictionDrawConfig &draw_config,
+                                      OrbitPlotPerfStats &perf,
+                                      const OrbitRenderCurve::RenderResult &lod,
+                                      const glm::vec4 &color,
+                                      const bool dashed)
+        {
+            emit_render_lod_segments_to(ctx,
+                                        draw_config,
+                                        perf,
+                                        lod,
+                                        color,
+                                        dashed,
+                                        [&](const WorldVec3 &a_world, const WorldVec3 &b_world) {
+                                            emit_orbit_line(ctx, color, a_world, b_world);
+                                        });
+        }
+
+        void append_render_lod_segments(const OrbitDrawWindowContext &ctx,
+                                        const OrbitPredictionDrawConfig &draw_config,
+                                        OrbitPlotPerfStats &perf,
+                                        const OrbitRenderCurve::RenderResult &lod,
+                                        const glm::vec4 &color,
+                                        const bool dashed,
+                                        std::vector<OrbitPlotSystem::LineCommand> &out_lines)
+        {
+            emit_render_lod_segments_to(ctx,
+                                        draw_config,
+                                        perf,
+                                        lod,
+                                        color,
+                                        dashed,
+                                        [&](const WorldVec3 &a_world, const WorldVec3 &b_world) {
+                                            append_orbit_line_commands(out_lines, ctx, color, a_world, b_world);
+                                        });
+        }
+
+        uint64_t render_anchor_hash(const std::span<const double> anchor_times_s)
+        {
+            uint64_t seed = 0xcbf29ce484222325ULL;
+            Game::prediction_hash_combine(seed, anchor_times_s.size());
+            for (const double t_s : anchor_times_s)
+            {
+                if (std::isfinite(t_s))
+                {
+                    Game::prediction_hash_combine(seed, static_cast<int64_t>(std::llround(t_s * 1000.0)));
+                }
+            }
+            return seed;
+        }
+
+        bool same_vec4(const glm::vec4 &a, const glm::vec4 &b, const float epsilon)
+        {
+            for (int i = 0; i < 4; ++i)
+            {
+                if (!std::isfinite(a[i]) || !std::isfinite(b[i]) || std::abs(a[i] - b[i]) > epsilon)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool should_rebuild_render_line_packet_cache(const PredictionRenderLinePacketCache &cache,
+                                                     const OrbitDrawWindowContext &ctx,
+                                                     const glm::vec4 &color,
+                                                     const double selection_error_scale,
+                                                     const double t0_s,
+                                                     const double t1_s,
+                                                     const uint64_t generation_id,
+                                                     const uint64_t display_frame_key,
+                                                     const uint64_t display_frame_revision,
+                                                     const uint64_t maneuver_plan_revision,
+                                                     const uint64_t maneuver_plan_signature,
+                                                     const uint64_t anchor_hash)
+        {
+            constexpr double kRenderWindowRebuildEpsilonS = 0.25;
+            constexpr double kRenderOriginRebuildDistanceM = 1000.0;
+            constexpr double kRenderFrustumOriginRebuildDistanceM = 1.0;
+            constexpr double kRenderCameraRebuildDistanceM = 1.0;
+            constexpr double kRenderMatrixRebuildEpsilon = 1.0e-6;
+            constexpr double kRenderScalarRebuildEpsilon = 1.0e-6;
+            constexpr float kRenderViewprojRebuildEpsilon = 1.0e-5f;
+            constexpr float kRenderColorRebuildEpsilon = 1.0e-5f;
+
+            if (!cache.valid ||
+                cache.generation_id != generation_id ||
+                cache.display_frame_key != display_frame_key ||
+                cache.display_frame_revision != display_frame_revision ||
+                cache.maneuver_plan_revision != maneuver_plan_revision ||
+                cache.maneuver_plan_signature != maneuver_plan_signature ||
+                cache.anchor_hash != anchor_hash ||
+                cache.render_max_segments != ctx.render_max_segments)
+            {
+                return true;
+            }
+
+            if (!same_matrix(cache.frame_to_world, ctx.frame_to_world, kRenderMatrixRebuildEpsilon))
+            {
+                return true;
+            }
+
+            if (cache.render_frustum_valid != ctx.render_frustum.valid ||
+                !same_matrix(cache.render_frustum_viewproj, ctx.render_frustum.viewproj, kRenderViewprojRebuildEpsilon) ||
+                glm::length(glm::dvec3(cache.render_frustum_origin_world - ctx.render_frustum.origin_world)) >
+                        kRenderFrustumOriginRebuildDistanceM)
+            {
+                return true;
+            }
+
+            const WorldVec3 line_origin_world = ctx.ref_body_world + ctx.align_delta;
+            if (glm::length(glm::dvec3(cache.line_origin_world - line_origin_world)) > kRenderOriginRebuildDistanceM ||
+                glm::length(cache.camera_world - ctx.camera_world) > kRenderCameraRebuildDistanceM)
+            {
+                return true;
+            }
+
+            if (std::abs(cache.tan_half_fov - ctx.tan_half_fov) > kRenderScalarRebuildEpsilon ||
+                std::abs(cache.viewport_height_px - ctx.viewport_height_px) > kRenderScalarRebuildEpsilon ||
+                std::abs(cache.render_error_px - ctx.render_error_px) > kRenderScalarRebuildEpsilon ||
+                std::abs(cache.selection_error_scale - selection_error_scale) > kRenderScalarRebuildEpsilon ||
+                std::abs(cache.line_overlay_boost - ctx.line_overlay_boost) > kRenderColorRebuildEpsilon ||
+                !same_vec4(cache.color, color, kRenderColorRebuildEpsilon))
+            {
+                return true;
+            }
+
+            return !std::isfinite(cache.t0_s) || !std::isfinite(cache.t1_s) ||
+                   std::abs(cache.t0_s - t0_s) > kRenderWindowRebuildEpsilonS ||
+                   std::abs(cache.t1_s - t1_s) > kRenderWindowRebuildEpsilonS;
+        }
+
+        void mark_render_line_packet_cache_valid(PredictionRenderLinePacketCache &cache,
+                                                 const OrbitDrawWindowContext &ctx,
+                                                 const glm::vec4 &color,
+                                                 const double selection_error_scale,
+                                                 const double t0_s,
+                                                 const double t1_s,
+                                                 const uint64_t generation_id,
+                                                 const uint64_t display_frame_key,
+                                                 const uint64_t display_frame_revision,
+                                                 const uint64_t maneuver_plan_revision,
+                                                 const uint64_t maneuver_plan_signature,
+                                                 const uint64_t anchor_hash,
+                                                 const bool cap_hit)
+        {
+            cache.valid = true;
+            cache.generation_id = generation_id;
+            cache.display_frame_key = display_frame_key;
+            cache.display_frame_revision = display_frame_revision;
+            cache.maneuver_plan_revision = maneuver_plan_revision;
+            cache.maneuver_plan_signature = maneuver_plan_signature;
+            cache.anchor_hash = anchor_hash;
+            cache.line_origin_world = ctx.ref_body_world + ctx.align_delta;
+            cache.ref_body_world = ctx.ref_body_world;
+            cache.align_delta_world = ctx.align_delta;
+            cache.frame_to_world = ctx.frame_to_world;
+            cache.render_frustum_valid = ctx.render_frustum.valid;
+            cache.render_frustum_viewproj = ctx.render_frustum.viewproj;
+            cache.render_frustum_origin_world = ctx.render_frustum.origin_world;
+            cache.camera_world = ctx.camera_world;
+            cache.tan_half_fov = ctx.tan_half_fov;
+            cache.viewport_height_px = ctx.viewport_height_px;
+            cache.render_error_px = ctx.render_error_px;
+            cache.selection_error_scale = selection_error_scale;
+            cache.t0_s = t0_s;
+            cache.t1_s = t1_s;
+            cache.render_max_segments = ctx.render_max_segments;
+            cache.line_overlay_boost = ctx.line_overlay_boost;
+            cache.color = color;
+            cache.cap_hit = cap_hit;
         }
 
         void emit_cpu_render_lod(const OrbitDrawWindowContext &ctx,
@@ -248,9 +498,151 @@ namespace Game::PredictionDrawDetail
         emit_render_lod_segments(ctx, draw_config, perf, lod, color, dashed);
     }
 
+    void draw_cached_adaptive_curve_window(const OrbitDrawWindowContext &ctx,
+                                           const OrbitPredictionDrawConfig &draw_config,
+                                           OrbitPlotPerfStats &perf,
+                                           const OrbitRenderCurve &curve,
+                                           const double t_start_s,
+                                           const double t_end_s,
+                                           const glm::vec4 &color,
+                                           const bool dashed,
+                                           const std::span<const double> anchor_times_s,
+                                           const double selection_error_scale,
+                                           PredictionRenderLinePacketCache &cache,
+                                           const uint64_t generation_id,
+                                           const uint64_t display_frame_key,
+                                           const uint64_t display_frame_revision,
+                                           const uint64_t maneuver_plan_revision,
+                                           const uint64_t maneuver_plan_signature)
+    {
+        if (dashed)
+        {
+            draw_adaptive_curve_window(ctx,
+                                       draw_config,
+                                       perf,
+                                       curve,
+                                       t_start_s,
+                                       t_end_s,
+                                       color,
+                                       true,
+                                       anchor_times_s,
+                                       selection_error_scale);
+            return;
+        }
+
+        if (curve.empty() || !(t_end_s > t_start_s) || !ctx.orbit_plot)
+        {
+            return;
+        }
+
+        const uint64_t anchor_hash = render_anchor_hash(anchor_times_s);
+        if (!should_rebuild_render_line_packet_cache(cache,
+                                                     ctx,
+                                                     color,
+                                                     selection_error_scale,
+                                                     t_start_s,
+                                                     t_end_s,
+                                                     generation_id,
+                                                     display_frame_key,
+                                                     display_frame_revision,
+                                                     maneuver_plan_revision,
+                                                     maneuver_plan_signature,
+                                                     anchor_hash))
+        {
+            if (cache.cap_hit)
+            {
+                perf.render_cap_hit_last_frame = true;
+                ++perf.render_cap_hits_total;
+            }
+            if (!cache.lines.empty())
+            {
+                const WorldVec3 line_delta_world =
+                        (ctx.ref_body_world + ctx.align_delta) - cache.line_origin_world;
+                ctx.orbit_plot->add_lines_translated(
+                        std::span<const OrbitPlotSystem::LineCommand>(cache.lines.data(), cache.lines.size()),
+                        line_delta_world);
+            }
+            return;
+        }
+
+        OrbitRenderCurve::SelectionContext selection_ctx{};
+        selection_ctx.reference_body_world = ctx.ref_body_world;
+        selection_ctx.align_delta_world = ctx.align_delta;
+        selection_ctx.frame_to_world = ctx.frame_to_world;
+        selection_ctx.camera_world = ctx.camera_world;
+        selection_ctx.tan_half_fov = ctx.tan_half_fov;
+        selection_ctx.viewport_height_px = ctx.viewport_height_px;
+        selection_ctx.error_frustum = ctx.render_frustum;
+        selection_ctx.error_px = ctx.render_error_px;
+        selection_ctx.anchor_times_s = anchor_times_s;
+        if (std::isfinite(selection_error_scale) && selection_error_scale > 0.0 &&
+            selection_error_scale < 1.0)
+        {
+            selection_ctx.error_px = std::max(0.025, ctx.render_error_px * selection_error_scale);
+        }
+
+        OrbitRenderCurve::RenderSettings render_settings{};
+        render_settings.error_px = ctx.render_error_px;
+        render_settings.max_segments = ctx.render_max_segments;
+
+        const auto render_lod_start_tp = std::chrono::steady_clock::now();
+        const OrbitRenderCurve::RenderResult lod =
+                OrbitRenderCurve::build_render_lod(curve,
+                                                   selection_ctx,
+                                                   ctx.render_frustum,
+                                                   render_settings,
+                                                   t_start_s,
+                                                   t_end_s);
+        perf.render_lod_ms_last +=
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - render_lod_start_tp)
+                        .count();
+
+        cache.lines.clear();
+        cache.lines.reserve(lod.segments.size() * ((ctx.line_overlay_boost > 0.0f) ? 2u : 1u));
+        append_render_lod_segments(ctx, draw_config, perf, lod, color, false, cache.lines);
+        mark_render_line_packet_cache_valid(cache,
+                                            ctx,
+                                            color,
+                                            selection_error_scale,
+                                            t_start_s,
+                                            t_end_s,
+                                            generation_id,
+                                            display_frame_key,
+                                            display_frame_revision,
+                                            maneuver_plan_revision,
+                                            maneuver_plan_signature,
+                                            anchor_hash,
+                                            lod.cap_hit);
+
+        if (!cache.lines.empty())
+        {
+            ctx.orbit_plot->add_lines(std::span<const OrbitPlotSystem::LineCommand>(cache.lines.data(),
+                                                                                    cache.lines.size()));
+        }
+    }
+
     namespace
     {
-        PickWindow build_planned_window_from_policy(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
+        double snap_time_past_straddling_chunk(const PredictionChunkAssembly &planned_assembly,
+                                               const double t_s)
+        {
+            for (const OrbitChunk &chunk : planned_assembly.chunks)
+            {
+                if (!chunk.valid ||
+                    chunk.frame_segments.empty() ||
+                    !std::isfinite(chunk.t0_s) ||
+                    !std::isfinite(chunk.t1_s) ||
+                    t_s < chunk.t0_s ||
+                    t_s > chunk.t1_s)
+                {
+                    continue;
+                }
+                return snap_time_past_straddling_segment(chunk.frame_segments, t_s);
+            }
+            return t_s;
+        }
+
+        PickWindow build_planned_window_from_policy(const PredictionChunkAssembly &planned_assembly,
                                                     const OrbitPredictionDrawConfig &draw_config,
                                                     const double anchor_time_s,
                                                     const bool anchor_is_future,
@@ -259,13 +651,13 @@ namespace Game::PredictionDrawDetail
                                                     const double window_end_time_s = std::numeric_limits<double>::quiet_NaN())
         {
             PickWindow planned_window{};
-            if (traj_planned_segments.empty() || !std::isfinite(anchor_time_s))
+            double t0p = 0.0;
+            double t1p = 0.0;
+            if (!planned_assembly.time_span(t0p, t1p) || !std::isfinite(anchor_time_s))
             {
                 return planned_window;
             }
 
-            const double t0p = traj_planned_segments.front().t0_s;
-            const double t1p = traj_planned_segments.back().t0_s + traj_planned_segments.back().dt_s;
             if (!(t1p > t0p))
             {
                 return planned_window;
@@ -275,7 +667,7 @@ namespace Game::PredictionDrawDetail
             if (anchor_is_future)
             {
                 const double snapped_t_plan_start =
-                        std::clamp(snap_time_past_straddling_segment(traj_planned_segments, t_plan_start), t0p, t1p);
+                        std::clamp(snap_time_past_straddling_chunk(planned_assembly, t_plan_start), t0p, t1p);
                 if (snapped_t_plan_start > (t_plan_start + draw_config.node_time_tolerance_s))
                 {
                     t_plan_start = snapped_t_plan_start;
@@ -310,7 +702,7 @@ namespace Game::PredictionDrawDetail
         }
     } // namespace
 
-    PickWindow build_planned_draw_window(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
+    PickWindow build_planned_draw_window(const PredictionChunkAssembly &planned_assembly,
                                          const OrbitPredictionDrawConfig &draw_config,
                                          const PredictionWindowPolicyResult &policy)
     {
@@ -318,7 +710,7 @@ namespace Game::PredictionDrawDetail
         {
             return {};
         }
-        return build_planned_window_from_policy(traj_planned_segments,
+        return build_planned_window_from_policy(planned_assembly,
                                                 draw_config,
                                                 policy.visual_anchor_time_s,
                                                 policy.visual_anchor_is_future,
@@ -327,7 +719,7 @@ namespace Game::PredictionDrawDetail
                                                 policy.visual_window_end_time_s);
     }
 
-    PickWindow build_planned_pick_window(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
+    PickWindow build_planned_pick_window(const PredictionChunkAssembly &planned_assembly,
                                          const OrbitPredictionDrawConfig &draw_config,
                                          const PredictionWindowPolicyResult &policy)
     {
@@ -335,7 +727,7 @@ namespace Game::PredictionDrawDetail
         {
             return {};
         }
-        return build_planned_window_from_policy(traj_planned_segments,
+        return build_planned_window_from_policy(planned_assembly,
                                                 draw_config,
                                                 policy.pick_anchor_time_s,
                                                 policy.pick_anchor_is_future,
@@ -430,6 +822,18 @@ namespace Game::PredictionDrawDetail
         const double dash_on_px = draw_config.dashed_segment_on_px;
         const double dash_off_px = draw_config.dashed_segment_off_px;
         const double dash_period_px = dash_on_px + dash_off_px;
+        const int max_dash_chunks_per_segment = draw_config.dash_max_chunks_per_segment;
+        if (dashed &&
+            (!std::isfinite(dash_on_px) ||
+             !std::isfinite(dash_off_px) ||
+             !std::isfinite(dash_period_px) ||
+             !(dash_on_px > 0.0) ||
+             !(dash_period_px > dash_on_px) ||
+             max_dash_chunks_per_segment <= 0))
+        {
+            draw_polyline_window(ctx, draw_config, traj, t_start_s, t_end_s, color, false);
+            return;
+        }
         double dash_phase_px = 0.0;
 
         for (std::size_t i = 1; i < traj.size(); ++i)
@@ -454,6 +858,12 @@ namespace Game::PredictionDrawDetail
                 continue;
             }
 
+            if (!dash_budget_available(ctx))
+            {
+                emit_orbit_line(ctx, color, a_world, b_world);
+                continue;
+            }
+
             const double seg_m = glm::length(glm::dvec3(b_world - a_world));
             const glm::dvec3 seg_mid = glm::mix(glm::dvec3(a_world), glm::dvec3(b_world), 0.5);
             const double seg_mpp = meters_per_px_at_world(ctx, WorldVec3(seg_mid));
@@ -464,8 +874,21 @@ namespace Game::PredictionDrawDetail
             }
 
             double cursor_px = 0.0;
-            while ((cursor_px + 1.0e-6) < seg_px)
+            int dash_chunks = 0;
+            while ((cursor_px + 1.0e-6) < seg_px &&
+                   dash_chunks < max_dash_chunks_per_segment)
             {
+                if (!dash_budget_available(ctx))
+                {
+                    const double u0 = std::clamp(cursor_px / seg_px, 0.0, 1.0);
+                    if (1.0 > u0)
+                    {
+                        emit_orbit_line(ctx, color, glm::mix(a_world, b_world, u0), b_world);
+                    }
+                    cursor_px = seg_px;
+                    break;
+                }
+
                 const bool phase_on = dash_phase_px < dash_on_px;
                 double phase_remaining_px = phase_on ? (dash_on_px - dash_phase_px) : (dash_period_px - dash_phase_px);
                 if (!std::isfinite(phase_remaining_px) || !(phase_remaining_px > 1.0e-6))
@@ -480,6 +903,7 @@ namespace Game::PredictionDrawDetail
                     const double u0 = std::clamp(cursor_px / seg_px, 0.0, 1.0);
                     const double u1 = std::clamp(next_px / seg_px, 0.0, 1.0);
                     emit_orbit_line(ctx, color, glm::mix(a_world, b_world, u0), glm::mix(a_world, b_world, u1));
+                    consume_dash_budget(ctx);
                 }
 
                 cursor_px = next_px;
@@ -488,6 +912,7 @@ namespace Game::PredictionDrawDetail
                 {
                     dash_phase_px = std::fmod(dash_phase_px, dash_period_px);
                 }
+                ++dash_chunks;
             }
         }
     }

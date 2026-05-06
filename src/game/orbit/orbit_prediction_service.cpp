@@ -101,14 +101,19 @@ namespace Game
         void discard_stale_maneuver_completed_results(
                 std::deque<OrbitPredictionService::Result> &completed,
                 const uint64_t track_id,
-                const uint64_t maneuver_plan_revision)
+                const uint64_t maneuver_plan_revision,
+                const bool preserve_fast_preview)
         {
             completed.erase(std::remove_if(completed.begin(),
                                            completed.end(),
-                                           [track_id, maneuver_plan_revision](const OrbitPredictionService::Result &queued) {
-                                                return queued.envelope.track_id == track_id &&
-                                                       queued.envelope.maneuver_plan_revision < maneuver_plan_revision;
-                                           }),
+                                           [track_id, maneuver_plan_revision, preserve_fast_preview](
+                                                   const OrbitPredictionService::Result &queued) {
+                                                 return queued.envelope.track_id == track_id &&
+                                                        queued.envelope.maneuver_plan_revision < maneuver_plan_revision &&
+                                                        !(preserve_fast_preview &&
+                                                          queued.envelope.solve_quality ==
+                                                                  OrbitPredictionService::SolveQuality::FastPreview);
+                                            }),
                             completed.end());
         }
 
@@ -201,9 +206,12 @@ namespace Game
                     track_id,
                     generation_id,
                     request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview);
+            const bool preserve_fast_preview =
+                    request.options.solve_quality == OrbitPredictionService::SolveQuality::FastPreview;
             discard_stale_maneuver_completed_results(_completed,
-                                                     track_id,
-                                                     _latest_maneuver_plan_revision_by_track[track_id]);
+                                                      track_id,
+                                                      _latest_maneuver_plan_revision_by_track[track_id],
+                                                      preserve_fast_preview);
 
             // Keep only the newest queued request per track to avoid backlogging stale previews.
             auto existing = std::find_if(_pending_jobs.begin(),
@@ -246,7 +254,7 @@ namespace Game
                 latest_revision = maneuver_plan_revision;
             }
 
-            discard_stale_maneuver_completed_results(_completed, track_id, latest_revision);
+            discard_stale_maneuver_completed_results(_completed, track_id, latest_revision, true);
         }
     }
 
@@ -549,7 +557,8 @@ namespace Game
 
         const auto latest_revision_it = _latest_maneuver_plan_revision_by_track.find(track_id);
         if (latest_revision_it != _latest_maneuver_plan_revision_by_track.end() &&
-            maneuver_plan_revision < latest_revision_it->second)
+            maneuver_plan_revision < latest_revision_it->second &&
+            solve_quality != OrbitPredictionService::SolveQuality::FastPreview)
         {
             return false;
         }
@@ -570,8 +579,9 @@ namespace Game
             return false;
         }
         if (!maneuver_revision_is_current(job.track_id,
-                                          job.request.envelope.maneuver_plan_revision,
-                                          _latest_maneuver_plan_revision_by_track))
+                                           job.request.envelope.maneuver_plan_revision,
+                                           _latest_maneuver_plan_revision_by_track) &&
+            job.request.options.solve_quality != OrbitPredictionService::SolveQuality::FastPreview)
         {
             return false;
         }

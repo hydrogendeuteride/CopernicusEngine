@@ -102,6 +102,14 @@ namespace Game
             debug.last_solver_result_tp = solver_result_tp;
             debug.last_solver_result_generation_id = result.envelope.generation_id;
             ++debug.solver_result_count;
+            if (result.envelope.solve_quality == OrbitPredictionSolveQuality::FastPreview)
+            {
+                ++debug.fast_preview_solver_result_count;
+            }
+            else
+            {
+                ++debug.full_solver_result_count;
+            }
             if (debug.last_request_generation_id == result.envelope.generation_id &&
                 PredictionDragDebugTelemetry::has_time(debug.last_request_tp))
             {
@@ -189,7 +197,8 @@ namespace Game
             return out;
         }
         if (track.supports_maneuvers &&
-            result.envelope.maneuver_plan_revision != context.maneuver_plan_revision)
+            result.envelope.maneuver_plan_revision != context.maneuver_plan_revision &&
+            !live_fast_preview_result)
         {
             Logger::warn("Dropping stale maneuver solver result: track={} gen={} result_plan_rev={} current_plan_rev={} "
                          "latest_request_gen={} request_pending={} derived_pending={} invalidated={} dirty={}",

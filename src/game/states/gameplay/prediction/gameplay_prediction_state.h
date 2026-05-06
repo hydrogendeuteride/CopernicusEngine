@@ -38,6 +38,7 @@ namespace Game
 
         OrbitPlotPerfStats orbit_plot_perf{};
         OrbitPredictionDrawConfig draw_config{};
+        PredictionTimeAnchorCache maneuver_node_time_cache{};
         OrbitPredictionDerivedService derived_service{};
         std::vector<PredictionTrackState> tracks{};
         std::vector<PredictionGroup> groups{};

@@ -59,8 +59,8 @@ public:
         // the cursor and camera are stationary. 0 disables this cache.
         uint32_t stationary_hover_miss_skip_frames = 5;
 
-        // When the cursor itself is stationary, refresh hover at a lower
-        // cadence even if the camera/scene is still moving. Mouse motion always
+        // When the cursor itself is stationary, refresh hover at a lower update
+        // interval even if the camera/scene is still moving. Mouse motion always
         // forces an immediate hover update. 0 disables throttling.
         uint32_t stationary_hover_update_interval_frames = 15;
 

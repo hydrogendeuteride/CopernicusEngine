@@ -625,8 +625,7 @@ TEST(GameplayPredictionManeuverTests, PredictionSystemClearsLivePreviewStateWith
     track.cache.identity.maneuver_plan_signature = 42u;
     track.cache.solver.planned.trajectory_inertial = {make_sample(0.0, 7'000'000.0)};
     track.cache.solver.planned.trajectory_segments_inertial = {make_segment(0.0, 10.0, 7'000'000.0, 7'100'000.0)};
-    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(track.cache);
     track.authoritative_cache = track.cache;
     track.preview_state = Game::PredictionPreviewRuntimeState::PreviewStreaming;
     track.preview_anchor.valid = true;

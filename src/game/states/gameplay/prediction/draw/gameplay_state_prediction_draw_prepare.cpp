@@ -80,13 +80,13 @@ namespace Game
                 const Draw::PredictionTrackDrawContext &ctx)
         {
             if (ctx.stale_planned_cache &&
-                ctx.planned_window_segments == &ctx.stale_planned_cache->display.trajectory_segments_frame_planned)
+                ctx.planned_window_assembly == &ctx.stale_planned_cache->display.planned_chunk_assembly)
             {
                 return ctx.stale_planned_cache;
             }
 
             if (ctx.stable_cache &&
-                ctx.planned_window_segments == &ctx.stable_cache->display.trajectory_segments_frame_planned)
+                ctx.planned_window_assembly == &ctx.stable_cache->display.planned_chunk_assembly)
             {
                 return ctx.stable_cache;
             }
@@ -120,7 +120,6 @@ namespace Game
         out.planned_cache = out.stable_cache;
 
         out.traj_base = &out.stable_cache->display.trajectory_frame;
-        out.traj_planned = &out.planned_cache->display.trajectory_frame_planned;
         out.display_cache = out.planned_cache->display.resolved_frame_spec_valid ? out.planned_cache : out.stable_cache;
 
         if (!_adapter.build_prediction_display_transform(
@@ -170,13 +169,10 @@ namespace Game
             return false;
         }
 
-        out.traj_planned_segments = &out.planned_cache->display.trajectory_segments_frame_planned;
-        out.planned_window_segments =
-                !out.stable_cache->display.trajectory_segments_frame_planned.empty()
-                        ? &out.stable_cache->display.trajectory_segments_frame_planned
-                        : (!out.planned_cache->display.trajectory_segments_frame_planned.empty()
-                                   ? &out.planned_cache->display.trajectory_segments_frame_planned
-                                   : out.traj_planned_segments);
+        out.planned_window_assembly =
+                out.planned_cache->display.planned_chunk_assembly.drawable()
+                        ? &out.planned_cache->display.planned_chunk_assembly
+                        : nullptr;
 
         out.is_active = track.key == _adapter.prediction_draw_state().selection.active_subject;
         out.active_player_track = out.is_active && _adapter.prediction_subject_is_player(track.key);
@@ -252,15 +248,11 @@ namespace Game
             };
 
             const auto planned_cache_end_time_s = [](const OrbitPredictionCache &candidate) {
-                if (!candidate.display.trajectory_segments_frame_planned.empty())
+                double t0_s = 0.0;
+                double t1_s = 0.0;
+                if (candidate.display.planned_chunk_assembly.time_span(t0_s, t1_s))
                 {
-                    const orbitsim::TrajectorySegment &last =
-                            candidate.display.trajectory_segments_frame_planned.back();
-                    return last.t0_s + last.dt_s;
-                }
-                if (candidate.display.trajectory_frame_planned.size() >= 2)
-                {
-                    return candidate.display.trajectory_frame_planned.back().t_s;
+                    return t1_s;
                 }
                 return std::numeric_limits<double>::quiet_NaN();
             };
@@ -304,17 +296,11 @@ namespace Game
                 out.stale_planned_cache = stale_candidate;
                 out.stale_planned_cache_drawable = keep_stale_planned_visible;
                 out.stale_planned_cache_prefix_cutoff_s = stale_prefix_cutoff_s;
-                if (!out.stale_planned_cache->display.trajectory_segments_frame_planned.empty())
-                {
-                    out.planned_window_segments =
-                            &out.stale_planned_cache->display.trajectory_segments_frame_planned;
-                }
+                out.planned_window_assembly = &out.stale_planned_cache->display.planned_chunk_assembly;
             }
             else
             {
-                out.traj_planned = nullptr;
-                out.traj_planned_segments = nullptr;
-                out.planned_window_segments = nullptr;
+                out.planned_window_assembly = nullptr;
             }
         }
 
@@ -322,8 +308,8 @@ namespace Game
         {
             _adapter.prediction_draw_state().orbit_plot_perf.solver_segments_base = static_cast<uint32_t>(out.traj_base_segments->size());
             _adapter.prediction_draw_state().orbit_plot_perf.solver_segments_planned =
-                    out.traj_planned_segments
-                            ? static_cast<uint32_t>(out.traj_planned_segments->size())
+                    out.planned_window_assembly
+                            ? static_cast<uint32_t>(out.planned_window_assembly->segment_count())
                             : 0u;
         }
 
@@ -368,20 +354,22 @@ namespace Game
 
         out.identity_frame_transform = Draw::frame_transform_is_identity(out.frame_to_world);
         out.use_base_adaptive_curve = !out.stable_cache->display.render_curve_frame.empty();
-        const bool planned_preview_like = PredictionRuntimeDetail::prediction_track_planned_preview_like(lifecycle);
+        const auto assembly_has_curve = [](const PredictionChunkAssembly &assembly) {
+            return std::any_of(assembly.chunks.begin(),
+                               assembly.chunks.end(),
+                               [](const OrbitChunk &chunk) { return !chunk.render_curve.empty(); });
+        };
         const bool stale_planned_curve_drawable =
                 out.stale_planned_cache_drawable &&
                 out.stale_planned_cache &&
-                !out.stale_planned_cache->display.render_curve_frame_planned.empty();
+                assembly_has_curve(out.stale_planned_cache->display.planned_chunk_assembly);
         const bool current_planned_curve_drawable =
                 out.planned_cache_drawable &&
                 out.planned_cache &&
-                !out.planned_cache->display.render_curve_frame_planned.empty();
+                assembly_has_curve(out.planned_cache->display.planned_chunk_assembly);
         const bool planned_curve_drawable =
                 current_planned_curve_drawable || stale_planned_curve_drawable;
-        out.use_planned_adaptive_curve =
-                planned_curve_drawable &&
-                (!planned_preview_like || stale_planned_curve_drawable || actual_maneuver_drag_active);
+        out.use_planned_adaptive_curve = planned_curve_drawable;
 
         out.world_basis_draw_ctx = out.draw_ctx;
         if (!out.identity_frame_transform)
@@ -406,12 +394,15 @@ namespace Game
         out.future_window_s = window_context.future_window_s(track.key);
         const OrbitPredictionCache *planned_window_source = planned_window_source_cache(out);
 
-        if (out.planned_window_segments && !out.planned_window_segments->empty() &&
+        if (out.planned_window_assembly && out.planned_window_assembly->drawable() &&
             planned_window_source && planned_window_source->has_planned_frame_draw_data())
         {
-            const double planned_segments_t0_s = out.planned_window_segments->front().t0_s;
-            const double planned_segments_t1_s =
-                    out.planned_window_segments->back().t0_s + out.planned_window_segments->back().dt_s;
+            double planned_segments_t0_s = 0.0;
+            double planned_segments_t1_s = 0.0;
+            if (!out.planned_window_assembly->time_span(planned_segments_t0_s, planned_segments_t1_s))
+            {
+                return false;
+            }
             const PredictionTimeContext time_ctx =
                     window_context.build_time_context(track.key, out.now_s, planned_segments_t0_s, planned_segments_t1_s);
             out.planned_window_policy = window_context.resolve_policy(&track, time_ctx, true);
@@ -453,11 +444,13 @@ namespace Game
 
                     if (out.stale_planned_cache_drawable &&
                         std::isfinite(out.stale_planned_cache_prefix_cutoff_s) &&
-                        out.planned_window_segments &&
-                        !out.planned_window_segments->empty())
+                        out.planned_window_assembly &&
+                        out.planned_window_assembly->drawable())
                     {
-                        const double prefix_start_s =
-                                std::max(out.now_s, out.planned_window_segments->front().t0_s);
+                        double window_t0_s = 0.0;
+                        double window_t1_s = 0.0;
+                        (void) out.planned_window_assembly->time_span(window_t0_s, window_t1_s);
+                        const double prefix_start_s = std::max(out.now_s, window_t0_s);
                         if (out.stale_planned_cache_prefix_cutoff_s >
                             prefix_start_s + kPredictionTimeEpsilonS)
                         {
@@ -552,15 +545,15 @@ namespace Game
 
         track_ctx.planned_draw_window =
                 (plan.overlay_layers.active_maneuver_track &&
-                 track_ctx.planned_window_segments && !track_ctx.planned_window_segments->empty())
-                        ? Draw::build_planned_draw_window(*track_ctx.planned_window_segments,
+                 track_ctx.planned_window_assembly && track_ctx.planned_window_assembly->drawable())
+                        ? Draw::build_planned_draw_window(*track_ctx.planned_window_assembly,
                                                           prediction_state.draw_config,
                                                           track_ctx.planned_window_policy)
                         : preview_anchor_window();
         track_ctx.planned_pick_window =
                 (plan.overlay_layers.active_maneuver_track &&
-                 track_ctx.planned_window_segments && !track_ctx.planned_window_segments->empty())
-                        ? Draw::build_planned_pick_window(*track_ctx.planned_window_segments,
+                 track_ctx.planned_window_assembly && track_ctx.planned_window_assembly->drawable())
+                        ? Draw::build_planned_pick_window(*track_ctx.planned_window_assembly,
                                                           prediction_state.draw_config,
                                                           track_ctx.planned_window_policy)
                         : preview_anchor_pick_window();

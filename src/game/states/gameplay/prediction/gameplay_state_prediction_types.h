@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/orbit_plot/orbit_plot.h"
 #include "core/picking/line_pick_segment.h"
 #include "core/world.h"
 #include "game/orbit/prediction/orbit_prediction_types.h"
@@ -8,6 +9,7 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -112,6 +114,7 @@ namespace Game
         double dashed_segment_on_px{14.0};
         double dashed_segment_off_px{9.0};
         int dash_max_chunks_per_segment{128};
+        int dash_max_chunks_per_window{4096};
         bool draw_planned_as_dashed{true};
     };
 
@@ -164,6 +167,22 @@ namespace Game
         {
             maneuver_plan_signature_valid = false;
             maneuver_plan_signature = 0;
+        }
+    };
+
+    struct PredictionTimeAnchorCache
+    {
+        uint64_t generation_id{0};
+        uint64_t revision{std::numeric_limits<uint64_t>::max()};
+        std::size_t source_count{std::numeric_limits<std::size_t>::max()};
+        std::vector<double> times_s{};
+
+        void clear()
+        {
+            generation_id = 0;
+            revision = std::numeric_limits<uint64_t>::max();
+            source_count = std::numeric_limits<std::size_t>::max();
+            times_s.clear();
         }
     };
 
@@ -278,14 +297,97 @@ namespace Game
         }
     };
 
+    struct OrbitChunk
+    {
+        uint32_t chunk_id{0};
+        uint64_t generation_id{0};
+        OrbitPredictionChunkQualityState quality_state{OrbitPredictionChunkQualityState::Final};
+        double t0_s{std::numeric_limits<double>::quiet_NaN()};
+        double t1_s{std::numeric_limits<double>::quiet_NaN()};
+        std::vector<orbitsim::TrajectorySample> frame_samples{};
+        std::vector<orbitsim::TrajectorySegment> frame_segments{};
+        OrbitRenderCurve render_curve{};
+        bool valid{false};
+
+        [[nodiscard]] bool drawable() const
+        {
+            return valid &&
+                   (frame_samples.size() >= 2 ||
+                    !frame_segments.empty() ||
+                    !render_curve.empty());
+        }
+    };
+
+    struct PredictionChunkAssembly
+    {
+        bool valid{false};
+        uint64_t generation_id{0};
+        std::vector<OrbitChunk> chunks{};
+
+        [[nodiscard]] bool drawable() const
+        {
+            return valid &&
+                   std::any_of(chunks.begin(), chunks.end(), [](const OrbitChunk &chunk) {
+                       return chunk.drawable();
+                   });
+        }
+
+        [[nodiscard]] std::size_t segment_count() const
+        {
+            std::size_t count = 0;
+            for (const OrbitChunk &chunk : chunks)
+            {
+                count += chunk.frame_segments.size();
+            }
+            return count;
+        }
+
+        [[nodiscard]] std::size_t sample_count() const
+        {
+            std::size_t count = 0;
+            for (const OrbitChunk &chunk : chunks)
+            {
+                count += chunk.frame_samples.size();
+            }
+            return count;
+        }
+
+        [[nodiscard]] bool time_span(double &out_t0_s, double &out_t1_s) const
+        {
+            out_t0_s = std::numeric_limits<double>::quiet_NaN();
+            out_t1_s = std::numeric_limits<double>::quiet_NaN();
+            if (!valid)
+            {
+                return false;
+            }
+
+            for (const OrbitChunk &chunk : chunks)
+            {
+                if (!std::isfinite(chunk.t0_s) || !std::isfinite(chunk.t1_s) || !(chunk.t1_s > chunk.t0_s))
+                {
+                    continue;
+                }
+                out_t0_s = std::isfinite(out_t0_s) ? std::min(out_t0_s, chunk.t0_s) : chunk.t0_s;
+                out_t1_s = std::isfinite(out_t1_s) ? std::max(out_t1_s, chunk.t1_s) : chunk.t1_s;
+            }
+
+            return std::isfinite(out_t0_s) && std::isfinite(out_t1_s) && out_t1_s > out_t0_s;
+        }
+
+        void clear()
+        {
+            valid = false;
+            generation_id = 0;
+            chunks.clear();
+        }
+    };
+
     struct PredictionDisplayFrameCache
     {
         std::vector<orbitsim::TrajectorySample> trajectory_frame;
-        std::vector<orbitsim::TrajectorySample> trajectory_frame_planned;
         std::vector<orbitsim::TrajectorySegment> trajectory_segments_frame;
-        std::vector<orbitsim::TrajectorySegment> trajectory_segments_frame_planned;
         OrbitRenderCurve render_curve_frame;
-        OrbitRenderCurve render_curve_frame_planned;
+        PredictionChunkAssembly planned_chunk_assembly{};
         orbitsim::TrajectoryFrameSpec resolved_frame_spec{};
         uint64_t display_frame_key{0};
         uint64_t display_frame_revision{0};
@@ -305,23 +407,17 @@ namespace Game
 
         void clear_planned()
         {
-            trajectory_frame_planned.clear();
-            trajectory_segments_frame_planned.clear();
-            render_curve_frame_planned.clear();
+            planned_chunk_assembly.clear();
         }
 
         void copy_planned_from(const PredictionDisplayFrameCache &src)
         {
-            trajectory_frame_planned = src.trajectory_frame_planned;
-            trajectory_segments_frame_planned = src.trajectory_segments_frame_planned;
-            render_curve_frame_planned = src.render_curve_frame_planned;
+            planned_chunk_assembly = src.planned_chunk_assembly;
         }
 
         [[nodiscard]] bool has_planned_draw_data() const
         {
-            return trajectory_frame_planned.size() >= 2 ||
-                   !trajectory_segments_frame_planned.empty() ||
-                   !render_curve_frame_planned.empty();
+            return planned_chunk_assembly.drawable();
         }
     };
 
@@ -428,33 +524,6 @@ namespace Game
         dst.identity.maneuver_plan_signature_valid = src.identity.maneuver_plan_signature_valid;
         dst.identity.maneuver_plan_signature = src.identity.maneuver_plan_signature;
     }
-
-    struct OrbitChunk
-    {
-        uint32_t chunk_id{0};
-        uint64_t generation_id{0};
-        OrbitPredictionChunkQualityState quality_state{OrbitPredictionChunkQualityState::Final};
-        double t0_s{std::numeric_limits<double>::quiet_NaN()};
-        double t1_s{std::numeric_limits<double>::quiet_NaN()};
-        std::vector<orbitsim::TrajectorySample> frame_samples{};
-        std::vector<orbitsim::TrajectorySegment> frame_segments{};
-        OrbitRenderCurve render_curve{};
-        bool valid{false};
-    };
-
-    struct PredictionChunkAssembly
-    {
-        bool valid{false};
-        uint64_t generation_id{0};
-        std::vector<OrbitChunk> chunks{};
-
-        void clear()
-        {
-            valid = false;
-            generation_id = 0;
-            chunks.clear();
-        }
-    };
 
     struct PredictionPreviewOverlay
     {
@@ -565,6 +634,66 @@ namespace Game
             planned_use_adaptive_curve = false;
             base_segments.clear();
             planned_segments.clear();
+        }
+    };
+
+    struct PredictionRenderLinePacketCache
+    {
+        bool valid{false};
+        uint64_t generation_id{0};
+        uint64_t display_frame_key{0};
+        uint64_t display_frame_revision{0};
+        uint64_t maneuver_plan_revision{0};
+        uint64_t maneuver_plan_signature{0};
+        uint64_t anchor_hash{0};
+        WorldVec3 line_origin_world{0.0, 0.0, 0.0};
+        WorldVec3 ref_body_world{0.0, 0.0, 0.0};
+        WorldVec3 align_delta_world{0.0, 0.0, 0.0};
+        glm::dmat3 frame_to_world{1.0};
+        bool render_frustum_valid{false};
+        glm::mat4 render_frustum_viewproj{1.0f};
+        WorldVec3 render_frustum_origin_world{0.0, 0.0, 0.0};
+        glm::dvec3 camera_world{0.0, 0.0, 0.0};
+        double tan_half_fov{0.0};
+        double viewport_height_px{1.0};
+        double render_error_px{0.75};
+        double selection_error_scale{1.0};
+        double t0_s{std::numeric_limits<double>::quiet_NaN()};
+        double t1_s{std::numeric_limits<double>::quiet_NaN()};
+        std::size_t render_max_segments{0};
+        float line_overlay_boost{0.0f};
+        glm::vec4 color{1.0f};
+        bool cap_hit{false};
+        std::vector<OrbitPlotSystem::LineCommand> lines{};
+
+        void clear()
+        {
+            valid = false;
+            generation_id = 0;
+            display_frame_key = 0;
+            display_frame_revision = 0;
+            maneuver_plan_revision = 0;
+            maneuver_plan_signature = 0;
+            anchor_hash = 0;
+            line_origin_world = WorldVec3(0.0, 0.0, 0.0);
+            ref_body_world = WorldVec3(0.0, 0.0, 0.0);
+            align_delta_world = WorldVec3(0.0, 0.0, 0.0);
+            frame_to_world = glm::dmat3(1.0);
+            render_frustum_valid = false;
+            render_frustum_viewproj = glm::mat4(1.0f);
+            render_frustum_origin_world = WorldVec3(0.0, 0.0, 0.0);
+            camera_world = glm::dvec3(0.0, 0.0, 0.0);
+            tan_half_fov = 0.0;
+            viewport_height_px = 1.0;
+            render_error_px = 0.75;
+            selection_error_scale = 1.0;
+            t0_s = std::numeric_limits<double>::quiet_NaN();
+            t1_s = std::numeric_limits<double>::quiet_NaN();
+            render_max_segments = 0;
+            line_overlay_boost = 0.0f;
+            color = glm::vec4(1.0f);
+            cap_hit = false;
+            lines.clear();
         }
     };
 
@@ -706,7 +835,11 @@ namespace Game
         uint64_t drag_session_id{0};
         uint64_t drag_update_count{0};
         uint64_t request_count{0};
+        uint64_t full_request_count{0};
+        uint64_t fast_preview_request_count{0};
         uint64_t solver_result_count{0};
+        uint64_t full_solver_result_count{0};
+        uint64_t fast_preview_solver_result_count{0};
         uint64_t derived_result_count{0};
         uint64_t publish_count{0};
         uint64_t last_request_generation_id{0};
@@ -735,14 +868,19 @@ namespace Game
         double derived_worker_ms_last{0.0};
         double derived_worker_ms_peak{0.0};
         double derived_frame_build_ms_last{0.0};
-        double derived_flatten_ms_last{0.0};
+        double derived_chunk_assembly_ms_last{0.0};
         double derived_apply_ms_last{0.0};
         double derived_apply_ms_peak{0.0};
 
-        std::size_t flattened_planned_segments_last{0};
-        std::size_t flattened_planned_samples_last{0};
+        std::size_t chunk_planned_segments_last{0};
+        std::size_t chunk_planned_samples_last{0};
 
+        OrbitPredictionSolveQuality last_request_solve_quality{OrbitPredictionSolveQuality::Full};
         OrbitPredictionSolveQuality last_result_solve_quality{OrbitPredictionSolveQuality::Full};
+        double last_request_future_window_s{0.0};
+        std::size_t last_request_maneuver_count{0};
+        bool last_request_preview_patch{false};
+        bool last_request_full_stream_publish{false};
         bool drag_active{false};
 
         static bool has_time(const TimePoint &tp)
@@ -787,6 +925,10 @@ namespace Game
         PredictionPreviewAnchor preview_anchor{};
         PredictionPreviewOverlay preview_overlay{};
         PredictionFrameBoundChunkOverlay full_stream_overlay{};
+        PredictionTimeAnchorCache planned_curve_preview_time_cache{};
+        PredictionTimeAnchorCache stale_planned_curve_preview_time_cache{};
+        PredictionRenderLinePacketCache planned_render_line_cache{};
+        PredictionRenderLinePacketCache stale_planned_render_line_cache{};
         double preview_entered_at_s{std::numeric_limits<double>::quiet_NaN()};
         double preview_last_anchor_refresh_at_s{std::numeric_limits<double>::quiet_NaN()};
         double preview_last_request_at_s{std::numeric_limits<double>::quiet_NaN()};
@@ -821,6 +963,10 @@ namespace Game
             preview_anchor = {};
             preview_overlay.clear();
             full_stream_overlay.clear();
+            planned_curve_preview_time_cache.clear();
+            stale_planned_curve_preview_time_cache.clear();
+            planned_render_line_cache.clear();
+            stale_planned_render_line_cache.clear();
             preview_entered_at_s = std::numeric_limits<double>::quiet_NaN();
             preview_last_anchor_refresh_at_s = std::numeric_limits<double>::quiet_NaN();
             preview_last_request_at_s = std::numeric_limits<double>::quiet_NaN();
