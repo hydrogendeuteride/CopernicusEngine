@@ -112,6 +112,7 @@ namespace Game
         double dashed_segment_on_px{14.0};
         double dashed_segment_off_px{9.0};
         int dash_max_chunks_per_segment{128};
+        int dash_max_chunks_per_window{4096};
         bool draw_planned_as_dashed{true};
     };
 

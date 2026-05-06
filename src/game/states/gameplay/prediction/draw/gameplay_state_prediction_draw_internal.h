@@ -40,6 +40,7 @@ namespace Game::PredictionDrawDetail
         double render_error_px{0.75};
         std::size_t render_max_segments{1};
         float line_overlay_boost{0.0f};
+        int *dash_chunks_remaining{nullptr};
     };
 
     struct PickWindow

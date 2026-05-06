@@ -40,6 +40,19 @@ namespace Game::PredictionDrawDetail
             }
         }
 
+        bool dash_budget_available(const OrbitDrawWindowContext &ctx)
+        {
+            return ctx.dash_chunks_remaining == nullptr || *ctx.dash_chunks_remaining > 0;
+        }
+
+        void consume_dash_budget(const OrbitDrawWindowContext &ctx)
+        {
+            if (ctx.dash_chunks_remaining && *ctx.dash_chunks_remaining > 0)
+            {
+                --(*ctx.dash_chunks_remaining);
+            }
+        }
+
         void emit_render_lod_segments(const OrbitDrawWindowContext &ctx,
                                       const OrbitPredictionDrawConfig &draw_config,
                                       OrbitPlotPerfStats &perf,
@@ -69,10 +82,29 @@ namespace Game::PredictionDrawDetail
             const double dash_on_px = draw_config.dashed_segment_on_px;
             const double dash_off_px = draw_config.dashed_segment_off_px;
             const double dash_period_px = dash_on_px + dash_off_px;
+            const int max_dash_chunks_per_segment = draw_config.dash_max_chunks_per_segment;
+            if (!std::isfinite(dash_on_px) || !std::isfinite(dash_off_px) ||
+                !std::isfinite(dash_period_px) ||
+                !(dash_on_px > 0.0) ||
+                !(dash_period_px > dash_on_px) ||
+                max_dash_chunks_per_segment <= 0)
+            {
+                for (const OrbitRenderCurve::LineSegment &segment : lod.segments)
+                {
+                    emit_orbit_line(ctx, color, segment.a_world, segment.b_world);
+                }
+                return;
+            }
 
             double dash_phase_px = 0.0;
             for (const OrbitRenderCurve::LineSegment &segment : lod.segments)
             {
+                if (!dash_budget_available(ctx))
+                {
+                    emit_orbit_line(ctx, color, segment.a_world, segment.b_world);
+                    continue;
+                }
+
                 const double seg_m = glm::length(glm::dvec3(segment.b_world - segment.a_world));
                 const double seg_dt_s = segment.t1_s - segment.t0_s;
                 if (!std::isfinite(seg_m) || !(seg_m > 1.0e-9) || !std::isfinite(seg_dt_s) || !(seg_dt_s > 0.0))
@@ -96,8 +128,22 @@ namespace Game::PredictionDrawDetail
                 double cursor_px = 0.0;
                 int dash_chunks = 0;
                 while ((cursor_px + 1.0e-6) < seg_px &&
-                       dash_chunks < draw_config.dash_max_chunks_per_segment)
+                       dash_chunks < max_dash_chunks_per_segment)
                 {
+                    if (!dash_budget_available(ctx))
+                    {
+                        const double u0 = std::clamp(cursor_px / seg_px, 0.0, 1.0);
+                        if (1.0 > u0)
+                        {
+                            emit_orbit_line(ctx,
+                                            color,
+                                            glm::mix(segment.a_world, segment.b_world, u0),
+                                            segment.b_world);
+                        }
+                        cursor_px = seg_px;
+                        break;
+                    }
+
                     const bool phase_on = dash_phase_px < dash_on_px;
                     double phase_remaining_px =
                             phase_on ? (dash_on_px - dash_phase_px) : (dash_period_px - dash_phase_px);
@@ -118,6 +164,7 @@ namespace Game::PredictionDrawDetail
                             const WorldVec3 a_world = glm::mix(segment.a_world, segment.b_world, u0);
                             const WorldVec3 b_world = glm::mix(segment.a_world, segment.b_world, u1);
                             emit_orbit_line(ctx, color, a_world, b_world);
+                            consume_dash_budget(ctx);
                         }
                     }
 
@@ -430,6 +477,18 @@ namespace Game::PredictionDrawDetail
         const double dash_on_px = draw_config.dashed_segment_on_px;
         const double dash_off_px = draw_config.dashed_segment_off_px;
         const double dash_period_px = dash_on_px + dash_off_px;
+        const int max_dash_chunks_per_segment = draw_config.dash_max_chunks_per_segment;
+        if (dashed &&
+            (!std::isfinite(dash_on_px) ||
+             !std::isfinite(dash_off_px) ||
+             !std::isfinite(dash_period_px) ||
+             !(dash_on_px > 0.0) ||
+             !(dash_period_px > dash_on_px) ||
+             max_dash_chunks_per_segment <= 0))
+        {
+            draw_polyline_window(ctx, draw_config, traj, t_start_s, t_end_s, color, false);
+            return;
+        }
         double dash_phase_px = 0.0;
 
         for (std::size_t i = 1; i < traj.size(); ++i)
@@ -454,6 +513,12 @@ namespace Game::PredictionDrawDetail
                 continue;
             }
 
+            if (!dash_budget_available(ctx))
+            {
+                emit_orbit_line(ctx, color, a_world, b_world);
+                continue;
+            }
+
             const double seg_m = glm::length(glm::dvec3(b_world - a_world));
             const glm::dvec3 seg_mid = glm::mix(glm::dvec3(a_world), glm::dvec3(b_world), 0.5);
             const double seg_mpp = meters_per_px_at_world(ctx, WorldVec3(seg_mid));
@@ -464,8 +529,21 @@ namespace Game::PredictionDrawDetail
             }
 
             double cursor_px = 0.0;
-            while ((cursor_px + 1.0e-6) < seg_px)
+            int dash_chunks = 0;
+            while ((cursor_px + 1.0e-6) < seg_px &&
+                   dash_chunks < max_dash_chunks_per_segment)
             {
+                if (!dash_budget_available(ctx))
+                {
+                    const double u0 = std::clamp(cursor_px / seg_px, 0.0, 1.0);
+                    if (1.0 > u0)
+                    {
+                        emit_orbit_line(ctx, color, glm::mix(a_world, b_world, u0), b_world);
+                    }
+                    cursor_px = seg_px;
+                    break;
+                }
+
                 const bool phase_on = dash_phase_px < dash_on_px;
                 double phase_remaining_px = phase_on ? (dash_on_px - dash_phase_px) : (dash_period_px - dash_phase_px);
                 if (!std::isfinite(phase_remaining_px) || !(phase_remaining_px > 1.0e-6))
@@ -480,6 +558,7 @@ namespace Game::PredictionDrawDetail
                     const double u0 = std::clamp(cursor_px / seg_px, 0.0, 1.0);
                     const double u1 = std::clamp(next_px / seg_px, 0.0, 1.0);
                     emit_orbit_line(ctx, color, glm::mix(a_world, b_world, u0), glm::mix(a_world, b_world, u1));
+                    consume_dash_budget(ctx);
                 }
 
                 cursor_px = next_px;
@@ -488,6 +567,7 @@ namespace Game::PredictionDrawDetail
                 {
                     dash_phase_px = std::fmod(dash_phase_px, dash_period_px);
                 }
+                ++dash_chunks;
             }
         }
     }
