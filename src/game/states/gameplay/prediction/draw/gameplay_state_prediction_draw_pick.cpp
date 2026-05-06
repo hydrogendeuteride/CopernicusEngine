@@ -453,103 +453,18 @@ namespace Game
                     }
                     else if (preview_overlay_active && planned_cache_pickable)
                     {
-                        const std::vector<std::pair<double, double>> uncovered_ranges =
-                                Draw::compute_uncovered_ranges(track_ctx.planned_pick_window.t0_s,
-                                                               track_ctx.planned_pick_window.t1_s,
-                                                               covered_ranges);
-                        for (const auto &[range_t0_s, range_t1_s] : uncovered_ranges)
-                        {
-                            const std::size_t budget_left =
-                                    remaining_pick_budget > track.pick_cache.planned_segments.size()
-                                            ? (remaining_pick_budget - track.pick_cache.planned_segments.size())
-                                            : 0u;
-                            if (budget_left == 0)
-                            {
-                                break;
-                            }
-
-                            if (track_ctx.direct_world_polyline &&
-                                !planned_cache.display.trajectory_frame_planned.empty())
-                            {
-                                std::vector<PickingSystem::LinePickSegmentData> fallback_segments;
-                                build_pick_polyline_segments(planned_cache.display.trajectory_frame_planned,
-                                                             range_t0_s,
-                                                             range_t1_s,
-                                                             budget_left,
-                                                             fallback_segments);
-                                track.pick_cache.planned_segments.insert(track.pick_cache.planned_segments.end(),
-                                                                         fallback_segments.begin(),
-                                                                         fallback_segments.end());
-                            }
-                            else
-                            {
-                                std::vector<PickingSystem::LinePickSegmentData> fallback_segments;
-                                bool cap_hit = false;
-                                pick_settings.max_segments = std::max<std::size_t>(1, budget_left);
-                                const std::vector<orbitsim::TrajectorySegment> &pick_planned_segments =
-                                        track_ctx.identity_frame_transform
-                                                ? planned_cache.display.trajectory_segments_frame_planned
-                                                : Draw::planned_segments_world_basis(track_ctx, planned_cache.display);
-                                Draw::build_pick_segment_cache(pick_planned_segments,
-                                                               track_ctx.ref_body_world,
-                                                               track_ctx.frame_to_world,
-                                                               track_ctx.align_delta,
-                                                               global_ctx.render_frustum,
-                                                               pick_settings,
-                                                               range_t0_s,
-                                                               range_t1_s,
-                                                               pick_anchor_times_span,
-                                                               !track_ctx.identity_frame_transform,
-                                                               fallback_segments,
-                                                               cap_hit,
-                                                               prediction_state.orbit_plot_perf);
-                                track.pick_cache.planned_segments.insert(track.pick_cache.planned_segments.end(),
-                                                                         fallback_segments.begin(),
-                                                                         fallback_segments.end());
-                            }
-                        }
+                        std::vector<std::pair<double, double>> planned_covered_ranges;
+                        append_chunk_assembly_pick_ranges(planned_cache.display.planned_chunk_assembly,
+                                                          &covered_ranges,
+                                                          planned_covered_ranges);
                     }
-                }
-                else if (planned_cache_pickable &&
-                          track_ctx.direct_world_polyline &&
-                          !planned_cache.display.trajectory_frame_planned.empty())
-                {
-                    build_pick_polyline_segments(planned_cache.display.trajectory_frame_planned,
-                                                 track_ctx.planned_pick_window.t0_s,
-                                                 track_ctx.planned_pick_window.t1_s,
-                                                 remaining_pick_budget,
-                                                 track.pick_cache.planned_segments);
-                }
-                else if (planned_cache_pickable && planned_pick_uses_adaptive_curve)
-                {
-                    bool cap_hit = false;
-                    build_pick_curve_cache(planned_cache.display.render_curve_frame_planned,
-                                           track_ctx.planned_pick_window.t0_s,
-                                           track_ctx.planned_pick_window.t1_s,
-                                           track.pick_cache.planned_segments,
-                                           cap_hit);
                 }
                 else if (planned_cache_pickable)
                 {
-                    bool cap_hit = false;
-                    pick_settings.max_segments = std::max<std::size_t>(1, remaining_pick_budget);
-                    const std::vector<orbitsim::TrajectorySegment> &pick_planned_segments =
-                            track_ctx.identity_frame_transform
-                                    ? planned_cache.display.trajectory_segments_frame_planned
-                                    : Draw::planned_segments_world_basis(track_ctx, planned_cache.display);
-                    Draw::build_pick_segment_cache(pick_planned_segments,
-                                                   track_ctx.ref_body_world,
-                                                   track_ctx.frame_to_world,
-                                                   track_ctx.align_delta,
-                                                   global_ctx.render_frustum,
-                                                   pick_settings,
-                                                   track_ctx.planned_pick_window.t0_s,
-                                                   track_ctx.planned_pick_window.t1_s,
-                                                   pick_anchor_times_span,
-                                                   !track_ctx.identity_frame_transform,
-                                                   track.pick_cache.planned_segments,
-                                                   cap_hit,
-                                                   prediction_state.orbit_plot_perf);
+                    std::vector<std::pair<double, double>> planned_covered_ranges;
+                    append_chunk_assembly_pick_ranges(planned_cache.display.planned_chunk_assembly,
+                                                      nullptr,
+                                                      planned_covered_ranges);
                 }
 
                 if (!track.pick_cache.planned_segments.empty())

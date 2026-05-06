@@ -623,7 +623,26 @@ namespace Game::PredictionDrawDetail
 
     namespace
     {
-        PickWindow build_planned_window_from_policy(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
+        double snap_time_past_straddling_chunk(const PredictionChunkAssembly &planned_assembly,
+                                               const double t_s)
+        {
+            for (const OrbitChunk &chunk : planned_assembly.chunks)
+            {
+                if (!chunk.valid ||
+                    chunk.frame_segments.empty() ||
+                    !std::isfinite(chunk.t0_s) ||
+                    !std::isfinite(chunk.t1_s) ||
+                    t_s < chunk.t0_s ||
+                    t_s > chunk.t1_s)
+                {
+                    continue;
+                }
+                return snap_time_past_straddling_segment(chunk.frame_segments, t_s);
+            }
+            return t_s;
+        }
+
+        PickWindow build_planned_window_from_policy(const PredictionChunkAssembly &planned_assembly,
                                                     const OrbitPredictionDrawConfig &draw_config,
                                                     const double anchor_time_s,
                                                     const bool anchor_is_future,
@@ -632,13 +651,13 @@ namespace Game::PredictionDrawDetail
                                                     const double window_end_time_s = std::numeric_limits<double>::quiet_NaN())
         {
             PickWindow planned_window{};
-            if (traj_planned_segments.empty() || !std::isfinite(anchor_time_s))
+            double t0p = 0.0;
+            double t1p = 0.0;
+            if (!planned_assembly.time_span(t0p, t1p) || !std::isfinite(anchor_time_s))
             {
                 return planned_window;
             }
 
-            const double t0p = traj_planned_segments.front().t0_s;
-            const double t1p = traj_planned_segments.back().t0_s + traj_planned_segments.back().dt_s;
             if (!(t1p > t0p))
             {
                 return planned_window;
@@ -648,7 +667,7 @@ namespace Game::PredictionDrawDetail
             if (anchor_is_future)
             {
                 const double snapped_t_plan_start =
-                        std::clamp(snap_time_past_straddling_segment(traj_planned_segments, t_plan_start), t0p, t1p);
+                        std::clamp(snap_time_past_straddling_chunk(planned_assembly, t_plan_start), t0p, t1p);
                 if (snapped_t_plan_start > (t_plan_start + draw_config.node_time_tolerance_s))
                 {
                     t_plan_start = snapped_t_plan_start;
@@ -683,7 +702,7 @@ namespace Game::PredictionDrawDetail
         }
     } // namespace
 
-    PickWindow build_planned_draw_window(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
+    PickWindow build_planned_draw_window(const PredictionChunkAssembly &planned_assembly,
                                          const OrbitPredictionDrawConfig &draw_config,
                                          const PredictionWindowPolicyResult &policy)
     {
@@ -691,7 +710,7 @@ namespace Game::PredictionDrawDetail
         {
             return {};
         }
-        return build_planned_window_from_policy(traj_planned_segments,
+        return build_planned_window_from_policy(planned_assembly,
                                                 draw_config,
                                                 policy.visual_anchor_time_s,
                                                 policy.visual_anchor_is_future,
@@ -700,7 +719,7 @@ namespace Game::PredictionDrawDetail
                                                 policy.visual_window_end_time_s);
     }
 
-    PickWindow build_planned_pick_window(const std::vector<orbitsim::TrajectorySegment> &traj_planned_segments,
+    PickWindow build_planned_pick_window(const PredictionChunkAssembly &planned_assembly,
                                          const OrbitPredictionDrawConfig &draw_config,
                                          const PredictionWindowPolicyResult &policy)
     {
@@ -708,7 +727,7 @@ namespace Game::PredictionDrawDetail
         {
             return {};
         }
-        return build_planned_window_from_policy(traj_planned_segments,
+        return build_planned_window_from_policy(planned_assembly,
                                                 draw_config,
                                                 policy.pick_anchor_time_s,
                                                 policy.pick_anchor_is_future,

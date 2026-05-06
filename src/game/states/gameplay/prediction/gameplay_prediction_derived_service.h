@@ -50,7 +50,7 @@ namespace Game
             {
                 double total_ms{0.0};
                 double frame_build_ms{0.0};
-                double flatten_ms{0.0};
+                double chunk_assembly_ms{0.0};
             };
 
             uint64_t track_id{0};

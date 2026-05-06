@@ -9,6 +9,7 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -296,14 +297,97 @@ namespace Game
         }
     };
 
+    struct OrbitChunk
+    {
+        uint32_t chunk_id{0};
+        uint64_t generation_id{0};
+        OrbitPredictionChunkQualityState quality_state{OrbitPredictionChunkQualityState::Final};
+        double t0_s{std::numeric_limits<double>::quiet_NaN()};
+        double t1_s{std::numeric_limits<double>::quiet_NaN()};
+        std::vector<orbitsim::TrajectorySample> frame_samples{};
+        std::vector<orbitsim::TrajectorySegment> frame_segments{};
+        OrbitRenderCurve render_curve{};
+        bool valid{false};
+
+        [[nodiscard]] bool drawable() const
+        {
+            return valid &&
+                   (frame_samples.size() >= 2 ||
+                    !frame_segments.empty() ||
+                    !render_curve.empty());
+        }
+    };
+
+    struct PredictionChunkAssembly
+    {
+        bool valid{false};
+        uint64_t generation_id{0};
+        std::vector<OrbitChunk> chunks{};
+
+        [[nodiscard]] bool drawable() const
+        {
+            return valid &&
+                   std::any_of(chunks.begin(), chunks.end(), [](const OrbitChunk &chunk) {
+                       return chunk.drawable();
+                   });
+        }
+
+        [[nodiscard]] std::size_t segment_count() const
+        {
+            std::size_t count = 0;
+            for (const OrbitChunk &chunk : chunks)
+            {
+                count += chunk.frame_segments.size();
+            }
+            return count;
+        }
+
+        [[nodiscard]] std::size_t sample_count() const
+        {
+            std::size_t count = 0;
+            for (const OrbitChunk &chunk : chunks)
+            {
+                count += chunk.frame_samples.size();
+            }
+            return count;
+        }
+
+        [[nodiscard]] bool time_span(double &out_t0_s, double &out_t1_s) const
+        {
+            out_t0_s = std::numeric_limits<double>::quiet_NaN();
+            out_t1_s = std::numeric_limits<double>::quiet_NaN();
+            if (!valid)
+            {
+                return false;
+            }
+
+            for (const OrbitChunk &chunk : chunks)
+            {
+                if (!std::isfinite(chunk.t0_s) || !std::isfinite(chunk.t1_s) || !(chunk.t1_s > chunk.t0_s))
+                {
+                    continue;
+                }
+                out_t0_s = std::isfinite(out_t0_s) ? std::min(out_t0_s, chunk.t0_s) : chunk.t0_s;
+                out_t1_s = std::isfinite(out_t1_s) ? std::max(out_t1_s, chunk.t1_s) : chunk.t1_s;
+            }
+
+            return std::isfinite(out_t0_s) && std::isfinite(out_t1_s) && out_t1_s > out_t0_s;
+        }
+
+        void clear()
+        {
+            valid = false;
+            generation_id = 0;
+            chunks.clear();
+        }
+    };
+
     struct PredictionDisplayFrameCache
     {
         std::vector<orbitsim::TrajectorySample> trajectory_frame;
-        std::vector<orbitsim::TrajectorySample> trajectory_frame_planned;
         std::vector<orbitsim::TrajectorySegment> trajectory_segments_frame;
-        std::vector<orbitsim::TrajectorySegment> trajectory_segments_frame_planned;
         OrbitRenderCurve render_curve_frame;
-        OrbitRenderCurve render_curve_frame_planned;
+        PredictionChunkAssembly planned_chunk_assembly{};
         orbitsim::TrajectoryFrameSpec resolved_frame_spec{};
         uint64_t display_frame_key{0};
         uint64_t display_frame_revision{0};
@@ -323,23 +407,17 @@ namespace Game
 
         void clear_planned()
         {
-            trajectory_frame_planned.clear();
-            trajectory_segments_frame_planned.clear();
-            render_curve_frame_planned.clear();
+            planned_chunk_assembly.clear();
         }
 
         void copy_planned_from(const PredictionDisplayFrameCache &src)
         {
-            trajectory_frame_planned = src.trajectory_frame_planned;
-            trajectory_segments_frame_planned = src.trajectory_segments_frame_planned;
-            render_curve_frame_planned = src.render_curve_frame_planned;
+            planned_chunk_assembly = src.planned_chunk_assembly;
         }
 
         [[nodiscard]] bool has_planned_draw_data() const
         {
-            return trajectory_frame_planned.size() >= 2 ||
-                   !trajectory_segments_frame_planned.empty() ||
-                   !render_curve_frame_planned.empty();
+            return planned_chunk_assembly.drawable();
         }
     };
 
@@ -446,33 +524,6 @@ namespace Game
         dst.identity.maneuver_plan_signature_valid = src.identity.maneuver_plan_signature_valid;
         dst.identity.maneuver_plan_signature = src.identity.maneuver_plan_signature;
     }
-
-    struct OrbitChunk
-    {
-        uint32_t chunk_id{0};
-        uint64_t generation_id{0};
-        OrbitPredictionChunkQualityState quality_state{OrbitPredictionChunkQualityState::Final};
-        double t0_s{std::numeric_limits<double>::quiet_NaN()};
-        double t1_s{std::numeric_limits<double>::quiet_NaN()};
-        std::vector<orbitsim::TrajectorySample> frame_samples{};
-        std::vector<orbitsim::TrajectorySegment> frame_segments{};
-        OrbitRenderCurve render_curve{};
-        bool valid{false};
-    };
-
-    struct PredictionChunkAssembly
-    {
-        bool valid{false};
-        uint64_t generation_id{0};
-        std::vector<OrbitChunk> chunks{};
-
-        void clear()
-        {
-            valid = false;
-            generation_id = 0;
-            chunks.clear();
-        }
-    };
 
     struct PredictionPreviewOverlay
     {
@@ -817,12 +868,12 @@ namespace Game
         double derived_worker_ms_last{0.0};
         double derived_worker_ms_peak{0.0};
         double derived_frame_build_ms_last{0.0};
-        double derived_flatten_ms_last{0.0};
+        double derived_chunk_assembly_ms_last{0.0};
         double derived_apply_ms_last{0.0};
         double derived_apply_ms_peak{0.0};
 
-        std::size_t flattened_planned_segments_last{0};
-        std::size_t flattened_planned_samples_last{0};
+        std::size_t chunk_planned_segments_last{0};
+        std::size_t chunk_planned_samples_last{0};
 
         OrbitPredictionSolveQuality last_request_solve_quality{OrbitPredictionSolveQuality::Full};
         OrbitPredictionSolveQuality last_result_solve_quality{OrbitPredictionSolveQuality::Full};

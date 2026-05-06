@@ -1436,10 +1436,10 @@ namespace Game
                                    debug.drag_apply_ms_last,
                                    debug.drag_apply_ms_peak);
             draw_debug_table_value("Solver worker", "%.3f ms", active_track->solver_ms_last);
-            draw_debug_table_value("Derived worker / frame / flatten", "%.3f / %.3f / %.3f ms",
+            draw_debug_table_value("Derived worker / frame / chunks", "%.3f / %.3f / %.3f ms",
                                    debug.derived_worker_ms_last,
                                    debug.derived_frame_build_ms_last,
-                                   debug.derived_flatten_ms_last);
+                                   debug.derived_chunk_assembly_ms_last);
             draw_debug_table_value("Derived apply", "%.3f ms", debug.derived_apply_ms_last);
             draw_debug_table_value("Render LOD / chunk / fallback / pick", "%.3f / %.3f / %.3f / %.3f ms",
                                    _prediction->state().orbit_plot_perf.render_lod_ms_last,
@@ -1454,9 +1454,9 @@ namespace Game
                               ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                                       ImGuiTableFlags_SizingStretchProp))
         {
-            draw_debug_table_value("Flattened planned seg / samples", "%zu / %zu",
-                                   debug.flattened_planned_segments_last,
-                                   debug.flattened_planned_samples_last);
+            draw_debug_table_value("Chunk planned seg / samples", "%zu / %zu",
+                                   debug.chunk_planned_segments_last,
+                                   debug.chunk_planned_samples_last);
             draw_debug_table_value("Frame samples base / planned", "%zu / %zu",
                                    active_track->derived_diagnostics.frame_sample_count,
                                    active_track->derived_diagnostics.frame_sample_count_planned);
@@ -1492,12 +1492,6 @@ namespace Game
         }
 
         ImGui::Separator();
-        if (debug.derived_flatten_ms_last > 0.0)
-        {
-            ImGui::TextWrapped(
-                    "Hot path: planned chunk output still flattens into a flat planned cache (%zu segs).",
-                    debug.flattened_planned_segments_last);
-        }
         if (drag_gate_remaining_ms > 0.0)
         {
             ImGui::TextWrapped(
@@ -1506,7 +1500,7 @@ namespace Game
         if (!live_chunk_path_supported)
         {
             ImGui::TextWrapped(
-                    "Chunk preview reuse is disabled in the current display frame, so live preview falls back to the heavier flat frame-cache path.");
+                    "Chunk preview reuse is disabled in the current display frame, so live preview falls back to rebuilding derived display data.");
         }
 
         ImGui::End();

@@ -122,8 +122,7 @@ namespace
         }
 
         bool rebuild_body_centered_frame_cache(
-                Game::OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                const bool build_planned_render_curve = true)
+                Game::OrbitPredictionDerivedDiagnostics *diagnostics = nullptr)
         {
             return Game::PredictionFrameCacheBuilder::rebuild(
                     fixture.cache.solver,
@@ -132,11 +131,10 @@ namespace
                     body_centered_frame(),
                     fixture.cache.solver.base.trajectory_segments_inertial,
                     {},
-                    diagnostics,
-                    build_planned_render_curve);
+                    diagnostics);
         }
 
-        bool rebuild_body_centered_planned_frame_cache(const bool build_planned_render_curve = true)
+        bool rebuild_body_centered_planned_frame_cache()
         {
             return Game::PredictionFrameCacheBuilder::rebuild_planned(
                     fixture.cache.solver,
@@ -144,8 +142,7 @@ namespace
                     body_centered_frame(),
                     fixture.cache.solver.base.trajectory_segments_inertial,
                     {},
-                    nullptr,
-                    build_planned_render_curve);
+                    nullptr);
         }
 
         void seed_planned_from_base()
@@ -372,28 +369,26 @@ TEST(PredictionCacheInternalTests, RebuildPredictionMetricsFindsPeriapsisFromSeg
     EXPECT_NEAR(cache.analysis.periapsis_alt_km, 0.004, 1.0e-6);
 }
 
-TEST_F(PredictionCacheInternalFixture, RebuildFrameCacheCanSkipPreviewPlannedRenderCurve)
+TEST_F(PredictionCacheInternalFixture, RebuildFrameCacheLeavesPlannedPathForChunkAssembly)
 {
     assert_ready();
     seed_planned_from_base();
 
-    ASSERT_TRUE(rebuild_body_centered_frame_cache(nullptr, false));
+    ASSERT_TRUE(rebuild_body_centered_frame_cache());
 
     EXPECT_FALSE(fixture.cache.display.render_curve_frame.empty());
-    EXPECT_FALSE(fixture.cache.display.trajectory_segments_frame_planned.empty());
-    EXPECT_TRUE(fixture.cache.display.render_curve_frame_planned.empty());
+    EXPECT_FALSE(fixture.cache.display.planned_chunk_assembly.drawable());
 }
 
-TEST_F(PredictionCacheInternalFixture, RebuildPlannedFrameCacheCanSkipPreviewPlannedRenderCurve)
+TEST_F(PredictionCacheInternalFixture, RebuildPlannedFrameCacheLeavesPlannedPathForChunkAssembly)
 {
     assert_ready();
     seed_planned_from_base();
 
-    ASSERT_TRUE(rebuild_body_centered_planned_frame_cache(false));
+    ASSERT_TRUE(rebuild_body_centered_planned_frame_cache());
 
-    EXPECT_FALSE(fixture.cache.display.trajectory_segments_frame_planned.empty());
-    EXPECT_GE(fixture.cache.display.trajectory_frame_planned.size(), 2u);
-    EXPECT_TRUE(fixture.cache.display.render_curve_frame_planned.empty());
+    EXPECT_FALSE(fixture.cache.display.planned_chunk_assembly.drawable());
+    EXPECT_TRUE(fixture.cache.display.resolved_frame_spec_valid);
 }
 
 TEST_F(PredictionCacheInternalFixture, RebuildFrameCacheRejectsDiscontinuousSegments)
@@ -435,7 +430,6 @@ TEST(PredictionCacheInternalTests, RebuildPredictionPatchChunksClipsStraddlingSe
                     .flags = 0u,
             },
     };
-    cache.display.trajectory_segments_frame_planned = cache.solver.planned.trajectory_segments_inertial;
 
     const std::vector<Game::OrbitPredictionPublishedChunk> published_chunks = {
             Game::OrbitPredictionPublishedChunk{
@@ -458,12 +452,12 @@ TEST(PredictionCacheInternalTests, RebuildPredictionPatchChunksClipsStraddlingSe
     Game::OrbitPredictionDerivedDiagnostics diagnostics{};
     ASSERT_TRUE(Game::StreamedChunkAssemblyBuilder::rebuild_from_published(
             assembly,
+            cache.solver,
             cache.display,
             published_chunks,
             7u,
             orbitsim::TrajectoryFrameSpec::inertial(),
-            0u,
-            0u,
+            {},
             {},
             {},
             &diagnostics));
@@ -494,15 +488,13 @@ TEST(PredictionCacheInternalTests, RebuildPredictionPatchChunksClipsStraddlingSe
     EXPECT_DOUBLE_EQ(assembly.chunks[1].frame_samples.front().t_s, published_chunks[1].t0_s);
     EXPECT_DOUBLE_EQ(assembly.chunks[1].frame_samples.back().t_s, published_chunks[1].t1_s);
 
-    Game::StreamedChunkAssemblyBuilder::flatten(cache.display, assembly);
-    ASSERT_EQ(cache.display.trajectory_segments_frame_planned.size(), 2u);
-    ASSERT_EQ(cache.display.trajectory_frame_planned.size(), 3u);
-    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[0].t0_s, 0.0);
-    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[0].dt_s, 10.0);
-    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[1].t0_s, 10.0);
-    EXPECT_DOUBLE_EQ(cache.display.trajectory_segments_frame_planned[1].dt_s, 10.0);
-    EXPECT_DOUBLE_EQ(cache.display.trajectory_frame_planned.front().t_s, 0.0);
-    EXPECT_DOUBLE_EQ(cache.display.trajectory_frame_planned.back().t_s, 20.0);
+    cache.display.planned_chunk_assembly = assembly;
+    ASSERT_EQ(cache.display.planned_chunk_assembly.segment_count(), 2u);
+    ASSERT_EQ(cache.display.planned_chunk_assembly.sample_count(), 4u);
+    EXPECT_DOUBLE_EQ(cache.display.planned_chunk_assembly.chunks[0].frame_segments.front().t0_s, 0.0);
+    EXPECT_DOUBLE_EQ(cache.display.planned_chunk_assembly.chunks[0].frame_segments.front().dt_s, 10.0);
+    EXPECT_DOUBLE_EQ(cache.display.planned_chunk_assembly.chunks[1].frame_segments.front().t0_s, 10.0);
+    EXPECT_DOUBLE_EQ(cache.display.planned_chunk_assembly.chunks[1].frame_segments.front().dt_s, 10.0);
     EXPECT_EQ(diagnostics.status, Game::PredictionDerivedStatus::Success);
 }
 

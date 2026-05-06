@@ -10,6 +10,7 @@
 #include "game/states/gameplay/prediction/runtime/prediction_window_context_builder.h"
 
 #include "core/engine.h"
+#include "game/orbit/orbit_plot_util.h"
 
 #include "imgui.h"
 
@@ -26,6 +27,148 @@ namespace Game
     namespace
     {
         using namespace ManeuverUtil;
+
+        bool sample_chunk_segments_world(const GameplayPredictionAdapter &prediction,
+                                         const OrbitPredictionCache &cache,
+                                         const std::vector<orbitsim::TrajectorySegment> &segments,
+                                         const double sample_time_s,
+                                         const double display_time_s,
+                                         const WorldVec3 &align_delta,
+                                         WorldVec3 &out_world)
+        {
+            out_world = WorldVec3(0.0, 0.0, 0.0);
+            if (segments.empty() || !std::isfinite(sample_time_s))
+            {
+                return false;
+            }
+
+            const orbitsim::TrajectorySegment *selected = nullptr;
+            constexpr double kTimeEpsilonS = 1.0e-6;
+            for (const orbitsim::TrajectorySegment &segment : segments)
+            {
+                if (!(segment.dt_s > 0.0) || !std::isfinite(segment.t0_s))
+                {
+                    continue;
+                }
+
+                const double segment_t1_s = segment.t0_s + segment.dt_s;
+                if (!std::isfinite(segment_t1_s))
+                {
+                    continue;
+                }
+                if (sample_time_s + kTimeEpsilonS >= segment.t0_s &&
+                    sample_time_s <= segment_t1_s + kTimeEpsilonS)
+                {
+                    selected = &segment;
+                    break;
+                }
+            }
+            if (!selected)
+            {
+                return false;
+            }
+
+            WorldVec3 frame_origin_world{0.0, 0.0, 0.0};
+            glm::dmat3 frame_to_world(1.0);
+            if (!prediction.build_prediction_display_transform(cache,
+                                                               frame_origin_world,
+                                                               frame_to_world,
+                                                               display_time_s))
+            {
+                return false;
+            }
+
+            const double segment_t1_s = selected->t0_s + selected->dt_s;
+            const double t_clamped = std::clamp(sample_time_s, selected->t0_s, segment_t1_s);
+            out_world = frame_origin_world +
+                        WorldVec3(frame_to_world *
+                                  OrbitPlotUtil::eval_segment_local_position(*selected, t_clamped)) +
+                        align_delta;
+            return finite3(glm::dvec3(out_world));
+        }
+
+        bool sample_chunk_samples_world(const GameplayPredictionAdapter &prediction,
+                                        const OrbitPredictionCache &cache,
+                                        const std::vector<orbitsim::TrajectorySample> &samples,
+                                        const double sample_time_s,
+                                        const double display_time_s,
+                                        const WorldVec3 &align_delta,
+                                        WorldVec3 &out_world)
+        {
+            out_world = WorldVec3(0.0, 0.0, 0.0);
+            if (samples.size() < 2 || !std::isfinite(sample_time_s) ||
+                sample_time_s < samples.front().t_s ||
+                sample_time_s > samples.back().t_s)
+            {
+                return false;
+            }
+
+            auto it_hi = std::lower_bound(samples.cbegin(), samples.cend(), sample_time_s,
+                                          [](const orbitsim::TrajectorySample &s, double t) { return s.t_s < t; });
+            const size_t i_hi = static_cast<size_t>(std::distance(samples.cbegin(), it_hi));
+            if (i_hi >= samples.size())
+            {
+                return false;
+            }
+
+            out_world = (i_hi > 0)
+                                ? prediction.prediction_sample_hermite_world(cache,
+                                                                             samples[i_hi - 1],
+                                                                             samples[i_hi],
+                                                                             sample_time_s,
+                                                                             display_time_s)
+                                : prediction.prediction_sample_position_world(cache,
+                                                                              samples.front(),
+                                                                              display_time_s);
+            out_world += align_delta;
+            return finite3(glm::dvec3(out_world));
+        }
+
+        bool sample_chunk_assembly_world(const GameplayPredictionAdapter &prediction,
+                                         const OrbitPredictionCache &cache,
+                                         const PredictionChunkAssembly &assembly,
+                                         const double sample_time_s,
+                                         const double display_time_s,
+                                         const WorldVec3 &align_delta,
+                                         WorldVec3 &out_world)
+        {
+            out_world = WorldVec3(0.0, 0.0, 0.0);
+            if (!assembly.drawable() || !std::isfinite(sample_time_s))
+            {
+                return false;
+            }
+
+            for (const OrbitChunk &chunk : assembly.chunks)
+            {
+                if (!chunk.drawable() ||
+                    !std::isfinite(chunk.t0_s) ||
+                    !std::isfinite(chunk.t1_s) ||
+                    sample_time_s < chunk.t0_s ||
+                    sample_time_s > chunk.t1_s)
+                {
+                    continue;
+                }
+
+                if (sample_chunk_segments_world(prediction,
+                                                cache,
+                                                chunk.frame_segments,
+                                                sample_time_s,
+                                                display_time_s,
+                                                align_delta,
+                                                out_world) ||
+                    sample_chunk_samples_world(prediction,
+                                               cache,
+                                               chunk.frame_samples,
+                                               sample_time_s,
+                                               display_time_s,
+                                               align_delta,
+                                               out_world))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
 
         const char *prediction_derived_status_label(const PredictionDerivedStatus status)
         {
@@ -537,13 +680,33 @@ namespace Game
 
             const bool is_planned = (pick.ownerName == "OrbitPlot/Planned");
             const double display_time_s = current_sim_time_s();
-            const auto &traj = is_planned
-                                   ? (cache->display.trajectory_frame_planned.size() >= 2
-                                              ? cache->display.trajectory_frame_planned
-                                              : (stable_cache && stable_cache->display.trajectory_frame_planned.size() >= 2
-                                                         ? stable_cache->display.trajectory_frame_planned
-                                                         : cache->display.trajectory_frame))
-                                   : cache->display.trajectory_frame;
+            if (is_planned)
+            {
+                const OrbitPredictionCache *planned_cache =
+                        cache->display.planned_chunk_assembly.drawable()
+                                ? cache
+                                : ((stable_cache && stable_cache->display.planned_chunk_assembly.drawable())
+                                           ? stable_cache
+                                           : nullptr);
+                if (planned_cache)
+                {
+                    const WorldVec3 align_delta =
+                            compute_maneuver_align_delta(ctx, *planned_cache, planned_cache->display.trajectory_frame);
+                    WorldVec3 pos{0.0, 0.0, 0.0};
+                    if (sample_chunk_assembly_world(prediction,
+                                                    *planned_cache,
+                                                    planned_cache->display.planned_chunk_assembly,
+                                                    pick.time_s,
+                                                    display_time_s,
+                                                    align_delta,
+                                                    pos))
+                    {
+                        return pos;
+                    }
+                }
+            }
+
+            const auto &traj = cache->display.trajectory_frame;
             if (traj.size() < 2)
             {
                 return pick.worldPos;

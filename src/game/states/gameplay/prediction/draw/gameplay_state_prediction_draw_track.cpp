@@ -307,17 +307,7 @@ namespace Game
                 return false;
             }
 
-            if (track_ctx.direct_world_polyline)
-            {
-                return cache.display.trajectory_frame_planned.size() >= 2;
-            }
-
-            if (track_ctx.use_planned_adaptive_curve)
-            {
-                return !cache.display.render_curve_frame_planned.empty();
-            }
-
-            return !cache.display.trajectory_segments_frame_planned.empty();
+            return cache.display.planned_chunk_assembly.drawable();
         };
 
         PredictionTimeAnchorCache local_preview_time_cache{};
@@ -401,80 +391,64 @@ namespace Game
             const auto draw_range = [&](const double range_t0_s,
                                         const double range_t1_s,
                                         const bool dashed) {
-                if (track_ctx.direct_world_polyline)
+                bool drew = false;
+                for (const OrbitChunk &chunk : cache.display.planned_chunk_assembly.chunks)
                 {
-                    const Draw::OrbitDrawWindowContext planned_ctx =
-                            planned_draw_context_for(track_ctx.draw_ctx, dashed);
-                    Draw::draw_polyline_window(planned_ctx,
-                                               prediction_state.draw_config,
-                                               cache.display.trajectory_frame_planned,
-                                               range_t0_s,
-                                               range_t1_s,
-                                               color,
-                                               dashed);
-                    return true;
-                }
-
-                if (track_ctx.use_planned_adaptive_curve &&
-                    !cache.display.render_curve_frame_planned.empty())
-                {
-                    const std::vector<double> anchors =
-                            collect_planned_curve_anchor_times(cache, range_t0_s, range_t1_s);
-                    const Draw::OrbitDrawWindowContext planned_ctx =
-                            planned_draw_context_for(track_ctx.draw_ctx, dashed);
-                    if (!planned_render_line_cache_allowed)
+                    const double chunk_t0_s = std::max(range_t0_s, chunk.t0_s);
+                    const double chunk_t1_s = std::min(range_t1_s, chunk.t1_s);
+                    if (!(chunk_t1_s > chunk_t0_s) ||
+                        !chunk.drawable())
                     {
-                        render_line_cache_for(cache).clear();
+                        continue;
+                    }
+
+                    const Draw::OrbitDrawWindowContext planned_ctx =
+                            planned_draw_context_for(track_ctx.draw_ctx, dashed);
+                    if (track_ctx.direct_world_polyline && chunk.frame_samples.size() >= 2)
+                    {
+                        Draw::draw_polyline_window(planned_ctx,
+                                                   prediction_state.draw_config,
+                                                   chunk.frame_samples,
+                                                   chunk_t0_s,
+                                                   chunk_t1_s,
+                                                   color,
+                                                   dashed);
+                        drew = true;
+                        continue;
+                    }
+
+                    if (!chunk.render_curve.empty())
+                    {
+                        const std::vector<double> anchors =
+                                collect_planned_curve_anchor_times(cache, chunk_t0_s, chunk_t1_s);
                         Draw::draw_adaptive_curve_window(planned_ctx,
                                                          prediction_state.draw_config,
                                                          prediction_state.orbit_plot_perf,
-                                                         cache.display.render_curve_frame_planned,
-                                                         range_t0_s,
-                                                         range_t1_s,
+                                                         chunk.render_curve,
+                                                         chunk_t0_s,
+                                                         chunk_t1_s,
                                                          color,
                                                          dashed,
                                                          anchors,
                                                          kPlannedAdaptiveSelectionErrorScale);
-                        return true;
+                        drew = true;
+                        continue;
                     }
 
-                    Draw::draw_cached_adaptive_curve_window(planned_ctx,
-                                                            prediction_state.draw_config,
-                                                            prediction_state.orbit_plot_perf,
-                                                            cache.display.render_curve_frame_planned,
-                                                            range_t0_s,
-                                                            range_t1_s,
-                                                            color,
-                                                            dashed,
-                                                            anchors,
-                                                            kPlannedAdaptiveSelectionErrorScale,
-                                                            render_line_cache_for(cache),
-                                                            cache.identity.generation_id,
-                                                            cache.display.display_frame_key,
-                                                            cache.display.display_frame_revision,
-                                                            cache.identity.maneuver_plan_revision,
-                                                            cache.identity.maneuver_plan_signature_valid
-                                                                    ? cache.identity.maneuver_plan_signature
-                                                                    : 0u);
-                    return true;
+                    if (!chunk.frame_segments.empty())
+                    {
+                        Draw::draw_orbit_window(planned_ctx,
+                                                prediction_state.draw_config,
+                                                prediction_state.orbit_plot_perf,
+                                                chunk.frame_segments,
+                                                chunk_t0_s,
+                                                chunk_t1_s,
+                                                color,
+                                                dashed);
+                        drew = true;
+                    }
                 }
-
-                const Draw::OrbitDrawWindowContext planned_ctx =
-                        planned_draw_context_for(track_ctx.identity_frame_transform
-                                                         ? track_ctx.draw_ctx
-                                                         : track_ctx.world_basis_draw_ctx,
-                                                 dashed);
-                Draw::draw_orbit_window(planned_ctx,
-                                        prediction_state.draw_config,
-                                        prediction_state.orbit_plot_perf,
-                                        track_ctx.identity_frame_transform
-                                                ? cache.display.trajectory_segments_frame_planned
-                                                : Draw::planned_segments_world_basis(track_ctx, cache.display),
-                                        range_t0_s,
-                                        range_t1_s,
-                                        color,
-                                        dashed);
-                return true;
+                return drew;
             };
             (void) draw_planned_split_ranges(window_t0_s,
                                              clipped_window_t1_s,
@@ -633,9 +607,12 @@ namespace Game
             prediction_state.orbit_plot_perf.planned_window_anchor_s = track_ctx.planned_draw_window.anchor_time_s;
             prediction_state.orbit_plot_perf.planned_window_t_start = track_ctx.planned_draw_window.t0_s;
             prediction_state.orbit_plot_perf.planned_window_t_end = track_ctx.planned_draw_window.t1_s;
+            double planned_t0_s = 0.0;
+            double planned_t1_s = 0.0;
             prediction_state.orbit_plot_perf.planned_window_t0p =
-                    (track_ctx.traj_planned_segments && !track_ctx.traj_planned_segments->empty())
-                            ? track_ctx.traj_planned_segments->front().t0_s
+                    (track_ctx.planned_window_assembly &&
+                     track_ctx.planned_window_assembly->time_span(planned_t0_s, planned_t1_s))
+                            ? planned_t0_s
                             : 0.0;
             prediction_state.orbit_plot_perf.planned_chunk_count = 0;
             prediction_state.orbit_plot_perf.planned_chunks_drawn = 0;
@@ -742,13 +719,36 @@ namespace Game
                                                        track_ctx.track_color_plan);
                     }
                 };
+        const auto sample_chunk_assembly_world = [&](const PredictionChunkAssembly &assembly,
+                                                     const double sample_t_s,
+                                                     WorldVec3 &out_world) {
+            for (const OrbitChunk &chunk : assembly.chunks)
+            {
+                if (!chunk.drawable() ||
+                    !std::isfinite(chunk.t0_s) ||
+                    !std::isfinite(chunk.t1_s) ||
+                    sample_t_s < chunk.t0_s ||
+                    sample_t_s > chunk.t1_s)
+                {
+                    continue;
+                }
+                if (Draw::sample_prediction_path_world(track_ctx.draw_ctx,
+                                                       chunk.frame_segments,
+                                                       chunk.frame_samples,
+                                                       sample_t_s,
+                                                       out_world))
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
         const auto preview_tail_matches_planned_cache = [&]() {
             if (!preview_assembly.valid || preview_assembly.chunks.empty())
             {
                 return false;
             }
-            if (planned_cache.display.trajectory_segments_frame_planned.empty() &&
-                planned_cache.display.trajectory_frame_planned.size() < 2)
+            if (!planned_cache.display.planned_chunk_assembly.drawable())
             {
                 return false;
             }
@@ -787,14 +787,12 @@ namespace Game
                     WorldVec3 planned_world{0.0};
                     if (!Draw::sample_prediction_path_world(track_ctx.draw_ctx,
                                                             chunk.frame_segments,
-                                                             chunk.frame_samples,
-                                                             sample_t_s,
-                                                             preview_world) ||
-                        !Draw::sample_prediction_path_world(track_ctx.draw_ctx,
-                                                             planned_cache.display.trajectory_segments_frame_planned,
-                                                             planned_cache.display.trajectory_frame_planned,
-                                                             sample_t_s,
-                                                             planned_world))
+                                                              chunk.frame_samples,
+                                                              sample_t_s,
+                                                              preview_world) ||
+                        !sample_chunk_assembly_world(planned_cache.display.planned_chunk_assembly,
+                                                     sample_t_s,
+                                                     planned_world))
                     {
                         continue;
                     }

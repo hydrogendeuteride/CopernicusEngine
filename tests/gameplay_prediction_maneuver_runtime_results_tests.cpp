@@ -180,8 +180,7 @@ TEST(GameplayPredictionManeuverTests, ClearManeuverPredictionArtifactsDropsPlann
     track.cache.solver.base.trajectory_segments_inertial = {make_segment(0.0, 60.0, 7'000'000.0, 7'100'000.0)};
     track.cache.solver.planned.trajectory_inertial = {make_sample(0.0, 7'000'000.0), make_sample(30.0, 7'050'000.0)};
     track.cache.solver.planned.trajectory_segments_inertial = {make_segment(0.0, 30.0, 7'000'000.0, 7'050'000.0)};
-    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(track.cache);
     track.cache.identity.maneuver_plan_signature_valid = true;
     track.cache.identity.maneuver_plan_signature = 42u;
     track.authoritative_cache = track.cache;
@@ -214,8 +213,7 @@ TEST(GameplayPredictionManeuverTests, ClearManeuverPredictionArtifactsDropsPlann
     EXPECT_FALSE(cleared.cache.solver.base.trajectory_segments_inertial.empty());
     EXPECT_TRUE(cleared.cache.solver.planned.trajectory_inertial.empty());
     EXPECT_TRUE(cleared.cache.solver.planned.trajectory_segments_inertial.empty());
-    EXPECT_TRUE(cleared.cache.display.trajectory_frame_planned.empty());
-    EXPECT_TRUE(cleared.cache.display.trajectory_segments_frame_planned.empty());
+    EXPECT_FALSE(cleared.cache.display.planned_chunk_assembly.drawable());
     EXPECT_FALSE(cleared.cache.identity.maneuver_plan_signature_valid);
     EXPECT_TRUE(cleared.authoritative_cache.solver.planned.trajectory_inertial.empty());
     EXPECT_FALSE(cleared.authoritative_cache.identity.maneuver_plan_signature_valid);
@@ -270,7 +268,7 @@ TEST(GameplayPredictionManeuverTests, RemovingLastManeuverNodeClearsPlannedArtif
     EXPECT_EQ(state._maneuver.revision(), 1u);
 }
 
-TEST(GameplayPredictionManeuverTests, DerivedPreviewStreamingBuildsPlannedRenderCurve)
+TEST(GameplayPredictionManeuverTests, DerivedPreviewStreamingBuildsPlannedChunkAssembly)
 {
     Game::OrbitPredictionDerivedService service{};
 
@@ -280,11 +278,13 @@ TEST(GameplayPredictionManeuverTests, DerivedPreviewStreamingBuildsPlannedRender
 
     ASSERT_TRUE(result.valid);
     EXPECT_TRUE(result.cache.identity.valid);
-    EXPECT_FALSE(result.cache.display.trajectory_segments_frame_planned.empty());
-    EXPECT_FALSE(result.cache.display.render_curve_frame_planned.empty());
+    ASSERT_TRUE(result.chunk_assembly.valid);
+    EXPECT_EQ(result.chunk_assembly.segment_count(), 2u);
+    ASSERT_FALSE(result.chunk_assembly.chunks.empty());
+    EXPECT_FALSE(result.chunk_assembly.chunks.front().render_curve.empty());
 }
 
-TEST(GameplayPredictionManeuverTests, DerivedPreviewFinalizingBuildRestoresPlannedRenderCurve)
+TEST(GameplayPredictionManeuverTests, DerivedPreviewFinalizingBuildsPlannedChunkAssembly)
 {
     Game::OrbitPredictionDerivedService service{};
 
@@ -294,11 +294,13 @@ TEST(GameplayPredictionManeuverTests, DerivedPreviewFinalizingBuildRestoresPlann
 
     ASSERT_TRUE(result.valid);
     EXPECT_TRUE(result.cache.identity.valid);
-    EXPECT_FALSE(result.cache.display.trajectory_segments_frame_planned.empty());
-    EXPECT_FALSE(result.cache.display.render_curve_frame_planned.empty());
+    ASSERT_TRUE(result.chunk_assembly.valid);
+    EXPECT_EQ(result.chunk_assembly.segment_count(), 2u);
+    ASSERT_FALSE(result.chunk_assembly.chunks.empty());
+    EXPECT_FALSE(result.chunk_assembly.chunks.front().render_curve.empty());
 }
 
-TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildUsesStreamedChunkPayloadWithoutFlatteningPlannedCache)
+TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildUsesStreamedChunkPayload)
 {
     Game::OrbitPredictionDerivedService service{};
     Game::OrbitPredictionDerivedService::PendingJob job = make_prediction_derived_job(
@@ -334,8 +336,7 @@ TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildUsesStreamedChunk
 
     ASSERT_TRUE(result.valid);
     EXPECT_TRUE(result.cache.identity.valid);
-    EXPECT_TRUE(result.cache.display.trajectory_segments_frame_planned.empty());
-    EXPECT_TRUE(result.cache.display.render_curve_frame_planned.empty());
+    EXPECT_FALSE(result.cache.display.planned_chunk_assembly.drawable());
     ASSERT_TRUE(result.chunk_assembly.valid);
     ASSERT_EQ(result.chunk_assembly.chunks.size(), 1u);
     EXPECT_EQ(result.chunk_assembly.chunks.front().chunk_id, 3u);
@@ -345,7 +346,7 @@ TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildUsesStreamedChunk
     EXPECT_EQ(result.diagnostics.status, Game::PredictionDerivedStatus::Success);
 }
 
-TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildsPlannedRenderCurveAndStreamedChunkRenderCurve)
+TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildsStreamedChunkRenderCurve)
 {
     Game::OrbitPredictionDerivedService service{};
     Game::OrbitPredictionDerivedService::PendingJob job = make_prediction_derived_job(
@@ -378,8 +379,7 @@ TEST(GameplayPredictionManeuverTests, DerivedFullStreamingBuildsPlannedRenderCur
 
     ASSERT_TRUE(result.valid);
     EXPECT_TRUE(result.cache.identity.valid);
-    EXPECT_FALSE(result.cache.display.trajectory_segments_frame_planned.empty());
-    EXPECT_FALSE(result.cache.display.render_curve_frame_planned.empty());
+    EXPECT_FALSE(result.cache.display.planned_chunk_assembly.drawable());
     ASSERT_TRUE(result.chunk_assembly.valid);
     ASSERT_EQ(result.chunk_assembly.chunks.size(), 1u);
     EXPECT_FALSE(result.chunk_assembly.chunks.front().render_curve.empty());

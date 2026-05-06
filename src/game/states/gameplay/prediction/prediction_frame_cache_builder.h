@@ -24,18 +24,14 @@ namespace Game
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
-                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true,
-                bool build_planned_samples = true);
+                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr);
 
         static bool rebuild(
                 OrbitPredictionCache &cache,
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
-                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true,
-                bool build_planned_samples = true);
+                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr);
 
         static bool rebuild_planned(
                 const PredictionSolverTrajectoryCache &solver,
@@ -43,17 +39,13 @@ namespace Game
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
-                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true,
-                bool build_planned_samples = true);
+                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr);
 
         static bool rebuild_planned(
                 OrbitPredictionCache &cache,
                 const orbitsim::TrajectoryFrameSpec &resolved_frame_spec,
                 const std::vector<orbitsim::TrajectorySegment> &player_lookup_segments_inertial,
                 const CancelCheck &cancel_requested = {},
-                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr,
-                bool build_planned_render_curve = true,
-                bool build_planned_samples = true);
+                OrbitPredictionDerivedDiagnostics *diagnostics = nullptr);
     };
 } // namespace Game

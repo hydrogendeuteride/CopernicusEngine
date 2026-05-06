@@ -52,8 +52,7 @@ namespace
                 make_segment(t0_s, t_mid_s, 7'000'000.0, 7'200'000.0),
                 make_segment(t_mid_s, t1_s, 7'200'000.0, 7'400'000.0),
         };
-        cache.display.trajectory_frame_planned = cache.solver.planned.trajectory_inertial;
-        cache.display.trajectory_segments_frame_planned = cache.solver.planned.trajectory_segments_inertial;
+        seed_planned_chunk_assembly(cache);
     }
 
     Game::PredictionDrawDetail::PredictionGlobalDrawContext make_draw_global_context(const double display_time_s)
@@ -1143,8 +1142,8 @@ TEST(GameplayPredictionManeuverTests, DrawContextUsesAuthoritativePlannedPrefixD
     EXPECT_EQ(draw_ctx.stale_planned_cache, &track.authoritative_cache);
     EXPECT_TRUE(draw_ctx.stale_planned_cache_drawable);
     EXPECT_DOUBLE_EQ(draw_ctx.stale_planned_cache_prefix_cutoff_s, node.time_s);
-    EXPECT_EQ(draw_ctx.planned_window_segments,
-              &track.authoritative_cache.display.trajectory_segments_frame_planned);
+    EXPECT_EQ(draw_ctx.planned_window_assembly,
+              &track.authoritative_cache.display.planned_chunk_assembly);
 
     GameplayTestHooks::clear_entities();
 }
@@ -1248,8 +1247,8 @@ TEST(GameplayPredictionManeuverTests, DrawContextKeepsAuthoritativePlannedPrefix
     EXPECT_EQ(draw_ctx.stale_planned_cache, &track.authoritative_cache);
     EXPECT_TRUE(draw_ctx.stale_planned_cache_drawable);
     EXPECT_DOUBLE_EQ(draw_ctx.stale_planned_cache_prefix_cutoff_s, node.time_s);
-    EXPECT_EQ(draw_ctx.planned_window_segments,
-              &track.authoritative_cache.display.trajectory_segments_frame_planned);
+    EXPECT_EQ(draw_ctx.planned_window_assembly,
+              &track.authoritative_cache.display.planned_chunk_assembly);
     EXPECT_TRUE(draw_ctx.planned_window_policy.valid);
     EXPECT_DOUBLE_EQ(draw_ctx.planned_window_policy.visual_window_start_time_s, 100.0);
     EXPECT_DOUBLE_EQ(draw_ctx.planned_window_policy.pick_window_start_time_s, 100.0);
@@ -1334,8 +1333,6 @@ TEST(GameplayPredictionManeuverTests, DrawPlannerBuildsRenderAndPickWindowsBefor
     track.supports_maneuvers = true;
     track.cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
     set_planned_path(track.cache, node.time_s, 320.0, 500.0);
-    track.cache.display.render_curve_frame_planned =
-            Game::OrbitRenderCurve::build(track.cache.display.trajectory_segments_frame_planned);
     track.cache.identity.maneuver_plan_signature_valid = true;
     track.cache.identity.maneuver_plan_signature = plan_signature;
 
@@ -1382,8 +1379,6 @@ TEST(GameplayPredictionManeuverTests, DrawPlannerUsesPlannedAdaptiveCurveDuringP
     track.preview_anchor.exact_window_s = 60.0;
     track.cache = make_draw_ready_cache(state, 5u, 100.0, 500.0);
     set_planned_path(track.cache, node.time_s, 320.0, 500.0);
-    track.cache.display.render_curve_frame_planned =
-            Game::OrbitRenderCurve::build(track.cache.display.trajectory_segments_frame_planned);
     track.cache.identity.maneuver_plan_signature_valid = true;
     track.cache.identity.maneuver_plan_signature = plan_signature;
 

@@ -143,8 +143,7 @@ namespace Game
         {
             return !cache.solver.planned.trajectory_inertial.empty() ||
                    !cache.solver.planned.trajectory_segments_inertial.empty() ||
-                   !cache.display.trajectory_frame_planned.empty() ||
-                   !cache.display.trajectory_segments_frame_planned.empty() ||
+                   cache.display.planned_chunk_assembly.valid ||
                    !cache.solver.planned.maneuver_previews.empty();
         }
 
@@ -267,9 +266,9 @@ namespace Game
                 debug.derived_worker_ms_peak,
                 result.timings.total_ms);
         debug.derived_frame_build_ms_last = std::max(0.0, result.timings.frame_build_ms);
-        debug.derived_flatten_ms_last = std::max(0.0, result.timings.flatten_ms);
-        debug.flattened_planned_segments_last = result.cache.display.trajectory_segments_frame_planned.size();
-        debug.flattened_planned_samples_last = result.cache.display.trajectory_frame_planned.size();
+        debug.derived_chunk_assembly_ms_last = std::max(0.0, result.timings.chunk_assembly_ms);
+        debug.chunk_planned_segments_last = result.cache.display.planned_chunk_assembly.segment_count();
+        debug.chunk_planned_samples_last = result.cache.display.planned_chunk_assembly.sample_count();
 
         PredictionLifecycleReducer::mark_derived_result_completed(
                 track,

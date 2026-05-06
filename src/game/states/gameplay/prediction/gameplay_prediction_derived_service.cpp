@@ -23,15 +23,6 @@ namespace Game
             return request.solver_result.envelope.publish_stage == OrbitPredictionPublishStage::PreviewStreaming;
         }
 
-        bool published_chunks_include_planned_path(const std::vector<OrbitPredictionPublishedChunk> &chunks)
-        {
-            return std::any_of(chunks.begin(),
-                               chunks.end(),
-                               [](const OrbitPredictionPublishedChunk &chunk) {
-                                   return chunk.includes_planned_path;
-                               });
-        }
-
         uint8_t derived_request_track_priority_rank(const OrbitPredictionRequestPriority priority)
         {
             switch (priority)
@@ -247,7 +238,6 @@ namespace Game
                 const bool preview_stage,
                 const bool full_streaming_stage,
                 const bool build_chunk_render_curves,
-                const bool build_planned_render_curve,
                 const bool use_dense_chunk_samples,
                 CancelRequestedFn &&cancel_requested,
                 OrbitPredictionDerivedDiagnostics &chunk_diagnostics)
@@ -287,31 +277,25 @@ namespace Game
             const std::vector<double> node_times_s = finite_maneuver_preview_times(cache.solver.planned.maneuver_previews);
             PredictionChunkAssembly chunk_assembly{};
             if (StreamedChunkAssemblyBuilder::rebuild_from_published(chunk_assembly,
+                                                                      cache.solver,
                                                                       cache.display,
                                                                        solver.publish.published_chunks,
                                                                       generation_id,
                                                                       resolved_frame_spec,
-                                                                      request.display_frame_key,
-                                                                      request.display_frame_revision,
+                                                                      request.player_lookup_segments_inertial,
                                                                       cancel_requested,
                                                                       node_times_s,
                                                                       &chunk_diagnostics,
                                                                       build_chunk_render_curves,
                                                                       use_dense_chunk_samples))
             {
-                out.chunk_assembly = std::move(chunk_assembly);
-                if (!preview_stage)
+                if (preview_stage)
                 {
-                    const auto flatten_start_tp = std::chrono::steady_clock::now();
-                    StreamedChunkAssemblyBuilder::flatten_preserving_segments(
-                            cache.display,
-                            out.chunk_assembly,
-                            build_planned_render_curve);
-                    out.timings.flatten_ms =
-                            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() -
-                                                                      flatten_start_tp)
-                                    .count();
-                    out.chunk_assembly.clear();
+                    out.chunk_assembly = std::move(chunk_assembly);
+                }
+                else
+                {
+                    cache.display.planned_chunk_assembly = std::move(chunk_assembly);
                 }
             }
         }
@@ -662,14 +646,8 @@ namespace Game
                 !preview_stage &&
                 solver.envelope.publish_stage == OrbitPredictionPublishStage::FullStreaming;
         const bool rebuild_metrics = !preview_stage && !full_streaming_stage;
-        const bool final_planned_chunks_will_flatten =
-                !preview_stage &&
-                !full_streaming_stage &&
-                published_chunks_include_planned_path(solver.publish.published_chunks);
-        const bool build_planned_render_curve = !final_planned_chunks_will_flatten;
-        const bool build_planned_samples = !final_planned_chunks_will_flatten;
-        const bool build_chunk_render_curves = full_streaming_stage;
-        const bool use_dense_chunk_samples = !preview_stage && !full_streaming_stage;
+        const bool build_chunk_render_curves = true;
+        const bool use_dense_chunk_samples = preview_stage;
         if (!solver.envelope.valid ||
             solver.resolved_trajectory_inertial().size() < 2 ||
             solver.resolved_trajectory_segments_inertial().empty())
@@ -704,9 +682,7 @@ namespace Game
                     resolved_frame_spec,
                     request.player_lookup_segments_inertial,
                     cancel_requested,
-                    &out.diagnostics,
-                    build_planned_render_curve,
-                    build_planned_samples);
+                    &out.diagnostics);
             out.timings.frame_build_ms =
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_build_start_tp)
                             .count();
@@ -720,9 +696,7 @@ namespace Game
                     resolved_frame_spec,
                     request.player_lookup_segments_inertial,
                     cancel_requested,
-                    &out.diagnostics,
-                    build_planned_render_curve,
-                    build_planned_samples);
+                    &out.diagnostics);
             out.timings.frame_build_ms =
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame_build_start_tp)
                             .count();
@@ -760,6 +734,7 @@ namespace Game
         }
 
         OrbitPredictionDerivedDiagnostics chunk_diagnostics{};
+        const auto chunk_assembly_start_tp = std::chrono::steady_clock::now();
         build_prediction_chunk_assembly_for_derived_request(out,
                                                             cache,
                                                             request,
@@ -768,10 +743,12 @@ namespace Game
                                                             preview_stage,
                                                             full_streaming_stage,
                                                             build_chunk_render_curves,
-                                                            build_planned_render_curve,
                                                             use_dense_chunk_samples,
                                                             cancel_requested,
                                                             chunk_diagnostics);
+        out.timings.chunk_assembly_ms =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - chunk_assembly_start_tp)
+                        .count();
 
         if (chunk_diagnostics.status != PredictionDerivedStatus::None)
         {

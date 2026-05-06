@@ -288,8 +288,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultsAccumulatePlannedChun
             make_segment(10.0, 20.0, 7'100'000.0, 7'200'000.0),
             make_segment(20.0, 30.0, 7'200'000.0, 7'300'000.0),
     };
-    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(track.cache);
     state.prediction_for_test().tracks.push_back(track);
 
     Game::OrbitPredictionDerivedService::Result streaming_result{};
@@ -312,8 +311,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultsAccumulatePlannedChun
             make_segment(0.0, 10.0, 7'000'000.0, 7'100'000.0),
             make_segment(10.0, 20.0, 7'100'000.0, 7'200'000.0),
     };
-    streaming_result.cache.display.trajectory_frame_planned = streaming_result.cache.solver.planned.trajectory_inertial;
-    streaming_result.cache.display.trajectory_segments_frame_planned = streaming_result.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(streaming_result.cache);
     streaming_result.chunk_assembly.valid = true;
     streaming_result.chunk_assembly.generation_id = 5;
     streaming_result.chunk_assembly.chunks = {
@@ -345,8 +343,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultsAccumulatePlannedChun
     finalizing_result.cache.solver.planned.trajectory_segments_inertial = {
             make_segment(20.0, 30.0, 7'200'000.0, 7'300'000.0),
     };
-    finalizing_result.cache.display.trajectory_frame_planned = finalizing_result.cache.solver.planned.trajectory_inertial;
-    finalizing_result.cache.display.trajectory_segments_frame_planned = finalizing_result.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(finalizing_result.cache);
     finalizing_result.chunk_assembly.valid = true;
     finalizing_result.chunk_assembly.generation_id = 5;
     finalizing_result.chunk_assembly.chunks = {
@@ -396,8 +393,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultRestoresExistingPlanne
             make_segment(10.0, 20.0, 7'100'000.0, 7'200'000.0),
             make_segment(20.0, 30.0, 7'200'000.0, 7'300'000.0),
     };
-    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(track.cache);
     track.cache.solver.planned.maneuver_previews = {
             Game::OrbitPredictionService::ManeuverNodePreview{
                     .node_id = 1,
@@ -428,8 +424,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultRestoresExistingPlanne
     result.cache.solver.planned.trajectory_segments_inertial = {
             make_segment(10.0, 20.0, 7'150'000.0, 7'250'000.0),
     };
-    result.cache.display.trajectory_frame_planned = result.cache.solver.planned.trajectory_inertial;
-    result.cache.display.trajectory_segments_frame_planned = result.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(result.cache);
     result.cache.solver.planned.maneuver_previews = {
             Game::OrbitPredictionService::ManeuverNodePreview{
                     .node_id = 1,
@@ -491,8 +486,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultDoesNotRestorePlannedC
             make_segment(0.0, 10.0, 7'000'000.0, 7'100'000.0),
             make_segment(10.0, 30.0, 7'100'000.0, 7'300'000.0),
     };
-    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(track.cache);
     track.cache.solver.planned.maneuver_previews = {
             Game::OrbitPredictionService::ManeuverNodePreview{
                     .node_id = node.id,
@@ -523,8 +517,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultDoesNotRestorePlannedC
     result.cache.solver.planned.trajectory_segments_inertial = {
             make_segment(20.0, 30.0, 7'200'000.0, 7'350'000.0),
     };
-    result.cache.display.trajectory_frame_planned = result.cache.solver.planned.trajectory_inertial;
-    result.cache.display.trajectory_segments_frame_planned = result.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(result.cache);
     result.cache.solver.planned.maneuver_previews = {
             Game::OrbitPredictionService::ManeuverNodePreview{
                     .node_id = node.id,
@@ -582,8 +575,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultDoesNotRestorePlannedC
             make_segment(0.0, 10.0, 7'000'000.0, 7'100'000.0),
             make_segment(10.0, 30.0, 7'100'000.0, 7'300'000.0),
     };
-    track.cache.display.trajectory_frame_planned = track.cache.solver.planned.trajectory_inertial;
-    track.cache.display.trajectory_segments_frame_planned = track.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(track.cache);
     track.cache.solver.planned.maneuver_previews = {
             Game::OrbitPredictionService::ManeuverNodePreview{
                     .node_id = node.id,
@@ -614,8 +606,7 @@ TEST(GameplayPredictionManeuverTests, PreviewDerivedResultDoesNotRestorePlannedC
     result.cache.solver.planned.trajectory_segments_inertial = {
             make_segment(10.0, 30.0, 7'250'000.0, 7'350'000.0),
     };
-    result.cache.display.trajectory_frame_planned = result.cache.solver.planned.trajectory_inertial;
-    result.cache.display.trajectory_segments_frame_planned = result.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(result.cache);
     result.cache.solver.planned.maneuver_previews = {
             Game::OrbitPredictionService::ManeuverNodePreview{
                     .node_id = node.id,
@@ -680,8 +671,7 @@ TEST(GameplayPredictionManeuverTests, LateFastPreviewDerivedResultAfterPreviewEn
     result.cache.display.trajectory_segments_frame = result.cache.solver.base.trajectory_segments_inertial;
     result.cache.solver.planned.trajectory_inertial = {make_sample(10.0, 8'100'000.0), make_sample(20.0, 8'200'000.0)};
     result.cache.solver.planned.trajectory_segments_inertial = {make_segment(10.0, 20.0, 8'100'000.0, 8'200'000.0)};
-    result.cache.display.trajectory_frame_planned = result.cache.solver.planned.trajectory_inertial;
-    result.cache.display.trajectory_segments_frame_planned = result.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(result.cache);
     result.chunk_assembly.valid = true;
     result.chunk_assembly.generation_id = 5u;
     result.chunk_assembly.chunks = {
@@ -742,8 +732,7 @@ TEST(GameplayPredictionManeuverTests, PreviewFinalizingDerivedResultKeepsAnchorS
             make_segment(10.0, 20.0, 7'050'000.0, 7'150'000.0),
             make_segment(20.0, 30.0, 7'150'000.0, 7'300'000.0),
     };
-    result.cache.display.trajectory_frame_planned = result.cache.solver.planned.trajectory_inertial;
-    result.cache.display.trajectory_segments_frame_planned = result.cache.solver.planned.trajectory_segments_inertial;
+    seed_planned_chunk_assembly(result.cache);
     result.cache.solver.planned.maneuver_previews = {
             Game::OrbitPredictionService::ManeuverNodePreview{
                     .node_id = 1,
