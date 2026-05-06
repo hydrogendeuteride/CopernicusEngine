@@ -3,7 +3,7 @@
 #include "game/game_world.h"
 #include "game/state/game_state.h"
 #include "core/game_api.h"
-#include "game/states/gameplay/maneuver/maneuver_system.h"
+#include "game/states/gameplay/maneuver_nbody/maneuver_system.h"
 #include "game/states/gameplay/gameplay_settings.h"
 #include "game/input/keybinds.h"
 #include "game/states/gameplay/scenario/scenario_config.h"

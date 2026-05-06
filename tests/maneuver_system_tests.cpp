@@ -1,4 +1,4 @@
-#include "game/states/gameplay/maneuver/maneuver_system.h"
+#include "game/states/gameplay/maneuver_nbody/maneuver_system.h"
 
 #include <gtest/gtest.h>
 

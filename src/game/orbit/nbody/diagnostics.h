@@ -1,7 +1,7 @@
 #pragma once
 
 #include "game/orbit/nbody/types.h"
-#include "game/orbit/trajectory/trajectory_utils.h"
+#include "game/orbit/nbody/trajectory_utils.h"
 
 #include <algorithm>
 #include <cmath>

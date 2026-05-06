@@ -4,7 +4,7 @@
 // debug-draw overloads that are not compiled into this test target but are required for linkage.
 
 #include "game/states/gameplay/gameplay_state.h"
-#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
+#include "game/states/gameplay/prediction_nbody/gameplay_prediction_adapter.h"
 #include "core/game_api.h"
 #include "core/input/input_system.h"
 #include "game/component/ship_controller.h"

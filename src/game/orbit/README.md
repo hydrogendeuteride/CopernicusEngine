@@ -6,11 +6,7 @@ This folder contains the orbit prediction, LOD tessellation, and rendering pipel
 
 ```
 orbit/
-  orbit_prediction_tuning.h          # compatibility shim for nbody/tuning.h
   orbit_prediction_math.h / .cpp     # orbital mechanics math
-  orbit_prediction_service.h         # compatibility shim for nbody/service.h
-  trajectory/
-    trajectory_utils.h / .cpp         # shared trajectory segment utilities
   orbit_render_curve.h               # LOD tree public API
   orbit_plot_util.h / .cpp           # shared plot helpers
   nbody/
@@ -19,6 +15,7 @@ orbit/
     service.h / .cpp         # prediction service public API, lifecycle, cache, threading
     diagnostics.h            # shared diagnostics builders
     internal.h               # shared types, context, declarations
+    trajectory_utils.h / .cpp # nbody streamed/planned segment utilities
     prediction/
       compute.cpp            # compute_prediction entry, job setup, route dispatch
       routes.cpp             # ephemeris/celestial/baseline route solvers
@@ -51,9 +48,6 @@ orbit/
   Compile-time tuning constants for every stage of the orbit prediction pipeline.
   Horizon limits, sample budgets, multi-band density settings, integrator step caps, ephemeris sample spacing, thrust-mode overrides, and maneuver-gizmo rebuild rate all live here.
 
-- `orbit_prediction_tuning.h`, `orbit_prediction_service.h`, and `prediction/*.h`
-  Compatibility shims for existing include paths. New nbody implementation work should include the files under `nbody/` directly.
-
 - `orbit_prediction_math.h / .cpp`
   Pure math helpers for orbital mechanics.
   `OrbitalElementsEstimate` struct (SMA, eccentricity, period, periapsis, apoapsis), `estimate_orbital_period_s()`, `compute_orbital_elements()`, `select_prediction_horizon_and_dt()`, and sample-pair trajectory evaluation helpers.
@@ -63,8 +57,8 @@ orbit/
   `OrbitPredictionService` owns a thread pool that consumes `Request` jobs (spacecraft or celestial), propagates trajectories via `orbitsim`, applies maneuver impulses, builds/caches celestial ephemerides, and publishes `Result` structs with inertial trajectory samples and segments. Supports generation-based staleness detection and per-track request coalescing.
   The `.cpp` contains lifecycle (constructor, destructor, `request`, `poll_completed`, `reset`), threading (`worker_loop`), and caching (`get_or_build_ephemeris`, baseline cache). The compute and planned trajectory logic live in `nbody/prediction/`.
 
-- `trajectory/trajectory_utils.h / .cpp`
-  Public orbit-module trajectory helpers shared by prediction service and gameplay-derived caches.
+- `nbody/trajectory_utils.h / .cpp`
+  N-body streamed/planned trajectory helpers shared by the solver and gameplay-derived nbody cache assembly.
   Contains finite-state checks, trajectory continuity validation, segment end/span helpers, Hermite segment evaluation, boundary-aware segment sampling, segment slicing, and uniform segment resampling.
 
 ### `nbody/prediction/` subfolder
@@ -96,7 +90,7 @@ Internal helpers split out from `nbody/service.cpp`.
   Planned trajectory solving for maneuver-bearing predictions. Contains `solve_planned_chunk_range()` (chunk-by-chunk adaptive solving with seam validation), chunk cache operations, and maneuver impulse application.
 
 - `trajectory.cpp`
-  Service-specific trajectory helpers: maneuver preview building, celestial ephemeris-to-segment conversion, and planned boundary splitting. Shared segment math lives in `trajectory/trajectory_utils.*`.
+  Service-specific trajectory helpers: maneuver preview building, celestial ephemeris-to-segment conversion, and planned boundary splitting. Shared nbody segment math lives in `nbody/trajectory_utils.*`.
 
 - `sampling.cpp`
   Uniform resampling of trajectory segments and ephemeris data.
@@ -184,7 +178,7 @@ The entry point is `GameplayState`, which:
   Start in `nbody/prediction/planned.cpp`.
 
 - Trajectory segment Hermite evaluation or segment slicing:
-  Start in `trajectory/trajectory_utils.h/.cpp`.
+  Start in `nbody/trajectory_utils.h/.cpp`.
 
 - Planned boundary splitting:
   Start in `nbody/prediction/trajectory.cpp`.

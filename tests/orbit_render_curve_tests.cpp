@@ -269,7 +269,7 @@ TEST(OrbitRenderCurveTests, CurveRenderLodSamplesSourcePathWhenMergedNodeSelecte
 
     Game::OrbitRenderCurve::RenderSettings settings{};
     settings.error_px = 0.25;
-    settings.max_segments = 256;
+    settings.max_segments = 4000;
 
     Game::OrbitRenderCurve::FrustumContext frustum{};
 

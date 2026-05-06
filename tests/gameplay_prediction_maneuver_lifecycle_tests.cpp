@@ -1,6 +1,6 @@
 #include "gameplay_prediction_maneuver_test_common.h"
 
-#include "game/states/gameplay/prediction/runtime/prediction_lifecycle_reducer.h"
+#include "game/states/gameplay/prediction_nbody/runtime/prediction_lifecycle_reducer.h"
 
 TEST(GameplayPredictionManeuverTests, LifecycleSnapshotClassifiesIdleTrack)
 {

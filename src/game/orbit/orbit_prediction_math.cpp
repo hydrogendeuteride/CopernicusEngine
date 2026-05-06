@@ -1,5 +1,5 @@
 #include "game/orbit/orbit_prediction_math.h"
-#include "game/orbit/orbit_prediction_tuning.h"
+#include "game/orbit/nbody/tuning.h"
 
 #include "orbitsim/math.hpp"
 

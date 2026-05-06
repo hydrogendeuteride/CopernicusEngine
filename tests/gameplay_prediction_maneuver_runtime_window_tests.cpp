@@ -1,8 +1,8 @@
 #include "gameplay_prediction_maneuver_test_common.h"
 #include "game/orbit/orbit_prediction_math.h"
-#include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
-#include "game/states/gameplay/maneuver/maneuver_runtime_cache_builder.h"
-#include "game/states/gameplay/prediction/draw/gameplay_state_prediction_draw_internal.h"
+#include "game/states/gameplay/maneuver_nbody/maneuver_prediction_bridge.h"
+#include "game/states/gameplay/maneuver_nbody/maneuver_runtime_cache_builder.h"
+#include "game/states/gameplay/prediction_nbody/draw/gameplay_state_prediction_draw_internal.h"
 
 namespace
 {

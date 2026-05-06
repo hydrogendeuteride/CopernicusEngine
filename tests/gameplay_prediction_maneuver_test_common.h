@@ -6,12 +6,12 @@
 #define VULKAN_ENGINE_GAMEPLAY_TEST_ACCESS 1
 #endif
 #include "game/states/gameplay/gameplay_state.h"
-#include "game/orbit/orbit_prediction_service.h"
-#include "game/orbit/orbit_prediction_tuning.h"
-#include "game/states/gameplay/maneuver/maneuver_prediction_bridge.h"
-#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
-#include "game/states/gameplay/prediction/runtime/gameplay_state_prediction_runtime_internal.h"
-#include "game/states/gameplay/prediction/runtime/prediction_request_factory.h"
+#include "game/orbit/nbody/service.h"
+#include "game/orbit/nbody/tuning.h"
+#include "game/states/gameplay/maneuver_nbody/maneuver_prediction_bridge.h"
+#include "game/states/gameplay/prediction_nbody/gameplay_prediction_adapter.h"
+#include "game/states/gameplay/prediction_nbody/runtime/gameplay_state_prediction_runtime_internal.h"
+#include "game/states/gameplay/prediction_nbody/runtime/prediction_request_factory.h"
 
 #include <gtest/gtest.h>
 

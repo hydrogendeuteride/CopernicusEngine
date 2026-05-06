@@ -1,0 +1,23 @@
+#include "game/states/gameplay/gameplay_state.h"
+#include "game/states/gameplay/prediction_nbody/gameplay_prediction_adapter.h"
+#include "game/states/gameplay/prediction_nbody/prediction_host_context_builder.h"
+
+#include <utility>
+
+namespace Game
+{
+    void GameplayPredictionAdapter::poll_completed_prediction_results()
+    {
+        if (_access.prediction.poll_completed_results(PredictionHostContextBuilder(context()).build()))
+        {
+            sync_prediction_dirty_flag();
+        }
+    }
+
+    void GameplayPredictionAdapter::apply_completed_prediction_result(OrbitPredictionResult result)
+    {
+        (void) _access.prediction.apply_completed_solver_result(
+                PredictionHostContextBuilder(context()).build(),
+                std::move(result));
+    }
+} // namespace Game

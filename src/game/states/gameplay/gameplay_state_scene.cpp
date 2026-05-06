@@ -3,7 +3,7 @@
 #include "orbiter_physics_bridge.h"
 #include "orbit_helpers.h"
 #include "game/component/ship_controller.h"
-#include "game/states/gameplay/prediction/gameplay_prediction_adapter.h"
+#include "game/states/gameplay/prediction_nbody/gameplay_prediction_adapter.h"
 #include "core/engine.h"
 #include "core/game_api.h"
 #include "core/util/logger.h"

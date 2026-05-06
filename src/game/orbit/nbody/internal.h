@@ -7,7 +7,7 @@
 #include "game/orbit/orbit_prediction_math.h"
 #include "game/orbit/nbody/tuning.h"
 #include "game/orbit/nbody/diagnostics.h"
-#include "game/orbit/trajectory/trajectory_utils.h"
+#include "game/orbit/nbody/trajectory_utils.h"
 
 #include "orbitsim/coordinate_frames.hpp"
 #include "orbitsim/game_sim.hpp"

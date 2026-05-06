@@ -1,7 +1,7 @@
-#include "game/orbit/trajectory/trajectory_utils.h"
-#include "game/states/gameplay/prediction/prediction_frame_cache_builder.h"
-#include "game/states/gameplay/prediction/prediction_metrics_builder.h"
-#include "game/states/gameplay/prediction/streamed_chunk_assembly_builder.h"
+#include "game/orbit/nbody/trajectory_utils.h"
+#include "game/states/gameplay/prediction_nbody/prediction_frame_cache_builder.h"
+#include "game/states/gameplay/prediction_nbody/prediction_metrics_builder.h"
+#include "game/states/gameplay/prediction_nbody/nbody/chunk_assembly.h"
 
 #include "orbitsim/trajectories.hpp"
 

@@ -1,5 +1,5 @@
 #include "gameplay_prediction_maneuver_test_common.h"
-#include "game/orbit/prediction/orbit_prediction_service_internal.h"
+#include "game/orbit/nbody/internal.h"
 
 #include <algorithm>
 #include <functional>
