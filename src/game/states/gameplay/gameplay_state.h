@@ -111,7 +111,7 @@ namespace Game
         // Maneuver adapters
         ManeuverPredictionBridgeContext build_maneuver_prediction_context();
         ManeuverUiControllerContext build_maneuver_ui_context(GameStateContext &ctx);
-        void draw_orbit_drag_debug_window(GameStateContext &ctx);
+        void draw_nbody_orbit_debug_window(GameStateContext &ctx);
         void refresh_maneuver_node_runtime_cache(GameStateContext &ctx, bool force_display_basis_refresh = false);
         void update_maneuver_nodes_time_warp(GameStateContext &ctx, float fixed_dt);
         void update_maneuver_nodes_execution(GameStateContext &ctx);
@@ -164,7 +164,7 @@ namespace Game
 
         bool _debug_draw_enabled{true};
         bool _show_orbit_hud{true};
-        bool _show_orbit_drag_debug{true};
+        bool _show_nbody_orbit_debug{true};
         bool _show_frame_view{true};
         bool _show_maneuver_nodes_panel{false};
         bool _reset_requested{false};

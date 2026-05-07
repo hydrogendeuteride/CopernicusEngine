@@ -80,7 +80,10 @@ gameplay/
   Scene bootstrap: `default_earth_moon_config()` (compiled fallback scenario), `setup_scene()` (physics world creation, `OrbitalRuntimeSystem::initialize_scenario()` call, celestial body spawning, orbiter instantiation from `ScenarioConfig`), `setup_environment()` (lighting, skybox, camera), orbiter lookup helpers (`find_player_orbiter`, `find_orbiter` by entity/name), `player_entity()`, `select_rebase_anchor_entity()`, `update_rebase_anchor()`, `sync_player_camera_target()`, `sync_player_collision_callbacks()`, `set_active_player_orbiter()`, `cycle_player_orbiter()`.
 
 - `gameplay_state_ui.cpp`
-  UI and settings: `extract_settings()` / `apply_settings()` for `GameplaySettings` round-trip, `on_draw_ui()` (the main HUD: simulation info panel, orbiter state, time warp controls, prediction config, maneuver panels, orbit plot stats, contact log, scenario/settings save/load, frame monitor), `draw_orbit_drag_debug_window()`.
+  UI and settings: `extract_settings()` / `apply_settings()` for `GameplaySettings` round-trip, `on_draw_ui()` (the main HUD: simulation info panel, orbit subject summary, orbiter state, time warp controls, contact log, scenario/settings save/load, frame monitor, and window toggles).
+
+- `gameplay_state_nbody_orbit_debug_ui.cpp`
+  Tabbed N-body orbit diagnostics: frame controls, draw settings, solver state, maneuver runtime, and plot/upload stats.
 
 - `gameplay_settings.cpp`
   JSON load/save for `GameplaySettings` using `nlohmann::json`. Supports schema versioning and legacy field aliases for backward compatibility.

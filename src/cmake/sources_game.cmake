@@ -79,6 +79,7 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/gameplay_orbital_context.h
   game/states/gameplay/gameplay_orbital_context.cpp
   game/states/gameplay/gameplay_state_ui.cpp
+  game/states/gameplay/gameplay_state_nbody_orbit_debug_ui.cpp
   game/states/gameplay/gameplay_state_scene.cpp
   game/states/gameplay/gameplay_state_sim.cpp
   game/states/gameplay/gameplay_settings.h
