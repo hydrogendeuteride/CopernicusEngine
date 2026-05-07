@@ -3,6 +3,7 @@
 /assets
 /.idea
 /compile_commands.json
+/.venv/
 *.spv
 /bin
 /lib
