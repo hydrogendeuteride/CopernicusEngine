@@ -95,6 +95,15 @@ set(GAMEPLAY_NBODY_PREDICTION_CACHE_SOURCES
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_nbody/nbody/chunk_assembly.cpp"
 )
 
+set(GAME_ORBIT_KEPLER_SOURCES
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_primary_resolver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_maneuver_solver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_tessellator.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_metrics.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_debug.cpp"
+)
+
 add_executable(scenario_loader_tests
   scenario_loader_tests.cpp
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/scenario/scenario_loader.cpp"
@@ -179,6 +188,28 @@ target_link_libraries(orbit_helpers_tests PRIVATE
 )
 
 add_test(NAME orbit_helpers_tests COMMAND orbit_helpers_tests)
+
+add_executable(kepler_orbit_tests
+  kepler_orbit_tests.cpp
+  ${GAME_ORBIT_KEPLER_SOURCES}
+)
+
+set_property(TARGET kepler_orbit_tests PROPERTY CXX_STANDARD 20)
+
+target_include_directories(kepler_orbit_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/third_party/vma"
+  "${PROJECT_SOURCE_DIR}/third_party/taskflow/3rd-party"
+)
+
+target_link_libraries(kepler_orbit_tests PRIVATE
+  gtest
+  fmt::fmt
+  glm
+  orbitsim
+)
+
+add_test(NAME kepler_orbit_tests COMMAND kepler_orbit_tests)
 
 add_executable(orbit_prediction_planner_tests
   orbit_prediction_planner_tests.cpp

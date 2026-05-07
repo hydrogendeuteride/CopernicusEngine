@@ -50,6 +50,21 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/orbit/nbody/prediction/policy_profile.cpp
   game/orbit/nbody/prediction/policy_adaptive.cpp
   game/orbit/nbody/prediction/policy_ephemeris.cpp
+  game/orbit/kepler/README.md
+  game/orbit/kepler/kepler_types.h
+  game/orbit/kepler/kepler_prediction_options.h
+  game/orbit/kepler/kepler_primary_resolver.h
+  game/orbit/kepler/kepler_primary_resolver.cpp
+  game/orbit/kepler/kepler_orbit_builder.h
+  game/orbit/kepler/kepler_orbit_builder.cpp
+  game/orbit/kepler/kepler_maneuver_solver.h
+  game/orbit/kepler/kepler_maneuver_solver.cpp
+  game/orbit/kepler/kepler_orbit_tessellator.h
+  game/orbit/kepler/kepler_orbit_tessellator.cpp
+  game/orbit/kepler/kepler_orbit_metrics.h
+  game/orbit/kepler/kepler_orbit_metrics.cpp
+  game/orbit/kepler/kepler_debug.h
+  game/orbit/kepler/kepler_debug.cpp
 
   # game root
   game/main_game.h
