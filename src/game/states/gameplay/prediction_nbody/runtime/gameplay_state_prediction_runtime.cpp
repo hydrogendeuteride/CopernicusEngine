@@ -5,6 +5,8 @@
 
 #include "core/util/logger.h"
 
+#include <vector>
+
 namespace Game
 {
     void GameplayPredictionAdapter::sync_prediction_dirty_flag()
@@ -12,15 +14,6 @@ namespace Game
         // Collapse only visible-track rebuild demand into one cheap UI-facing flag.
         const std::vector<PredictionSubjectKey> visible_subjects = collect_visible_prediction_subjects();
         _access.prediction.sync_visible_dirty_flag(visible_subjects);
-    }
-
-    void GameplayState::mark_prediction_dirty()
-    {
-        // Force only the active/overlay-visible tracks to rebuild on the next prediction update.
-        GameplayPredictionAdapter prediction(build_prediction_access());
-        const std::vector<PredictionSubjectKey> visible_subjects = prediction.collect_visible_prediction_subjects();
-        _prediction->mark_visible_tracks_dirty(visible_subjects);
-        prediction.sync_prediction_dirty_flag();
     }
 
     void GameplayPredictionAdapter::mark_maneuver_plan_dirty()
@@ -39,11 +32,6 @@ namespace Game
     void GameplayPredictionAdapter::clear_maneuver_prediction_artifacts()
     {
         _access.prediction.clear_maneuver_prediction_artifacts();
-    }
-
-    void GameplayState::clear_prediction_runtime()
-    {
-        _prediction->clear_runtime();
     }
 
     void GameplayPredictionAdapter::clear_visible_prediction_runtime(const std::vector<PredictionSubjectKey> &visible_subjects)
@@ -134,15 +122,4 @@ namespace Game
                                                        with_maneuvers);
     }
 
-    void GameplayState::update_prediction(GameStateContext &ctx, float fixed_dt)
-    {
-        (void) ctx;
-
-        // Keep frame metadata aligned before the prediction subsystem decides what to rebuild.
-        GameplayPredictionAdapter prediction(build_prediction_access());
-        prediction.rebuild_prediction_frame_options();
-        prediction.rebuild_prediction_analysis_options();
-        _prediction->update(PredictionHostContextBuilder(build_prediction_context()).build(&ctx),
-                            fixed_dt);
-    }
 } // namespace Game

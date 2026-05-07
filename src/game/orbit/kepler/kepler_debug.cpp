@@ -22,6 +22,10 @@ namespace Game
                 return "InvalidArc";
             case KeplerOrbitStatus::PrimaryMismatch:
                 return "PrimaryMismatch";
+            case KeplerOrbitStatus::EphemerisUnavailable:
+                return "EphemerisUnavailable";
+            case KeplerOrbitStatus::ContinuityFailed:
+                return "ContinuityFailed";
             case KeplerOrbitStatus::PropagationFailed:
                 return "PropagationFailed";
             case KeplerOrbitStatus::SampleBudgetExceeded:

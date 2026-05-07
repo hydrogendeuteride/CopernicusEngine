@@ -5,6 +5,8 @@
 #include "core/picking/picking_system.h"
 #include "game/component/ship_controller.h"
 #include "game/entity_manager.h"
+#include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
+#include "game/states/gameplay/prediction_nbody/gameplay_prediction_adapter.h"
 #include "game/states/gameplay/prediction_nbody/prediction_system.h"
 #include "physics/physics_context.h"
 #include "physics/physics_world.h"
@@ -65,7 +67,8 @@ namespace Game
 
     GameplayState::GameplayState()
         : _scenario_config(default_earth_moon_config()),
-          _prediction(std::make_unique<PredictionSystem>())
+          _prediction(std::make_unique<PredictionSystem>()),
+          _kepler_prediction(std::make_unique<KeplerPredictionSystem>())
     {
     }
 
@@ -119,6 +122,11 @@ namespace Game
         {
             _world.set_rebase_anchor(next_anchor);
         }
+    }
+
+    void GameplayPredictionAdapter::emit_orbit_prediction_debug(GameStateContext &ctx)
+    {
+        (void) ctx;
     }
 
     void GameStateContext::quit() {}

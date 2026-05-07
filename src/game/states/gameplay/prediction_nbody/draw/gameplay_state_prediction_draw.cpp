@@ -153,10 +153,4 @@ namespace Game
         }
     }
 
-    void GameplayState::draw_prediction(GameStateContext &ctx)
-    {
-        GameplayPredictionAdapter prediction(build_prediction_access());
-        prediction.poll_completed_prediction_results();
-        prediction.emit_orbit_prediction_debug(ctx);
-    }
 } // namespace Game

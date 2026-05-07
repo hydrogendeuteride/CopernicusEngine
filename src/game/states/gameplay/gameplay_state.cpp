@@ -4,6 +4,7 @@
 #include "orbit_helpers.h"
 #include "game/states/gameplay/gameplay_settings.h"
 #include "game/states/gameplay/maneuver_nbody/maneuver_ui_controller.h"
+#include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 #include "game/states/gameplay/prediction_nbody/prediction_system.h"
 #include "game/states/gameplay/scenario/scenario_loader.h"
 #include "game/component/ship_controller.h"
@@ -25,6 +26,7 @@ namespace Game
     GameplayState::GameplayState()
         : _scenario_config()
         , _prediction(std::make_unique<PredictionSystem>())
+        , _kepler_prediction(std::make_unique<KeplerPredictionSystem>())
     {
     }
 
@@ -32,6 +34,7 @@ namespace Game
         : _scenario_preloaded(true)
         , _scenario_config(std::move(scenario_config))
         , _prediction(std::make_unique<PredictionSystem>())
+        , _kepler_prediction(std::make_unique<KeplerPredictionSystem>())
     {
     }
 
@@ -51,6 +54,7 @@ namespace Game
         _settings_io_status.clear();
         _settings_io_status_ok = true;
         _prediction->reset_session_state();
+        _kepler_prediction->reset();
 
         if (ctx.renderer && ctx.renderer->_context && ctx.renderer->_context->orbit_plot)
         {
@@ -130,6 +134,7 @@ namespace Game
         _orbit.reset();
         _contact_log.clear();
         _prediction->reset_session_state();
+        _kepler_prediction->reset();
         _renderer = nullptr;
         if (ctx.renderer && ctx.renderer->_context && ctx.renderer->_context->orbit_plot)
         {

@@ -53,6 +53,8 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/orbit/kepler/README.md
   game/orbit/kepler/kepler_types.h
   game/orbit/kepler/kepler_prediction_options.h
+  game/orbit/kepler/kepler_celestial_nbody.h
+  game/orbit/kepler/kepler_celestial_nbody.cpp
   game/orbit/kepler/kepler_primary_resolver.h
   game/orbit/kepler/kepler_primary_resolver.cpp
   game/orbit/kepler/kepler_orbit_builder.h
@@ -94,6 +96,9 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/gameplay_orbital_context.h
   game/states/gameplay/gameplay_orbital_context.cpp
   game/states/gameplay/gameplay_state_ui.cpp
+  game/states/gameplay/gameplay_state_orbit_prediction.cpp
+  game/states/gameplay/gameplay_state_kepler_prediction.cpp
+  game/states/gameplay/gameplay_state_kepler_prediction_debug_ui.cpp
   game/states/gameplay/gameplay_state_nbody_orbit_debug_ui.cpp
   game/states/gameplay/gameplay_state_scene.cpp
   game/states/gameplay/gameplay_state_sim.cpp
@@ -178,6 +183,16 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/prediction_nbody/draw/gameplay_state_prediction_draw_shared.cpp
   game/states/gameplay/prediction_nbody/draw/gameplay_state_prediction_draw_track.cpp
   game/states/gameplay/prediction_nbody/draw/gameplay_state_prediction_draw_pick.cpp
+  game/states/gameplay/prediction_kepler/README.md
+  game/states/gameplay/prediction_kepler/kepler_prediction_state.h
+  game/states/gameplay/prediction_kepler/kepler_prediction_subject.h
+  game/states/gameplay/prediction_kepler/kepler_prediction_subject.cpp
+  game/states/gameplay/prediction_kepler/kepler_prediction_builder.h
+  game/states/gameplay/prediction_kepler/kepler_prediction_builder.cpp
+  game/states/gameplay/prediction_kepler/kepler_prediction_draw.h
+  game/states/gameplay/prediction_kepler/kepler_prediction_draw.cpp
+  game/states/gameplay/prediction_kepler/kepler_prediction_system.h
+  game/states/gameplay/prediction_kepler/kepler_prediction_system.cpp
   game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_colors.h
   game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_types.h
   game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_util.h

@@ -5,6 +5,7 @@
 #include "core/game_api.h"
 #include "game/states/gameplay/maneuver_nbody/maneuver_system.h"
 #include "game/states/gameplay/gameplay_settings.h"
+#include "game/orbit/kepler/kepler_prediction_options.h"
 #include "game/input/keybinds.h"
 #include "game/states/gameplay/scenario/scenario_config.h"
 #include "orbital_runtime_system.h"
@@ -29,6 +30,7 @@ namespace Physics
 namespace Game
 {
     class PredictionSystem;
+    class KeplerPredictionSystem;
     struct GameplayPredictionAccess;
     struct GameplayPredictionContext;
     struct GameplayPredictionState;
@@ -36,6 +38,12 @@ namespace Game
     struct ManeuverCommandResult;
     struct ManeuverPredictionBridgeContext;
     struct ManeuverUiControllerContext;
+
+    enum class SpacecraftOrbitPredictionMode : uint8_t
+    {
+        Kepler = 0,
+        NBody,
+    };
 
     // ============================================================================
     // GameplayState: Main gameplay — orbital mechanics, combat, ship control
@@ -103,8 +111,15 @@ namespace Game
         // Prediction entry points
         GameplayPredictionContext build_prediction_context();
         GameplayPredictionAccess build_prediction_access();
+        bool spacecraft_orbit_prediction_uses_kepler() const;
+        bool spacecraft_orbit_prediction_uses_nbody() const;
+        void set_spacecraft_orbit_prediction_mode(SpacecraftOrbitPredictionMode mode);
         void update_prediction(GameStateContext &ctx, float fixed_dt);
+        void mark_kepler_prediction_dirty();
+        void clear_kepler_prediction_runtime();
+        void update_kepler_prediction(GameStateContext &ctx);
         void draw_prediction(GameStateContext &ctx);
+        void draw_kepler_prediction(GameStateContext &ctx);
         void mark_prediction_dirty();
         void clear_prediction_runtime();
 
@@ -112,6 +127,7 @@ namespace Game
         ManeuverPredictionBridgeContext build_maneuver_prediction_context();
         ManeuverUiControllerContext build_maneuver_ui_context(GameStateContext &ctx);
         void draw_nbody_orbit_debug_window(GameStateContext &ctx);
+        void draw_kepler_orbit_debug_window(GameStateContext &ctx);
         void refresh_maneuver_node_runtime_cache(GameStateContext &ctx, bool force_display_basis_refresh = false);
         void update_maneuver_nodes_time_warp(GameStateContext &ctx, float fixed_dt);
         void update_maneuver_nodes_execution(GameStateContext &ctx);
@@ -165,10 +181,17 @@ namespace Game
         bool _debug_draw_enabled{true};
         bool _show_orbit_hud{true};
         bool _show_nbody_orbit_debug{true};
+        bool _show_kepler_orbit_debug{true};
         bool _show_frame_view{true};
         bool _show_maneuver_nodes_panel{false};
         bool _reset_requested{false};
+        SpacecraftOrbitPredictionMode _spacecraft_orbit_prediction_mode{SpacecraftOrbitPredictionMode::Kepler};
+        KeplerPredictionOptions _kepler_prediction_options{};
+        bool _kepler_draw_orbiter_tracks{true};
+        bool _kepler_draw_celestial_kepler_tracks{false};
+        bool _kepler_draw_celestial_nbody_tracks{true};
         std::unique_ptr<PredictionSystem> _prediction;
+        std::unique_ptr<KeplerPredictionSystem> _kepler_prediction;
         ManeuverSystem _maneuver{};
 
         float _elapsed{0.0f};

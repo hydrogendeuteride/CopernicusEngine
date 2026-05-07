@@ -9,6 +9,7 @@
 #include "core/input/input_system.h"
 #include "game/component/ship_controller.h"
 #include "game/entity_manager.h"
+#include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 #include "physics/physics_context.h"
 #include "physics/physics_world.h"
 

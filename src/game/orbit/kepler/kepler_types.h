@@ -24,6 +24,8 @@ namespace Game
         InvalidPrimary,
         InvalidArc,
         PrimaryMismatch,
+        EphemerisUnavailable,
+        ContinuityFailed,
         PropagationFailed,
         SampleBudgetExceeded,
         NoSamples,

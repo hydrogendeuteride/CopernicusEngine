@@ -26,6 +26,17 @@ namespace Game
 
     namespace
     {
+        const char *spacecraft_orbit_prediction_mode_label(const SpacecraftOrbitPredictionMode mode)
+        {
+            switch (mode)
+            {
+                case SpacecraftOrbitPredictionMode::Kepler:
+                    return "Kepler";
+                case SpacecraftOrbitPredictionMode::NBody:
+                    return "N Body";
+            }
+            return "Unknown";
+        }
 
         std::string resolve_asset_rel_path(const GameStateContext &ctx, const std::string &rel_path)
         {
@@ -103,12 +114,19 @@ namespace Game
             if (ImGui::BeginMenu("View"))
             {
                 ImGui::MenuItem("Orbit HUD", nullptr, &_show_orbit_hud);
-                ImGui::MenuItem("N Body Orbit Debug", nullptr, &_show_nbody_orbit_debug);
-                ImGui::MenuItem("Frame Monitor", nullptr, &_show_frame_view);
-                ImGui::MenuItem("Maneuver Nodes", nullptr, &_show_maneuver_nodes_panel);
                 ImGui::EndMenu();
             }
             ImGui::EndMainMenuBar();
+        }
+
+        if (spacecraft_orbit_prediction_uses_kepler())
+        {
+            _show_nbody_orbit_debug = false;
+            _show_maneuver_nodes_panel = false;
+        }
+        else
+        {
+            _show_kepler_orbit_debug = false;
         }
 
         if (_show_orbit_hud)
@@ -152,9 +170,36 @@ namespace Game
 
                 ImGui::Text("Warp: x%.0f (%s)  [,][.] change  [/]/[Backspace] x1", _time_warp.factor(), warp_mode);
                 ImGui::Text("Vessel: %s", controlled_vessel);
+                ImGui::Text("Orbit: %s", spacecraft_orbit_prediction_mode_label(_spacecraft_orbit_prediction_mode));
                 ImGui::TextUnformatted("Switch vessel: '[' previous, ']' next");
                 ImGui::Text("Real: %.1f s", _elapsed);
                 ImGui::Text("[ESC] Pause");
+
+                ImGui::Separator();
+                if (ImGui::CollapsingHeader("Orbit Prediction", ImGuiTreeNodeFlags_DefaultOpen))
+                {
+                    if (ImGui::RadioButton("Kepler", spacecraft_orbit_prediction_uses_kepler()))
+                    {
+                        set_spacecraft_orbit_prediction_mode(SpacecraftOrbitPredictionMode::Kepler);
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::RadioButton("N Body", spacecraft_orbit_prediction_uses_nbody()))
+                    {
+                        set_spacecraft_orbit_prediction_mode(SpacecraftOrbitPredictionMode::NBody);
+                    }
+
+                    if (spacecraft_orbit_prediction_uses_kepler())
+                    {
+                        ImGui::Checkbox("Kepler Orbit Debug", &_show_kepler_orbit_debug);
+                    }
+                    else
+                    {
+                        ImGui::Checkbox("N Body Orbit Debug", &_show_nbody_orbit_debug);
+                        ImGui::SameLine();
+                        ImGui::Checkbox("Maneuver Nodes", &_show_maneuver_nodes_panel);
+                    }
+                    ImGui::Checkbox("Frame Monitor", &_show_frame_view);
+                }
 
                 prediction.rebuild_prediction_subjects();
                 const PredictionTrackState *active_prediction = prediction.active_prediction_track();
@@ -585,17 +630,24 @@ namespace Game
             ImGui::End();
         }
 
-        ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
-        ManeuverUiController::open_nodes_panel_from_orbit_pick_release(maneuver_ui);
-
-        if (_show_maneuver_nodes_panel)
+        if (spacecraft_orbit_prediction_uses_nbody())
         {
-            ManeuverUiController::draw_nodes_panel(maneuver_ui);
+            ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
+            ManeuverUiController::open_nodes_panel_from_orbit_pick_release(maneuver_ui);
+
+            if (_show_maneuver_nodes_panel)
+            {
+                ManeuverUiController::draw_nodes_panel(maneuver_ui);
+            }
+            ManeuverUiController::draw_imgui_gizmo(maneuver_ui);
         }
-        ManeuverUiController::draw_imgui_gizmo(maneuver_ui);
-        if (_show_nbody_orbit_debug)
+        if (_show_nbody_orbit_debug && spacecraft_orbit_prediction_uses_nbody())
         {
             draw_nbody_orbit_debug_window(ctx);
+        }
+        if (_show_kepler_orbit_debug && spacecraft_orbit_prediction_uses_kepler())
+        {
+            draw_kepler_orbit_debug_window(ctx);
         }
         if (_show_frame_view)
         {

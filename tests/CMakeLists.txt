@@ -96,12 +96,22 @@ set(GAMEPLAY_NBODY_PREDICTION_CACHE_SOURCES
 )
 
 set(GAME_ORBIT_KEPLER_SOURCES
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_celestial_nbody.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_primary_resolver.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_maneuver_solver.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_tessellator.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_metrics.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_debug.cpp"
+)
+
+set(GAMEPLAY_KEPLER_PREDICTION_SOURCES
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_orbit_prediction.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_kepler_prediction.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_subject.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_draw.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_system.cpp"
 )
 
 add_executable(scenario_loader_tests
@@ -210,6 +220,29 @@ target_link_libraries(kepler_orbit_tests PRIVATE
 )
 
 add_test(NAME kepler_orbit_tests COMMAND kepler_orbit_tests)
+
+add_executable(kepler_prediction_tests
+  kepler_prediction_tests.cpp
+  ${GAME_ORBIT_KEPLER_SOURCES}
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_builder.cpp"
+)
+
+set_property(TARGET kepler_prediction_tests PROPERTY CXX_STANDARD 20)
+
+target_include_directories(kepler_prediction_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/third_party/vma"
+  "${PROJECT_SOURCE_DIR}/third_party/taskflow/3rd-party"
+)
+
+target_link_libraries(kepler_prediction_tests PRIVATE
+  gtest
+  fmt::fmt
+  glm
+  orbitsim
+)
+
+add_test(NAME kepler_prediction_tests COMMAND kepler_prediction_tests)
 
 add_executable(orbit_prediction_planner_tests
   orbit_prediction_planner_tests.cpp
@@ -338,17 +371,19 @@ target_link_libraries(maneuver_system_tests PRIVATE
 add_test(NAME maneuver_system_tests COMMAND maneuver_system_tests)
 
 add_executable(gameplay_prediction_maneuver_tests
-  gameplay_prediction_maneuver_runtime_window_tests.cpp
-  gameplay_prediction_maneuver_lifecycle_tests.cpp
-  gameplay_prediction_maneuver_service_tests.cpp
-  gameplay_prediction_maneuver_runtime_results_tests.cpp
-  gameplay_prediction_maneuver_derived_results_tests.cpp
-  gameplay_prediction_maneuver_test_stubs.cpp
+  nbody/gameplay_prediction_maneuver_runtime_window_tests.cpp
+  nbody/gameplay_prediction_maneuver_lifecycle_tests.cpp
+  nbody/gameplay_prediction_maneuver_service_tests.cpp
+  nbody/gameplay_prediction_maneuver_runtime_results_tests.cpp
+  nbody/gameplay_prediction_maneuver_derived_results_tests.cpp
+  nbody/gameplay_prediction_maneuver_test_stubs.cpp
   "${PROJECT_SOURCE_DIR}/src/game/entity.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/orbit_prediction_math.cpp"
   ${NBODY_ORBIT_RENDER_CURVE_SOURCES}
   "${PROJECT_SOURCE_DIR}/src/core/orbit_plot/orbit_plot.cpp"
   ${NBODY_ORBIT_PREDICTION_SERVICE_SOURCES}
+  ${GAME_ORBIT_KEPLER_SOURCES}
+  ${GAMEPLAY_KEPLER_PREDICTION_SOURCES}
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_sim.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_physics_system.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_physics_bridge.cpp"
