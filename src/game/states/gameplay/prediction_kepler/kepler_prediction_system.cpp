@@ -287,6 +287,40 @@ namespace Game
             }
             return std::clamp(required_horizon_s * 0.25, kMinReuseS, kMaxReuseS);
         }
+
+        double prediction_rebuild_interval_s(const KeplerPredictionUpdateContext &context)
+        {
+            const double source_dt_s =
+                    (std::isfinite(context.tessellation.max_time_step_s) &&
+                     context.tessellation.max_time_step_s > 0.0)
+                            ? context.tessellation.max_time_step_s
+                            : 10.0;
+            return std::clamp(source_dt_s * 0.005, 1.0 / 60.0, 0.05);
+        }
+
+        bool can_reuse_prediction(const KeplerPredictionState &state,
+                                  const KeplerPredictionUpdateContext &context,
+                                  const KeplerWorldFrame &world_frame)
+        {
+            if (state.dirty || !state.valid)
+            {
+                return false;
+            }
+            if (state.maneuver_revision != context.maneuver_revision ||
+                state.world_reference_body_id != world_frame.world_reference_body_id)
+            {
+                return false;
+            }
+            if (!std::isfinite(state.build_time_s) ||
+                !std::isfinite(context.current_sim_time_s) ||
+                context.current_sim_time_s < state.build_time_s)
+            {
+                return false;
+            }
+
+            const double elapsed_s = context.current_sim_time_s - state.build_time_s;
+            return elapsed_s < prediction_rebuild_interval_s(context);
+        }
     } // namespace
 
     const KeplerPredictionSystem::CelestialNBodyEphemerisCache &
@@ -445,6 +479,12 @@ namespace Game
             return;
         }
 
+        if (can_reuse_prediction(_state, context, world_frame))
+        {
+            _state.enabled = context.enabled;
+            return;
+        }
+
         const KeplerPredictionSubjectContext subject_context{
                 .orbit = context.orbit,
                 .world = context.world,
@@ -455,13 +495,20 @@ namespace Game
 
         std::vector<KeplerPredictionSubject> subjects =
                 resolve_kepler_prediction_orbiter_subjects(subject_context, world_frame);
+        const bool needs_celestial_subjects =
+                context.build_celestial_kepler_tracks || context.build_celestial_nbody_tracks;
         std::vector<KeplerPredictionSubject> celestial_subjects =
-                resolve_kepler_prediction_celestial_subjects(subject_context);
+                needs_celestial_subjects
+                        ? resolve_kepler_prediction_celestial_subjects(subject_context)
+                        : std::vector<KeplerPredictionSubject>{};
         const std::size_t celestial_subject_count = celestial_subjects.size();
-        subjects.insert(subjects.end(),
-                        std::make_move_iterator(celestial_subjects.begin()),
-                        std::make_move_iterator(celestial_subjects.end()));
-        if (subjects.empty())
+        if (context.build_celestial_kepler_tracks)
+        {
+            subjects.insert(subjects.end(),
+                            celestial_subjects.begin(),
+                            celestial_subjects.end());
+        }
+        if (subjects.empty() && (!context.build_celestial_nbody_tracks || celestial_subjects.empty()))
         {
             _state.clear_result(KeplerOrbitStatus::InvalidSubjectState);
             _state.dirty = false;
@@ -478,8 +525,12 @@ namespace Game
         _state.tracks.reserve(subjects.size() +
                               (context.build_celestial_nbody_tracks ? celestial_subject_count : 0u));
 
+        const bool needs_celestial_nbody_cache =
+                context.build_celestial_nbody_tracks || context.build_celestial_kepler_tracks;
         const CelestialNBodyEphemerisCache &celestial_nbody =
-                resolve_celestial_nbody_cache(context, world_frame);
+                needs_celestial_nbody_cache
+                        ? resolve_celestial_nbody_cache(context, world_frame)
+                        : _celestial_nbody_cache;
         _state.celestial_nbody_ephemeris.valid = celestial_nbody.valid;
         _state.celestial_nbody_ephemeris.status = celestial_nbody.status;
         _state.celestial_nbody_ephemeris.required_horizon_s =
@@ -505,9 +556,13 @@ namespace Game
                 celestial_nbody.diagnostics.hard_cap_hit;
         _state.celestial_nbody_ephemeris.cancelled =
                 celestial_nbody.diagnostics.cancelled;
+        if (!needs_celestial_nbody_cache)
+        {
+            _state.celestial_nbody_ephemeris = {};
+        }
 
         const KeplerBodyStateProvider body_state_provider =
-                celestial_nbody.valid
+                needs_celestial_nbody_cache && celestial_nbody.valid
                         ? celestial_nbody.body_state_provider
                         : make_current_kepler_body_state_provider(*context.orbit);
 
@@ -519,8 +574,11 @@ namespace Game
                                                        body_state_provider,
                                                        celestial_nbody.ephemeris,
                                                        previous_primary_body_id));
+        }
 
-            if (subject.celestial && context.build_celestial_nbody_tracks)
+        if (context.build_celestial_nbody_tracks)
+        {
+            for (const KeplerPredictionSubject &subject : celestial_subjects)
             {
                 _state.tracks.push_back(build_celestial_nbody_track(subject,
                                                                     context,

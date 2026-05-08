@@ -221,6 +221,8 @@ namespace Game
                 const WorldVec3 &mid_world,
                 const WorldVec3 &b_world)
         {
+            constexpr std::size_t kMaxSourceBoundaryErrorSamples = 16u;
+
             if (should_split_interval(camera, frustum, error_px_threshold, a_world, b_world, mid_world))
             {
                 return true;
@@ -243,6 +245,43 @@ namespace Game
                 should_split_interval(camera, frustum, error_px_threshold, a_world, b_world, q1_world))
             {
                 return true;
+            }
+
+            if (!source_segments.empty())
+            {
+                const std::size_t i0 = source_segment_index_for_time(source_segments, t0_s);
+                const std::size_t i1 = source_segment_index_for_time(source_segments, std::nextafter(t1_s, t0_s));
+                if (i0 < source_segments.size() && i1 < source_segments.size() && i1 > i0)
+                {
+                    const std::size_t boundary_count = i1 - i0;
+                    const std::size_t sample_count =
+                            std::min(boundary_count, kMaxSourceBoundaryErrorSamples);
+                    for (std::size_t sample_index = 0u; sample_index < sample_count; ++sample_index)
+                    {
+                        const std::size_t boundary_offset =
+                                (sample_count > 1u)
+                                        ? ((sample_index * (boundary_count - 1u)) / (sample_count - 1u))
+                                        : (boundary_count / 2u);
+                        const std::size_t source_index = i0 + boundary_offset;
+                        const double boundary_t_s = segment_end_time(source_segments[source_index]);
+                        if (!(boundary_t_s > t0_s) || !(boundary_t_s < t1_s))
+                        {
+                            continue;
+                        }
+
+                        WorldVec3 boundary_world{};
+                        if (sample_source_world_position(source_segments, ctx, boundary_t_s, boundary_world) &&
+                            should_split_interval(camera,
+                                                  frustum,
+                                                  error_px_threshold,
+                                                  a_world,
+                                                  b_world,
+                                                  boundary_world))
+                        {
+                            return true;
+                        }
+                    }
+                }
             }
 
             return false;

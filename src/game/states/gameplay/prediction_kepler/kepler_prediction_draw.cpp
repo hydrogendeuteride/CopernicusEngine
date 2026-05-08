@@ -4,6 +4,8 @@
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 
 #include <cmath>
+#include <span>
+#include <vector>
 
 namespace Game
 {
@@ -34,6 +36,8 @@ namespace Game
                 pick_group = picking->add_line_pick_group(pick_owner_name);
             }
 
+            std::vector<OrbitPlotSystem::LineCommand> lines{};
+            lines.reserve(line_set.vertices.size() - 1u);
             for (std::size_t i = 1; i < line_set.vertices.size(); ++i)
             {
                 const KeplerOrbitLineVertex &a = line_set.vertices[i - 1u];
@@ -43,7 +47,12 @@ namespace Game
                     continue;
                 }
 
-                orbit_plot.add_line(a.position_world, b.position_world, color, depth);
+                lines.push_back(OrbitPlotSystem::LineCommand{
+                        .a_world = a.position_world,
+                        .b_world = b.position_world,
+                        .color = color,
+                        .depth = depth,
+                });
                 if (pick_enabled)
                 {
                     picking->add_line_pick_segment(
@@ -53,6 +62,10 @@ namespace Game
                             a.t_s,
                             b.t_s);
                 }
+            }
+            if (!lines.empty())
+            {
+                orbit_plot.add_lines(std::span<const OrbitPlotSystem::LineCommand>(lines.data(), lines.size()));
             }
         }
 

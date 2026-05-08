@@ -28,6 +28,7 @@ namespace Game
         std::span<const KeplerManeuverNode> maneuver_nodes{};
         uint64_t maneuver_revision{0};
         double celestial_nbody_horizon_s{0.0};
+        bool build_celestial_kepler_tracks{false};
         bool build_celestial_nbody_tracks{true};
     };
 

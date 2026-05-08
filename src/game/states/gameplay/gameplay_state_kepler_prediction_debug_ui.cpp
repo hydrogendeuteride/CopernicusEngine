@@ -74,6 +74,58 @@ namespace Game
         {
             mark_kepler_prediction_dirty();
         }
+
+        bool quality_changed = false;
+        ImGui::SeparatorText("Quality");
+        float spacecraft_max_dt_s = static_cast<float>(_kepler_tessellation_options.max_time_step_s);
+        if (ImGui::DragFloat("Spacecraft max dt (s)", &spacecraft_max_dt_s, 0.25f, 1.0f, 300.0f, "%.2f"))
+        {
+            _kepler_tessellation_options.max_time_step_s =
+                    static_cast<double>(std::clamp(spacecraft_max_dt_s, 1.0f, 300.0f));
+            quality_changed = true;
+        }
+
+        int spacecraft_max_vertices_per_arc =
+                static_cast<int>(std::min<std::size_t>(_kepler_tessellation_options.max_vertices_per_arc,
+                                                       200000u));
+        if (ImGui::DragInt("Spacecraft vertices / arc",
+                           &spacecraft_max_vertices_per_arc,
+                           64.0f,
+                           64,
+                           200000))
+        {
+            _kepler_tessellation_options.max_vertices_per_arc =
+                    static_cast<std::size_t>(std::clamp(spacecraft_max_vertices_per_arc, 64, 200000));
+            quality_changed = true;
+        }
+
+        int spacecraft_max_vertices_total =
+                static_cast<int>(std::min<std::size_t>(_kepler_tessellation_options.max_vertices_total,
+                                                       200000u));
+        if (ImGui::DragInt("Spacecraft vertices total",
+                           &spacecraft_max_vertices_total,
+                           64.0f,
+                           64,
+                           200000))
+        {
+            _kepler_tessellation_options.max_vertices_total =
+                    static_cast<std::size_t>(std::clamp(spacecraft_max_vertices_total, 64, 200000));
+            quality_changed = true;
+        }
+
+        float open_orbit_horizon_h =
+                static_cast<float>(_kepler_prediction_options.open_orbit_window_s / 3600.0);
+        if (ImGui::DragFloat("Open orbit horizon (h)", &open_orbit_horizon_h, 0.25f, 0.25f, 720.0f, "%.2f"))
+        {
+            _kepler_prediction_options.open_orbit_window_s =
+                    static_cast<double>(std::clamp(open_orbit_horizon_h, 0.25f, 720.0f)) * 3600.0;
+            quality_changed = true;
+        }
+
+        if (quality_changed)
+        {
+            mark_kepler_prediction_dirty();
+        }
         ImGui::Separator();
 
         const KeplerPredictionState &kepler = _kepler_prediction->state();
@@ -95,6 +147,11 @@ namespace Game
                                           static_cast<unsigned int>(kepler.world_reference_body_id));
             draw_kepler_debug_table_value("Build time", "%.3f s", kepler.build_time_s);
             draw_kepler_debug_table_value("Horizon", "%.3f s", kepler.horizon_s);
+            draw_kepler_debug_table_value(
+                    "Spacecraft dt / vertices", "%.3f s / %zu / %zu",
+                    _kepler_tessellation_options.max_time_step_s,
+                    _kepler_tessellation_options.max_vertices_per_arc,
+                    _kepler_tessellation_options.max_vertices_total);
             draw_kepler_debug_table_value(
                     "Celestial track horizon", "%.3f s",
                     _kepler_prediction_options.celestial_nbody_horizon_s);
@@ -134,10 +191,10 @@ namespace Game
                     kepler.celestial_nbody_ephemeris.forced_boundary_splits);
             draw_kepler_debug_table_bool("Celestial ephem cap hit",
                                          kepler.celestial_nbody_ephemeris.hard_cap_hit);
-            draw_kepler_debug_table_value("Base arcs / vertices", "%zu / %zu",
+            draw_kepler_debug_table_value("Base arcs / samples", "%zu / %zu",
                                           kepler.base_arcs.size(),
                                           kepler.base_lines.vertices.size());
-            draw_kepler_debug_table_value("Planned arcs / vertices", "%zu / %zu",
+            draw_kepler_debug_table_value("Planned arcs / samples", "%zu / %zu",
                                           kepler.planned_arcs.size(),
                                           kepler.planned_lines.vertices.size());
             if (kepler.metrics.valid)

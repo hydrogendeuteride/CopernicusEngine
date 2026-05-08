@@ -296,6 +296,68 @@ TEST(OrbitRenderCurveTests, CurveRenderLodSamplesSourcePathWhenMergedNodeSelecte
     EXPECT_TRUE(found_source_lobe_endpoint);
 }
 
+TEST(OrbitRenderCurveTests, CurveRenderLodChecksSourceBoundariesInsideMergedIntervals)
+{
+    const std::vector<orbitsim::TrajectorySegment> segments{
+            make_segment(0.0,
+                         1.0,
+                         glm::dvec3(0.0, 0.0, 10.0),
+                         glm::dvec3(1.0, 10.0, 0.0),
+                         glm::dvec3(1.0, 10.0, 10.0),
+                         glm::dvec3(1.0, 10.0, 0.0)),
+            make_segment(1.0,
+                         1.0,
+                         glm::dvec3(1.0, 10.0, 10.0),
+                         glm::dvec3(1.0, -10.0, 0.0),
+                         glm::dvec3(2.0, 0.0, 10.0),
+                         glm::dvec3(1.0, -10.0, 0.0)),
+            make_segment(2.0,
+                         2.0,
+                         glm::dvec3(2.0, 0.0, 10.0),
+                         glm::dvec3(1.0, 0.0, 0.0),
+                         glm::dvec3(4.0, 0.0, 10.0),
+                         glm::dvec3(1.0, 0.0, 0.0)),
+            make_segment(4.0,
+                         2.0,
+                         glm::dvec3(4.0, 0.0, 10.0),
+                         glm::dvec3(1.0, 0.0, 0.0),
+                         glm::dvec3(6.0, 0.0, 10.0),
+                         glm::dvec3(1.0, 0.0, 0.0)),
+            make_segment(6.0,
+                         2.0,
+                         glm::dvec3(6.0, 0.0, 10.0),
+                         glm::dvec3(1.0, 0.0, 0.0),
+                         glm::dvec3(8.0, 0.0, 10.0),
+                         glm::dvec3(1.0, 0.0, 0.0)),
+    };
+    const Game::OrbitRenderCurve curve = Game::OrbitRenderCurve::build(segments);
+
+    Game::OrbitRenderCurve::SelectionContext ctx{};
+    ctx.camera_world = glm::dvec3(4.0, 0.0, 0.0);
+    ctx.tan_half_fov = 1.0;
+    ctx.viewport_height_px = 1000.0;
+    ctx.error_px = 1.0e30; // force tree selection to accept the coarse merged root
+
+    Game::OrbitRenderCurve::RenderSettings settings{};
+    settings.error_px = 1.0;
+    settings.max_segments = 4096;
+
+    Game::OrbitRenderCurve::FrustumContext frustum{};
+
+    const Game::OrbitRenderCurve::RenderResult result =
+            Game::OrbitRenderCurve::build_render_lod(curve, ctx, frustum, settings, 0.0, 8.0);
+
+    ASSERT_GT(result.segments.size(), 1u);
+
+    double max_y = 0.0;
+    for (const Game::OrbitRenderCurve::LineSegment &segment : result.segments)
+    {
+        max_y = std::max(max_y, std::abs(segment.a_world.y));
+        max_y = std::max(max_y, std::abs(segment.b_world.y));
+    }
+    EXPECT_GT(max_y, 5.0);
+}
+
 TEST(OrbitRenderCurveTests, RenderLodSkipsCurveIntervalsOutsideFrustum)
 {
     const std::vector<orbitsim::TrajectorySegment> segments{

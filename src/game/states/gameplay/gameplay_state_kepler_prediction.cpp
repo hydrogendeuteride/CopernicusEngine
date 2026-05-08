@@ -47,14 +47,22 @@ namespace Game
         kepler_context.enabled = _prediction->state().enabled;
         kepler_context.current_sim_time_s = current_sim_time_s();
         kepler_context.options = _kepler_prediction_options;
+        kepler_context.tessellation = _kepler_tessellation_options;
         kepler_context.celestial_nbody_horizon_s = _kepler_prediction_options.celestial_nbody_horizon_s;
+        kepler_context.build_celestial_kepler_tracks = _kepler_draw_celestial_kepler_tracks;
         kepler_context.build_celestial_nbody_tracks = _kepler_draw_celestial_nbody_tracks;
 
         const int render_segment_budget = _prediction->budget().render_max_segments_cpu;
         if (render_segment_budget > 1)
         {
+            constexpr std::size_t kKeplerCurveSourceVertexCap = 16384u;
             kepler_context.tessellation.max_vertices_total =
-                    static_cast<std::size_t>(std::min(render_segment_budget + 1, 8192));
+                    std::min(kepler_context.tessellation.max_vertices_total,
+                             static_cast<std::size_t>(std::min(render_segment_budget + 1,
+                                                               static_cast<int>(kKeplerCurveSourceVertexCap))));
+            kepler_context.tessellation.max_vertices_per_arc =
+                    std::min(kepler_context.tessellation.max_vertices_per_arc,
+                             kepler_context.tessellation.max_vertices_total);
         }
 
         _kepler_prediction->update(kepler_context);

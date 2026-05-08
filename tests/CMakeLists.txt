@@ -32,6 +32,7 @@ set(NBODY_ORBIT_PREDICTION_SERVICE_SOURCES
 )
 
 set(NBODY_ORBIT_RENDER_CURVE_SOURCES
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/orbit_prediction_math.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve_render.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/render_curve/orbit_render_curve_pick.cpp"

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
 namespace Game
 {
@@ -86,6 +87,25 @@ namespace Game
             }
             out.vertices.push_back(vertex);
         }
+
+        bool finish_partial_line_set(KeplerOrbitLineSet &out,
+                                     const KeplerOrbitStatus status,
+                                     const std::size_t failed_arc_index,
+                                     const orbitsim::KeplerStatus first_kepler_failure = orbitsim::KeplerStatus::Ok)
+        {
+            out.diagnostics.status = status;
+            out.diagnostics.failed_arc_index = failed_arc_index;
+            if (first_kepler_failure != orbitsim::KeplerStatus::Ok)
+            {
+                out.diagnostics.first_kepler_failure = first_kepler_failure;
+            }
+            if (out.vertices.size() >= 2u)
+            {
+                out.valid = true;
+                return true;
+            }
+            return false;
+        }
     } // namespace
 
     KeplerOrbitLineSet build_kepler_orbit_lines(const KeplerOrbitTessellationRequest &request)
@@ -134,14 +154,6 @@ namespace Game
                     orbitsim::build_kepler_arc_samples(game_arc.arc, sample_options, &sample_diagnostics);
             out.diagnostics.requested_samples += sample_diagnostics.requested_samples;
             out.diagnostics.accepted_samples += sample_diagnostics.accepted_samples;
-            if (sample_diagnostics.first_failure != orbitsim::KeplerStatus::Ok)
-            {
-                out.diagnostics.status = KeplerOrbitStatus::PropagationFailed;
-                out.diagnostics.failed_arc_index = arc_index;
-                out.diagnostics.first_kepler_failure = sample_diagnostics.first_failure;
-                return out;
-            }
-
             if (samples.size() == allowed_samples &&
                 request.options.include_end &&
                 !samples.empty() &&
@@ -155,9 +167,10 @@ namespace Game
                 const orbitsim::KeplerArcSample &sample = samples[sample_index];
                 if (!sample.ok())
                 {
-                    out.diagnostics.status = KeplerOrbitStatus::PropagationFailed;
-                    out.diagnostics.failed_arc_index = arc_index;
-                    out.diagnostics.first_kepler_failure = sample.diagnostics.status;
+                    (void) finish_partial_line_set(out,
+                                                   KeplerOrbitStatus::PropagationFailed,
+                                                   arc_index,
+                                                   sample.diagnostics.status);
                     return out;
                 }
 
@@ -234,7 +247,11 @@ namespace Game
         }
 
         out.valid = true;
-        out.diagnostics.status = KeplerOrbitStatus::Ok;
+        if (out.diagnostics.status == KeplerOrbitStatus::InvalidInput)
+        {
+            out.diagnostics.status = KeplerOrbitStatus::Ok;
+        }
         return out;
     }
+
 } // namespace Game

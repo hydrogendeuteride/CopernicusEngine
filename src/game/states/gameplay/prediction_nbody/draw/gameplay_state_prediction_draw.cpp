@@ -73,7 +73,7 @@ namespace Game
         {
             out.render_frustum.valid = true;
             out.render_frustum.viewproj = ctx.renderer->_sceneManager->getSceneData().viewproj;
-            out.render_frustum.origin_world = WorldVec3(out.camera_world);
+            out.render_frustum.origin_world = ctx.renderer->_sceneManager->get_world_origin();
         }
 
         out.render_error_px =
