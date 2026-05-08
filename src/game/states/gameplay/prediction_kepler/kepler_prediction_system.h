@@ -27,7 +27,6 @@ namespace Game
         KeplerOrbitTessellationOptions tessellation{};
         std::span<const KeplerManeuverNode> maneuver_nodes{};
         uint64_t maneuver_revision{0};
-        double celestial_nbody_horizon_s{0.0};
         bool build_celestial_kepler_tracks{false};
         bool build_celestial_nbody_tracks{true};
     };
@@ -52,8 +51,11 @@ namespace Game
             KeplerBodyStateProvider body_state_provider{};
             double t0_s{0.0};
             double t_end_s{0.0};
+            double uncapped_required_horizon_s{0.0};
             double required_horizon_s{0.0};
             double built_horizon_s{0.0};
+            double horizon_cap_s{0.0};
+            bool horizon_capped{false};
             double gravitational_constant{0.0};
             double softening_length_m{0.0};
             KeplerCelestialNBodyEphemerisOptions ephemeris_options{};
@@ -66,7 +68,11 @@ namespace Game
 
         [[nodiscard]] const CelestialNBodyEphemerisCache &resolve_celestial_nbody_cache(
                 const KeplerPredictionUpdateContext &context,
-                const KeplerWorldFrame &world_frame);
+                const KeplerWorldFrame &world_frame,
+                double required_horizon_s,
+                double uncapped_required_horizon_s,
+                double horizon_cap_s,
+                bool horizon_capped);
 
         KeplerPredictionState _state{};
         CelestialNBodyEphemerisCache _celestial_nbody_cache{};

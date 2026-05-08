@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/states/gameplay/gameplay_settings.h"
+#include "game/states/gameplay/settings/gameplay_settings.h"
 #include "game/states/gameplay/prediction_nbody/gameplay_prediction_derived_service.h"
 #include "game/states/gameplay/prediction_nbody/gameplay_state_prediction_types.h"
 

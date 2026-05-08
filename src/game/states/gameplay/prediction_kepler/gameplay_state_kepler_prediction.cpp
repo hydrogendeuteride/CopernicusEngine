@@ -48,7 +48,6 @@ namespace Game
         kepler_context.current_sim_time_s = current_sim_time_s();
         kepler_context.options = _kepler_prediction_options;
         kepler_context.tessellation = _kepler_tessellation_options;
-        kepler_context.celestial_nbody_horizon_s = _kepler_prediction_options.celestial_nbody_horizon_s;
         kepler_context.build_celestial_kepler_tracks = _kepler_draw_celestial_kepler_tracks;
         kepler_context.build_celestial_nbody_tracks = _kepler_draw_celestial_nbody_tracks;
 

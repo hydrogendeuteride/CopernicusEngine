@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/world.h"
-#include "game/states/gameplay/gameplay_settings.h"
+#include "game/states/gameplay/settings/gameplay_settings.h"
 #include "game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_types.h"
 #include "game/states/gameplay/prediction_nbody/gameplay_state_prediction_types.h"
 

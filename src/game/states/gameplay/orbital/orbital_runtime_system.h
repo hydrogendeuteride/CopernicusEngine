@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/states/gameplay/orbit_runtime_types.h"
+#include "game/states/gameplay/orbital/orbit_runtime.h"
 
 #include <memory>
 #include <string_view>

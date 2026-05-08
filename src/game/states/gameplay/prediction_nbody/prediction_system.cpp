@@ -2,7 +2,7 @@
 
 #include "game/orbit/nbody/service.h"
 #include "game/states/gameplay/gameplay_state.h"
-#include "game/states/gameplay/orbit_helpers.h"
+#include "game/states/gameplay/orbital/orbit_runtime.h"
 #include "game/states/gameplay/prediction_nbody/runtime/prediction_invalidation_controller.h"
 #include "game/states/gameplay/prediction_nbody/runtime/prediction_lifecycle_reducer.h"
 #include "game/states/gameplay/prediction_nbody/runtime/prediction_runtime_controller.h"

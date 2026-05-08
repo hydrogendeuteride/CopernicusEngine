@@ -31,7 +31,12 @@ namespace Game
 
         double fallback_horizon_s(const KeplerPredictionOptions &options)
         {
-            return positive_or_default(options.celestial_nbody_horizon_s, 6.0 * 60.0 * 60.0);
+            return positive_or_default(options.open_orbit_window_s, 24.0 * 60.0 * 60.0);
+        }
+
+        double configured_horizon_cap_s(const KeplerPredictionOptions &options)
+        {
+            return positive_or_default(options.celestial_nbody_horizon_cap_s, 0.0);
         }
 
         std::size_t positive_size_or_default(const std::size_t value,
@@ -221,20 +226,23 @@ namespace Game
         return fallback_horizon_s(request.options);
     }
 
-    double select_kepler_celestial_nbody_horizon_s(
-            const orbitsim::GameSimulation &simulation,
-            const orbitsim::BodyId body_id,
-            const KeplerPredictionOptions &options,
-            const double requested_horizon_s)
+    KeplerCelestialNBodyHorizonLimit limit_kepler_celestial_nbody_horizon(
+            const double horizon_s,
+            const KeplerPredictionOptions &options)
     {
-        (void) simulation;
-        (void) body_id;
-        if (std::isfinite(requested_horizon_s) && requested_horizon_s > 0.0)
-        {
-            return requested_horizon_s;
-        }
+        KeplerCelestialNBodyHorizonLimit out{};
+        out.uncapped_horizon_s = positive_or_default(horizon_s, 0.0);
+        out.horizon_s = out.uncapped_horizon_s;
+        out.cap_s = configured_horizon_cap_s(options);
 
-        return fallback_horizon_s(options);
+        if (out.cap_s > 0.0 &&
+            std::isfinite(out.cap_s) &&
+            out.horizon_s > out.cap_s)
+        {
+            out.horizon_s = out.cap_s;
+            out.capped = true;
+        }
+        return out;
     }
 
     KeplerBodyStateProvider make_kepler_celestial_nbody_state_provider(

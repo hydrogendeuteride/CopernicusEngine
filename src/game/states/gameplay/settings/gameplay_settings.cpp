@@ -1,4 +1,4 @@
-#include "game/states/gameplay/gameplay_settings.h"
+#include "game/states/gameplay/settings/gameplay_settings.h"
 #include "core/util/logger.h"
 
 #include <nlohmann/json.hpp>

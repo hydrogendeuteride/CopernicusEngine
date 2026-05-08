@@ -2,7 +2,7 @@
 
 #include "game/game_world.h"
 #include "game/states/gameplay/maneuver_nbody/maneuver_system.h"
-#include "game/states/gameplay/orbital_runtime_system.h"
+#include "game/states/gameplay/orbital/orbital_runtime_system.h"
 #include "game/states/gameplay/prediction_nbody/prediction_subject_state_provider.h"
 #include "game/states/gameplay/prediction_nbody/prediction_system.h"
 #include "game/states/gameplay/prediction_nbody/prediction_trajectory_sampler.h"

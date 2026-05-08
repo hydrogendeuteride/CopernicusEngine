@@ -1,8 +1,8 @@
-#include "game/states/gameplay/formation_hold_system.h"
+#include "game/states/gameplay/orbital/formation_hold_system.h"
 
 #include "game/game_world.h"
-#include "game/states/gameplay/orbit_helpers.h"
-#include "game/states/gameplay/orbital_runtime_system.h"
+#include "game/states/gameplay/orbital/orbit_runtime.h"
+#include "game/states/gameplay/orbital/orbital_runtime_system.h"
 #include "orbitsim/coordinate_frames.hpp"
 #include "orbitsim/frame_utils.hpp"
 #include "physics/physics_world.h"

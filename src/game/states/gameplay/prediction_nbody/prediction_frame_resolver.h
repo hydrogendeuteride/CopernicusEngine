@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/states/gameplay/orbit_helpers.h"
+#include "game/states/gameplay/orbital/orbit_runtime.h"
 #include "game/states/gameplay/prediction_nbody/gameplay_state_prediction_types.h"
 
 #include "orbitsim/coordinate_frames.hpp"

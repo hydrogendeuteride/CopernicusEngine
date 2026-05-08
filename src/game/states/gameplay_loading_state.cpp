@@ -1,6 +1,6 @@
 #include "gameplay_loading_state.h"
 
-#include "game/states/gameplay/gameplay_preload_cache.h"
+#include "game/states/gameplay/settings/gameplay_preload_cache.h"
 #include "game/states/gameplay/gameplay_state.h"
 #include "game/states/gameplay/scenario/scenario_loader.h"
 #include "game/states/title_screen_state.h"

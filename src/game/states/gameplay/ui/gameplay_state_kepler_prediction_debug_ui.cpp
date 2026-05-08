@@ -1,4 +1,4 @@
-#include "gameplay_state.h"
+#include "game/states/gameplay/gameplay_state.h"
 
 #include "game/orbit/kepler/kepler_debug.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
@@ -138,6 +138,24 @@ namespace Game
             quality_changed = true;
         }
 
+        float celestial_nbody_horizon_cap_h =
+                static_cast<float>(_kepler_prediction_options.celestial_nbody_horizon_cap_s / 3600.0);
+        if (ImGui::DragFloat("Celestial N-body cap (h)",
+                             &celestial_nbody_horizon_cap_h,
+                             0.25f,
+                             0.0f,
+                             720.0f,
+                             "%.2f"))
+        {
+            _kepler_prediction_options.celestial_nbody_horizon_cap_s =
+                    celestial_nbody_horizon_cap_h > 0.0f
+                            ? static_cast<double>(std::clamp(celestial_nbody_horizon_cap_h,
+                                                             0.25f,
+                                                             720.0f)) * 3600.0
+                            : 0.0;
+            quality_changed = true;
+        }
+
         if (quality_changed)
         {
             mark_kepler_prediction_dirty();
@@ -170,12 +188,19 @@ namespace Game
                     _kepler_tessellation_options.max_vertices_per_arc,
                     _kepler_tessellation_options.max_vertices_total);
             draw_kepler_debug_table_value(
-                    "Celestial track horizon", "%.3f s",
-                    _kepler_prediction_options.celestial_nbody_horizon_s);
-            draw_kepler_debug_table_value(
                     "Celestial line dt / vertices", "%.3f s / %zu",
                     _kepler_prediction_options.celestial_line_max_time_step_s,
                     _kepler_prediction_options.celestial_line_max_vertices_per_track);
+            if (_kepler_prediction_options.celestial_nbody_horizon_cap_s > 0.0)
+            {
+                draw_kepler_debug_table_value(
+                        "Celestial N-body cap", "%.3f s",
+                        _kepler_prediction_options.celestial_nbody_horizon_cap_s);
+            }
+            else
+            {
+                draw_kepler_debug_table_value("Celestial N-body cap", "%s", "disabled");
+            }
             draw_kepler_debug_table_value(
                     "Celestial ephem dt setting", "%.6f / %.3f s",
                     _kepler_prediction_options.celestial_nbody_ephemeris.min_dt_s,
@@ -186,9 +211,12 @@ namespace Game
                     "Celestial ephem status", "%s",
                     kepler_orbit_status_name(kepler.celestial_nbody_ephemeris.status));
             draw_kepler_debug_table_value(
-                    "Celestial ephem horizon", "req %.3f s / built %.3f s",
+                    "Celestial ephem horizon", "src %.3f s / req %.3f s / built %.3f s",
+                    kepler.celestial_nbody_ephemeris.uncapped_required_horizon_s,
                     kepler.celestial_nbody_ephemeris.required_horizon_s,
                     kepler.celestial_nbody_ephemeris.built_horizon_s);
+            draw_kepler_debug_table_bool("Celestial horizon capped",
+                                         kepler.celestial_nbody_ephemeris.horizon_capped);
             draw_kepler_debug_table_value(
                     "Celestial ephem window", "%.3f - %.3f s",
                     kepler.celestial_nbody_ephemeris.t0_s,

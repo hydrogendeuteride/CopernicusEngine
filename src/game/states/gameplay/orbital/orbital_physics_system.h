@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/states/gameplay/formation_hold_system.h"
+#include "game/states/gameplay/orbital/formation_hold_system.h"
 
 #include <glm/glm.hpp>
 
@@ -22,6 +22,19 @@ namespace Game
     struct Keybinds;
     struct OrbiterInfo;
     struct ScenarioConfig;
+
+    struct GameplayOrbitalContextInputs
+    {
+        VulkanEngine *renderer{nullptr};
+        GameWorld &world;
+        OrbitalRuntimeSystem &orbit;
+        Physics::PhysicsWorld *physics{nullptr};
+        Physics::PhysicsContext *physics_context{nullptr};
+        const ScenarioConfig &scenario_config;
+        const Keybinds *keybinds{nullptr};
+        std::function<bool(const GameStateContext &)> ui_capture_keyboard{};
+        std::function<void()> mark_prediction_dirty{};
+    };
 
     class OrbitalPhysicsSystem
     {
@@ -85,5 +98,16 @@ namespace Game
         bool _rails_thrust_applied_this_tick{false};
         glm::vec3 _rails_last_thrust_dir_local{0.0f};
         glm::vec3 _rails_last_torque_dir_local{0.0f};
+    };
+
+    class GameplayOrbitalContextBuilder
+    {
+    public:
+        explicit GameplayOrbitalContextBuilder(GameplayOrbitalContextInputs inputs);
+
+        [[nodiscard]] OrbitalPhysicsSystem::Context build() const;
+
+    private:
+        GameplayOrbitalContextInputs _inputs;
     };
 } // namespace Game

@@ -2,8 +2,8 @@
 
 #include "game/state/game_state.h"
 #include "game/states/gameplay/maneuver_nbody/maneuver_system.h"
-#include "game/states/gameplay/orbital_physics_system.h"
-#include "game/states/gameplay/orbital_runtime_system.h"
+#include "game/states/gameplay/orbital/orbital_physics_system.h"
+#include "game/states/gameplay/orbital/orbital_runtime_system.h"
 #include "game/states/gameplay/prediction_nbody/prediction_frame_context_builder.h"
 #include "game/states/gameplay/prediction_nbody/runtime/prediction_window_context_builder.h"
 

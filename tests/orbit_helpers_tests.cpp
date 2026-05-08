@@ -1,4 +1,4 @@
-#include "game/states/gameplay/orbit_helpers.h"
+#include "game/states/gameplay/orbital/orbit_runtime.h"
 
 #include <gtest/gtest.h>
 
@@ -48,7 +48,7 @@ namespace
         ref_info.name = "reference";
         ref_info.mass_kg = reference_mass_kg;
         scenario.bodies.push_back(ref_info);
-        scenario.reference_body_index = 0;
+        scenario.world_reference_body_index = 0;
 
         return scenario;
     }

@@ -107,8 +107,8 @@ set(GAME_ORBIT_KEPLER_SOURCES
 )
 
 set(GAMEPLAY_KEPLER_PREDICTION_SOURCES
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_orbit_prediction.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_kepler_prediction.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_nbody/gameplay_state_orbit_prediction.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/gameplay_state_kepler_prediction.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_subject.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_draw.cpp"
@@ -315,12 +315,10 @@ add_test(NAME time_warp_state_tests COMMAND time_warp_state_tests)
 add_executable(gameplay_time_warp_transition_tests
   gameplay_time_warp_transition_tests.cpp
   gameplay_state_test_stubs.cpp
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_runtime_system.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_orbital_context.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_world_state_provider.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_physics_bridge.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/formation_hold_system.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_physics_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/orbital_runtime_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/orbiter_state_bridge.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/formation_hold_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/orbital_physics_system.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_sim.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_nbody/gameplay_prediction_state.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/orbit_prediction_math.cpp"
@@ -386,12 +384,10 @@ add_executable(gameplay_prediction_maneuver_tests
   ${GAME_ORBIT_KEPLER_SOURCES}
   ${GAMEPLAY_KEPLER_PREDICTION_SOURCES}
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_sim.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_physics_system.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_physics_bridge.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital_runtime_system.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_orbital_context.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbiter_world_state_provider.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/formation_hold_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/orbital_physics_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/orbiter_state_bridge.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/orbital_runtime_system.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/orbital/formation_hold_system.cpp"
   ${GAMEPLAY_NBODY_PREDICTION_SOURCES}
   ${GAMEPLAY_NBODY_MANEUVER_RUNTIME_SOURCES}
   "${PROJECT_SOURCE_DIR}/src/core/util/logger.cpp"

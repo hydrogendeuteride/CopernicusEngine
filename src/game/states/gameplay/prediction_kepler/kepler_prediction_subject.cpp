@@ -1,8 +1,8 @@
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_subject.h"
 
 #include "game/game_world.h"
-#include "game/states/gameplay/orbiter_world_state_provider.h"
-#include "game/states/gameplay/orbital_runtime_system.h"
+#include "game/states/gameplay/orbital/orbiter_state_bridge.h"
+#include "game/states/gameplay/orbital/orbital_runtime_system.h"
 #include "game/states/gameplay/scenario/scenario_config.h"
 
 #include <cmath>

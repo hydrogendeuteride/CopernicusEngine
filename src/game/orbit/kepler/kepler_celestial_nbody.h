@@ -42,11 +42,17 @@ namespace Game
         KeplerOrbitTessellationOptions tessellation{};
     };
 
-    [[nodiscard]] double select_kepler_celestial_nbody_horizon_s(
-            const orbitsim::GameSimulation &simulation,
-            orbitsim::BodyId body_id,
-            const KeplerPredictionOptions &options,
-            double requested_horizon_s = 0.0);
+    struct KeplerCelestialNBodyHorizonLimit
+    {
+        double uncapped_horizon_s{0.0};
+        double horizon_s{0.0};
+        double cap_s{0.0};
+        bool capped{false};
+    };
+
+    [[nodiscard]] KeplerCelestialNBodyHorizonLimit limit_kepler_celestial_nbody_horizon(
+            double horizon_s,
+            const KeplerPredictionOptions &options);
 
     [[nodiscard]] double select_kepler_celestial_nbody_ephemeris_horizon_s(
             const KeplerCelestialNBodyEphemerisRequest &request);

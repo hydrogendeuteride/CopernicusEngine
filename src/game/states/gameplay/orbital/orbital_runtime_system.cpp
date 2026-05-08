@@ -1,6 +1,6 @@
-#include "game/states/gameplay/orbital_runtime_system.h"
+#include "game/states/gameplay/orbital/orbital_runtime_system.h"
 
-#include "game/states/gameplay/orbit_helpers.h"
+#include "game/states/gameplay/orbital/orbit_runtime.h"
 #include "game/states/gameplay/scenario/scenario_config.h"
 
 #include <algorithm>

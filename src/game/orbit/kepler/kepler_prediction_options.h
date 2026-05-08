@@ -25,7 +25,7 @@ namespace Game
         double elliptic_period_count{1.0};
         double open_orbit_window_s{24.0 * 60.0 * 60.0};
         double fallback_primary_hysteresis_keep_ratio{0.90};
-        double celestial_nbody_horizon_s{6.0 * 60.0 * 60.0};
+        double celestial_nbody_horizon_cap_s{24.0 * 60.0 * 60.0};
         double celestial_line_max_time_step_s{300.0};
         std::size_t celestial_line_max_vertices_per_track{256};
         orbitsim::SoiSwitchOptions primary_switch{};

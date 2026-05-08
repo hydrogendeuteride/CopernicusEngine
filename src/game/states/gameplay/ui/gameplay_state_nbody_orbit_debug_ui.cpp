@@ -1,4 +1,4 @@
-#include "gameplay_state.h"
+#include "game/states/gameplay/gameplay_state.h"
 #include "game/orbit/nbody/tuning.h"
 #include "game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_gizmo_helpers.h"
 #include "game/states/gameplay/prediction_nbody/gameplay_prediction_adapter.h"

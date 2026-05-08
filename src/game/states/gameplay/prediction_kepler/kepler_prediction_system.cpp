@@ -1,11 +1,12 @@
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 
 #include "game/orbit/kepler/kepler_celestial_nbody.h"
-#include "game/states/gameplay/orbital_runtime_system.h"
+#include "game/states/gameplay/orbital/orbital_runtime_system.h"
 
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -231,20 +232,20 @@ namespace Game
                 const KeplerPredictionSubject &subject,
                 const KeplerPredictionUpdateContext &context,
                 const KeplerWorldFrame &world_frame,
-                const KeplerSharedCelestialEphemeris &ephemeris)
+                const KeplerSharedCelestialEphemeris &ephemeris,
+                const double horizon_s)
         {
-            if (!context.orbit || !context.orbit->scenario() || !ephemeris || ephemeris->empty())
+            if (!context.orbit ||
+                !context.orbit->scenario() ||
+                !ephemeris ||
+                ephemeris->empty() ||
+                !(horizon_s > 0.0) ||
+                !std::isfinite(horizon_s))
             {
                 return make_invalid_celestial_nbody_track(subject,
                                                           KeplerOrbitStatus::EphemerisUnavailable);
             }
 
-            const orbitsim::GameSimulation &simulation = context.orbit->scenario()->sim;
-            const double horizon_s =
-                    select_kepler_celestial_nbody_horizon_s(simulation,
-                                                            subject.body_id,
-                                                            context.options,
-                                                            context.celestial_nbody_horizon_s);
             KeplerOrbitLineSet lines = build_kepler_celestial_nbody_lines(
                     KeplerCelestialNBodyLineRequest{
                             .ephemeris = ephemeris,
@@ -275,6 +276,98 @@ namespace Game
         double positive_or_default(const double value, const double fallback)
         {
             return (std::isfinite(value) && value > 0.0) ? value : fallback;
+        }
+
+        double fallback_prediction_horizon_s(const KeplerPredictionUpdateContext &context)
+        {
+            if (std::isfinite(context.requested_horizon_s) && context.requested_horizon_s > 0.0)
+            {
+                return context.requested_horizon_s;
+            }
+            return positive_or_default(context.options.open_orbit_window_s,
+                                       24.0 * 60.0 * 60.0);
+        }
+
+        struct ResolvedCelestialNBodyHorizon
+        {
+            double uncapped_horizon_s{0.0};
+            double horizon_s{0.0};
+            double cap_s{0.0};
+            bool capped{false};
+        };
+
+        double estimate_track_horizon_s(const KeplerPredictionSubject &subject,
+                                        const KeplerPredictionUpdateContext &context,
+                                        const KeplerWorldFrame &world_frame,
+                                        const orbitsim::BodyId previous_primary_body_id)
+        {
+            if (!context.orbit || !context.orbit->scenario())
+            {
+                return 0.0;
+            }
+
+            const orbitsim::GameSimulation &simulation = context.orbit->scenario()->sim;
+            KeplerOrbitBuildRequest request{};
+            request.simulation = &simulation;
+            request.ephemeris = nullptr;
+            request.subject_state_inertial = subject.state_inertial;
+            request.t0_s = context.current_sim_time_s;
+            request.requested_horizon_s = context.requested_horizon_s;
+            request.fixed_primary_body_id =
+                    subject.celestial
+                            ? select_celestial_kepler_primary_body_id(simulation, subject, world_frame)
+                            : context.fixed_primary_body_id;
+            request.current_primary_body_id =
+                    subject.active_player ? previous_primary_body_id : orbitsim::kInvalidBodyId;
+            request.options = context.options;
+
+            const KeplerOrbitBuildResult orbit = build_kepler_orbit(request);
+            return (orbit.valid && std::isfinite(orbit.horizon_s) && orbit.horizon_s > 0.0)
+                           ? orbit.horizon_s
+                           : 0.0;
+        }
+
+        ResolvedCelestialNBodyHorizon resolve_required_celestial_nbody_horizon(
+                const std::span<const KeplerPredictionSubject> subjects,
+                const KeplerPredictionUpdateContext &context,
+                const KeplerWorldFrame &world_frame,
+                const orbitsim::BodyId previous_primary_body_id)
+        {
+            double uncapped_horizon_s = 0.0;
+            for (const KeplerPredictionSubject &subject : subjects)
+            {
+                const double track_horizon_s =
+                        estimate_track_horizon_s(subject,
+                                                 context,
+                                                 world_frame,
+                                                 previous_primary_body_id);
+                uncapped_horizon_s = std::max(uncapped_horizon_s,
+                                              track_horizon_s);
+            }
+
+            if (!(uncapped_horizon_s > 0.0) || !std::isfinite(uncapped_horizon_s))
+            {
+                const KeplerCelestialNBodyHorizonLimit fallback =
+                        limit_kepler_celestial_nbody_horizon(
+                                fallback_prediction_horizon_s(context),
+                                context.options);
+                return ResolvedCelestialNBodyHorizon{
+                        .uncapped_horizon_s = fallback.uncapped_horizon_s,
+                        .horizon_s = fallback.horizon_s,
+                        .cap_s = fallback.cap_s,
+                        .capped = fallback.capped,
+                };
+            }
+
+            const KeplerCelestialNBodyHorizonLimit limited =
+                    limit_kepler_celestial_nbody_horizon(uncapped_horizon_s,
+                                                         context.options);
+            return ResolvedCelestialNBodyHorizon{
+                    .uncapped_horizon_s = uncapped_horizon_s,
+                    .horizon_s = limited.horizon_s,
+                    .cap_s = limited.cap_s,
+                    .capped = limited.capped,
+            };
         }
 
         double cache_reuse_horizon_s(const double required_horizon_s)
@@ -326,7 +419,11 @@ namespace Game
     const KeplerPredictionSystem::CelestialNBodyEphemerisCache &
     KeplerPredictionSystem::resolve_celestial_nbody_cache(
             const KeplerPredictionUpdateContext &context,
-            const KeplerWorldFrame &world_frame)
+            const KeplerWorldFrame &world_frame,
+            const double required_horizon_s,
+            const double uncapped_required_horizon_s,
+            const double horizon_cap_s,
+            const bool horizon_capped)
     {
         if (!context.orbit || !context.orbit->scenario() || !std::isfinite(context.current_sim_time_s))
         {
@@ -340,11 +437,9 @@ namespace Game
         horizon_request.simulation = &simulation;
         horizon_request.world_frame = world_frame;
         horizon_request.t0_s = context.current_sim_time_s;
-        horizon_request.requested_horizon_s = context.celestial_nbody_horizon_s;
+        horizon_request.requested_horizon_s = required_horizon_s;
         horizon_request.options = context.options;
 
-        const double required_horizon_s =
-                select_kepler_celestial_nbody_ephemeris_horizon_s(horizon_request);
         const double required_end_s = context.current_sim_time_s + required_horizon_s;
         if (!(required_horizon_s > 0.0) ||
             !std::isfinite(required_horizon_s) ||
@@ -390,7 +485,11 @@ namespace Game
                                   _celestial_nbody_cache.t_end_s + kTimeEpsilonS >= required_end_s;
         if (cache_matches && cache_covers)
         {
+            _celestial_nbody_cache.uncapped_required_horizon_s =
+                    uncapped_required_horizon_s;
             _celestial_nbody_cache.required_horizon_s = required_horizon_s;
+            _celestial_nbody_cache.horizon_cap_s = horizon_cap_s;
+            _celestial_nbody_cache.horizon_capped = horizon_capped;
             return _celestial_nbody_cache;
         }
 
@@ -404,8 +503,11 @@ namespace Game
         CelestialNBodyEphemerisCache next_cache{};
         next_cache.status = built.status;
         next_cache.diagnostics = built.diagnostics;
+        next_cache.uncapped_required_horizon_s = uncapped_required_horizon_s;
         next_cache.required_horizon_s = required_horizon_s;
         next_cache.built_horizon_s = built.horizon_s;
+        next_cache.horizon_cap_s = horizon_cap_s;
+        next_cache.horizon_capped = horizon_capped;
 
         if (!built.valid || !built.ephemeris || built.ephemeris->empty())
         {
@@ -527,16 +629,33 @@ namespace Game
 
         const bool needs_celestial_nbody_cache =
                 context.build_celestial_nbody_tracks || context.build_celestial_kepler_tracks;
+        const ResolvedCelestialNBodyHorizon required_celestial_nbody_horizon =
+                needs_celestial_nbody_cache
+                        ? resolve_required_celestial_nbody_horizon(
+                                  std::span<const KeplerPredictionSubject>(subjects.data(), subjects.size()),
+                                  context,
+                                  world_frame,
+                                  previous_primary_body_id)
+                        : ResolvedCelestialNBodyHorizon{};
         const CelestialNBodyEphemerisCache &celestial_nbody =
                 needs_celestial_nbody_cache
-                        ? resolve_celestial_nbody_cache(context, world_frame)
+                        ? resolve_celestial_nbody_cache(context,
+                                                        world_frame,
+                                                        required_celestial_nbody_horizon.horizon_s,
+                                                        required_celestial_nbody_horizon.uncapped_horizon_s,
+                                                        required_celestial_nbody_horizon.cap_s,
+                                                        required_celestial_nbody_horizon.capped)
                         : _celestial_nbody_cache;
         _state.celestial_nbody_ephemeris.valid = celestial_nbody.valid;
         _state.celestial_nbody_ephemeris.status = celestial_nbody.status;
+        _state.celestial_nbody_ephemeris.uncapped_required_horizon_s =
+                celestial_nbody.uncapped_required_horizon_s;
         _state.celestial_nbody_ephemeris.required_horizon_s =
                 celestial_nbody.required_horizon_s;
         _state.celestial_nbody_ephemeris.built_horizon_s =
                 celestial_nbody.built_horizon_s;
+        _state.celestial_nbody_ephemeris.horizon_cap_s =
+                celestial_nbody.horizon_cap_s;
         _state.celestial_nbody_ephemeris.t0_s = celestial_nbody.t0_s;
         _state.celestial_nbody_ephemeris.t_end_s = celestial_nbody.t_end_s;
         _state.celestial_nbody_ephemeris.body_count = celestial_nbody.body_ids.size();
@@ -552,6 +671,8 @@ namespace Game
                 celestial_nbody.diagnostics.avg_dt_s;
         _state.celestial_nbody_ephemeris.max_dt_s =
                 celestial_nbody.diagnostics.max_dt_s;
+        _state.celestial_nbody_ephemeris.horizon_capped =
+                celestial_nbody.horizon_capped;
         _state.celestial_nbody_ephemeris.hard_cap_hit =
                 celestial_nbody.diagnostics.hard_cap_hit;
         _state.celestial_nbody_ephemeris.cancelled =
@@ -583,7 +704,8 @@ namespace Game
                 _state.tracks.push_back(build_celestial_nbody_track(subject,
                                                                     context,
                                                                     world_frame,
-                                                                    celestial_nbody.ephemeris));
+                                                                    celestial_nbody.ephemeris,
+                                                                    required_celestial_nbody_horizon.horizon_s));
             }
         }
 

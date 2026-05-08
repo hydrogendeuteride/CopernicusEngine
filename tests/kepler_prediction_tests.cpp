@@ -214,7 +214,7 @@ TEST(KeplerPrediction, CelestialNBodyEphemerisBuildsMovingBodyLines)
               0.0);
 }
 
-TEST(KeplerPrediction, CelestialNBodyHorizonUsesConfiguredWindow)
+TEST(KeplerPrediction, CelestialNBodyEphemerisUsesRequestedWindow)
 {
     orbitsim::GameSimulation sim = make_two_body_sim();
     const orbitsim::MassiveBody *earth = sim.body_by_id(kEarthId);
@@ -226,14 +226,36 @@ TEST(KeplerPrediction, CelestialNBodyHorizonUsesConfiguredWindow)
     world_frame.world_reference_state_inertial = earth->state;
 
     Game::KeplerPredictionOptions prediction_options{};
-    prediction_options.celestial_nbody_horizon_s = 7'200.0;
+    prediction_options.open_orbit_window_s = 3'600.0;
 
-    EXPECT_TRUE(near_abs(Game::select_kepler_celestial_nbody_horizon_s(
-                                 sim,
-                                 kMoonId,
-                                 prediction_options),
-                         7'200.0,
-                         1.0e-12));
+    const Game::KeplerCelestialNBodyEphemerisResult ephemeris =
+            Game::build_kepler_celestial_nbody_ephemeris(
+                    Game::KeplerCelestialNBodyEphemerisRequest{
+                            .simulation = &sim,
+                            .world_frame = world_frame,
+                            .t0_s = 0.0,
+                            .requested_horizon_s = 7'200.0,
+                            .options = prediction_options,
+                    });
+
+    ASSERT_TRUE(ephemeris.valid) << Game::kepler_orbit_status_name(ephemeris.status);
+    EXPECT_TRUE(near_abs(ephemeris.horizon_s, 7'200.0, 1.0e-12));
+    EXPECT_TRUE(near_abs(ephemeris.ephemeris->t_end_s(), 7'200.0, 1.0e-12));
+}
+
+TEST(KeplerPrediction, CelestialNBodyEphemerisFallsBackToPredictionWindow)
+{
+    orbitsim::GameSimulation sim = make_two_body_sim();
+    const orbitsim::MassiveBody *earth = sim.body_by_id(kEarthId);
+    ASSERT_NE(earth, nullptr);
+
+    Game::KeplerWorldFrame world_frame{};
+    world_frame.world_reference_body_world = WorldVec3{0.0, 0.0, 0.0};
+    world_frame.world_reference_body_id = kEarthId;
+    world_frame.world_reference_state_inertial = earth->state;
+
+    Game::KeplerPredictionOptions prediction_options{};
+    prediction_options.open_orbit_window_s = 7'200.0;
 
     const Game::KeplerCelestialNBodyEphemerisResult ephemeris =
             Game::build_kepler_celestial_nbody_ephemeris(
@@ -247,6 +269,28 @@ TEST(KeplerPrediction, CelestialNBodyHorizonUsesConfiguredWindow)
     ASSERT_TRUE(ephemeris.valid) << Game::kepler_orbit_status_name(ephemeris.status);
     EXPECT_TRUE(near_abs(ephemeris.horizon_s, 7'200.0, 1.0e-12));
     EXPECT_TRUE(near_abs(ephemeris.ephemeris->t_end_s(), 7'200.0, 1.0e-12));
+}
+
+TEST(KeplerPrediction, CelestialNBodyHorizonLimitCapsLongWindows)
+{
+    Game::KeplerPredictionOptions prediction_options{};
+    prediction_options.celestial_nbody_horizon_cap_s = 7'200.0;
+
+    const Game::KeplerCelestialNBodyHorizonLimit capped =
+            Game::limit_kepler_celestial_nbody_horizon(28'800.0,
+                                                       prediction_options);
+    EXPECT_TRUE(capped.capped);
+    EXPECT_TRUE(near_abs(capped.uncapped_horizon_s, 28'800.0, 1.0e-12));
+    EXPECT_TRUE(near_abs(capped.horizon_s, 7'200.0, 1.0e-12));
+    EXPECT_TRUE(near_abs(capped.cap_s, 7'200.0, 1.0e-12));
+
+    prediction_options.celestial_nbody_horizon_cap_s = 0.0;
+    const Game::KeplerCelestialNBodyHorizonLimit uncapped =
+            Game::limit_kepler_celestial_nbody_horizon(28'800.0,
+                                                       prediction_options);
+    EXPECT_FALSE(uncapped.capped);
+    EXPECT_TRUE(near_abs(uncapped.horizon_s, 28'800.0, 1.0e-12));
+    EXPECT_TRUE(near_abs(uncapped.cap_s, 0.0, 1.0e-12));
 }
 
 int main(int argc, char **argv)

@@ -41,8 +41,10 @@ namespace Game
         {
             bool valid{false};
             KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
+            double uncapped_required_horizon_s{0.0};
             double required_horizon_s{0.0};
             double built_horizon_s{0.0};
+            double horizon_cap_s{0.0};
             double t0_s{0.0};
             double t_end_s{0.0};
             std::size_t body_count{0};
@@ -52,6 +54,7 @@ namespace Game
             double min_dt_s{0.0};
             double avg_dt_s{0.0};
             double max_dt_s{0.0};
+            bool horizon_capped{false};
             bool hard_cap_hit{false};
             bool cancelled{false};
         };

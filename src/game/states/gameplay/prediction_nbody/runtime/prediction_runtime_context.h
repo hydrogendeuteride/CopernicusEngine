@@ -1,8 +1,8 @@
 #pragma once
 
-#include "game/states/gameplay/gameplay_settings.h"
+#include "game/states/gameplay/settings/gameplay_settings.h"
 #include "game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_types.h"
-#include "game/states/gameplay/orbit_helpers.h"
+#include "game/states/gameplay/orbital/orbit_runtime.h"
 #include "game/states/gameplay/prediction_nbody/gameplay_state_prediction_types.h"
 
 #include <functional>
