@@ -56,6 +56,13 @@ namespace
         return arc;
     }
 
+    double circular_period_s()
+    {
+        constexpr double r_m = 7'000'000.0;
+        constexpr double two_pi = 6.28318530717958647692;
+        return two_pi * std::sqrt((r_m * r_m * r_m) / kEarthMu);
+    }
+
     Game::KeplerOrbitArc make_eccentric_arc(const double t0_s = 0.0, const double t1_s = 1'200.0)
     {
         constexpr double periapsis_m = 7'000'000.0;
@@ -340,6 +347,51 @@ TEST(KeplerOrbit, TessellatorPreservesEndpointsAndSkipsDuplicateArcBoundary)
     EXPECT_NE(lines.vertices.back().flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::OrbitEnd), 0u);
     EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::ArcEnd), 0u);
     EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::ArcStart), 0u);
+}
+
+TEST(KeplerOrbit, TessellatorMovesClosedOrbitEndpointAwayFromCurrentPosition)
+{
+    const double period_s = circular_period_s();
+    const Game::KeplerOrbitArc arc = make_circular_arc(0.0, period_s);
+
+    Game::KeplerOrbitTessellationRequest request{};
+    request.arcs = std::span<const Game::KeplerOrbitArc>(&arc, 1u);
+    request.options.max_time_step_s = 20.0;
+    request.options.max_chord_error_m = 0.0;
+    request.options.max_vertices_per_arc = 1024;
+    request.options.max_vertices_total = 1024;
+    request.world_frame.world_reference_state_inertial = {};
+
+    const Game::KeplerOrbitLineSet lines = Game::build_kepler_orbit_lines(request);
+
+    ASSERT_TRUE(lines.valid) << Game::kepler_orbit_status_name(lines.diagnostics.status);
+    ASSERT_GE(lines.vertices.size(), 4u);
+    EXPECT_LT(lines.vertices.front().t_s, arc.arc.t0_s);
+    EXPECT_LT(lines.vertices.back().t_s, arc.arc.t1_s);
+
+    EXPECT_GT(lines.vertices[1].t_s, arc.arc.t0_s);
+
+    const auto current_it = std::find_if(lines.vertices.begin(),
+                                         lines.vertices.end(),
+                                         [](const Game::KeplerOrbitLineVertex &vertex) {
+                                             return near_abs(vertex.t_s, 0.0, 1.0e-9);
+                                         });
+    EXPECT_EQ(current_it, lines.vertices.end());
+
+    const WorldVec3 current_world =
+            WorldVec3(arc.primary_state_inertial_at_t0.position_m +
+                      arc.arc.state0_relative.position_m);
+    EXPECT_LE(point_segment_distance_m(current_world,
+                                       lines.vertices[0].position_world,
+                                       lines.vertices[1].position_world),
+              1.0);
+
+    const auto exact_end_it = std::find_if(lines.vertices.begin(),
+                                           lines.vertices.end(),
+                                           [period_s](const Game::KeplerOrbitLineVertex &vertex) {
+                                               return near_abs(vertex.t_s, period_s, 1.0e-9);
+                                           });
+    EXPECT_EQ(exact_end_it, lines.vertices.end());
 }
 
 TEST(KeplerOrbit, TessellatorRefinesHighEccentricityByChordError)

@@ -21,6 +21,7 @@ namespace Game
         glm::vec4 base_color{0.18f, 0.82f, 1.00f, 0.78f};
         glm::vec4 planned_color{0.35f, 1.00f, 0.50f, 0.90f};
         OrbitPlotDepth depth{OrbitPlotDepth::DepthTested};
+        float line_overlay_boost{0.35f};
     };
 
     void draw_kepler_prediction(const KeplerPredictionState &state,

@@ -1,5 +1,7 @@
 #include "game/orbit/kepler/kepler_orbit_tessellator.h"
 
+#include "orbitsim/math.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <queue>
@@ -81,6 +83,50 @@ namespace Game
         double positive_or_default(const double value, const double fallback)
         {
             return (std::isfinite(value) && value > 0.0) ? value : fallback;
+        }
+
+        double elliptic_period_s(const orbitsim::KeplerArc &arc)
+        {
+            const orbitsim::OrbitalElements elements =
+                    orbitsim::orbital_elements_from_relative_state(arc.mu_m3_s2,
+                                                                   arc.state0_relative.position_m,
+                                                                   arc.state0_relative.velocity_mps);
+            if (!std::isfinite(elements.eccentricity) || !(elements.eccentricity < 1.0))
+            {
+                return 0.0;
+            }
+
+            const orbitsim::OrbitScalars scalars =
+                    orbitsim::orbit_scalars_from_elements(arc.mu_m3_s2, elements);
+            return (scalars.valid && std::isfinite(scalars.period_s) && scalars.period_s > 0.0)
+                           ? scalars.period_s
+                           : 0.0;
+        }
+
+        bool arc_end_returns_to_start(const orbitsim::KeplerArc &arc)
+        {
+            const double period_s = elliptic_period_s(arc);
+            const double duration_s = std::abs(arc.t1_s - arc.t0_s);
+            if (!(period_s > 0.0) || !(duration_s > 0.0) || !std::isfinite(duration_s))
+            {
+                return false;
+            }
+
+            const double period_count = duration_s / period_s;
+            const double nearest_period_count = std::round(period_count);
+            return nearest_period_count >= 1.0 &&
+                   std::abs(period_count - nearest_period_count) <= 1.0e-3;
+        }
+
+        double closed_orbit_start_cross_dt_s(const double duration_s, const double max_interval_s)
+        {
+            constexpr double kPreferredCrossDtS = 0.25;
+            if (!(duration_s > 0.0) || !std::isfinite(duration_s) ||
+                !(max_interval_s > 0.0) || !std::isfinite(max_interval_s))
+            {
+                return 0.0;
+            }
+            return std::min({kPreferredCrossDtS, max_interval_s, duration_s * 0.25});
         }
 
         double point_segment_distance_m(const WorldVec3 &p,
@@ -245,11 +291,52 @@ namespace Game
             samples.push_back(start_eval.vertex);
 
             const double duration_s = std::abs(game_arc.arc.t1_s - game_arc.arc.t0_s);
+            const double max_interval_s = sample_dt_for_arc(game_arc.arc, request.options, allowed_samples);
+            const double min_interval_s = positive_or_default(request.options.min_time_step_s, 1.0);
+            const bool can_cross_start =
+                    arc_index == 0u &&
+                    request.options.include_start &&
+                    allowed_samples > 2u &&
+                    duration_s > 0.0 &&
+                    std::isfinite(duration_s) &&
+                    std::isfinite(max_interval_s) &&
+                    max_interval_s > 0.0;
+            const bool closed_periodic_arc = can_cross_start && arc_end_returns_to_start(game_arc.arc);
+            const bool crosses_start = closed_periodic_arc;
+            double adjusted_end_t_s = game_arc.arc.t1_s;
+            if (crosses_start)
+            {
+                const double pre_start_dt_s = closed_orbit_start_cross_dt_s(duration_s, max_interval_s);
+                if (!(pre_start_dt_s > 0.0))
+                {
+                    out.status = KeplerOrbitStatus::InvalidInput;
+                    return out;
+                }
+                const LineSampleEvaluation pre_start_eval = evaluate(game_arc.arc.t0_s - pre_start_dt_s);
+                if (!pre_start_eval.ok)
+                {
+                    out.status = pre_start_eval.status;
+                    out.first_kepler_failure = pre_start_eval.kepler_status;
+                    return out;
+                }
+                const LineSampleEvaluation post_start_eval = evaluate(game_arc.arc.t0_s + pre_start_dt_s);
+                if (!post_start_eval.ok)
+                {
+                    out.status = post_start_eval.status;
+                    out.first_kepler_failure = post_start_eval.kepler_status;
+                    return out;
+                }
+                samples.clear();
+                samples.push_back(pre_start_eval.vertex);
+                samples.push_back(post_start_eval.vertex);
+                adjusted_end_t_s = game_arc.arc.t1_s - pre_start_dt_s;
+            }
+
             if (duration_s > 0.0 && std::isfinite(duration_s))
             {
-                if (allowed_samples > 1u)
+                if (samples.size() < allowed_samples)
                 {
-                    const LineSampleEvaluation end_eval = evaluate(game_arc.arc.t1_s);
+                    const LineSampleEvaluation end_eval = evaluate(adjusted_end_t_s);
                     if (!end_eval.ok)
                     {
                         out.status = end_eval.status;
@@ -264,8 +351,6 @@ namespace Game
                 }
             }
 
-            const double max_interval_s = sample_dt_for_arc(game_arc.arc, request.options, allowed_samples);
-            const double min_interval_s = positive_or_default(request.options.min_time_step_s, 1.0);
             const double max_chord_error_m = request.options.max_chord_error_m;
             const bool chord_error_enabled =
                     std::isfinite(max_chord_error_m) && max_chord_error_m > 0.0;
@@ -359,9 +444,9 @@ namespace Game
                 });
             };
 
-            if (samples.size() >= 2u)
+            for (std::size_t i = 1u; i < samples.size(); ++i)
             {
-                try_push_interval(0u, 1u);
+                try_push_interval(i - 1u, i);
             }
             if (failed)
             {

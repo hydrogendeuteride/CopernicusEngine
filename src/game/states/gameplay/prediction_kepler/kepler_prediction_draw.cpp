@@ -246,6 +246,7 @@ namespace Game
                            const KeplerOrbitLineSet &line_set,
                            const glm::vec4 &color,
                            const OrbitPlotDepth depth,
+                           const float line_overlay_boost,
                            KeplerPickFrameStats &pick_stats)
         {
             if (!line_set.valid || line_set.vertices.size() < 2u)
@@ -329,6 +330,20 @@ namespace Game
                         .color = color,
                         .depth = depth,
                 });
+                if (line_overlay_boost > 0.0f)
+                {
+                    glm::vec4 overlay_color = color;
+                    overlay_color.a = std::clamp(overlay_color.a * line_overlay_boost, 0.0f, 1.0f);
+                    if (overlay_color.a > 0.0f)
+                    {
+                        lines.push_back(OrbitPlotSystem::LineCommand{
+                                .a_world = a.position_world,
+                                .b_world = b.position_world,
+                                .color = overlay_color,
+                                .depth = OrbitPlotDepth::AlwaysOnTop,
+                        });
+                    }
+                }
             }
             if (pick_enabled)
             {
@@ -417,6 +432,7 @@ namespace Game
                               track.base_lines,
                               track_base_color(track, context),
                               context.depth,
+                              context.line_overlay_boost,
                               pick_stats);
 
                 if (context.draw_planned && track.active_player)
@@ -429,6 +445,7 @@ namespace Game
                                   track.planned_lines,
                                   context.planned_color,
                                   context.depth,
+                                  context.line_overlay_boost,
                                   pick_stats);
                 }
             }
@@ -444,6 +461,7 @@ namespace Game
                       state.base_lines,
                       context.base_color,
                       context.depth,
+                      context.line_overlay_boost,
                       pick_stats);
 
         if (context.draw_planned)
@@ -456,6 +474,7 @@ namespace Game
                           state.planned_lines,
                           context.planned_color,
                           context.depth,
+                          context.line_overlay_boost,
                           pick_stats);
         }
 
