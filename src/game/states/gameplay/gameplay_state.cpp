@@ -188,6 +188,32 @@ namespace Game
         ManeuverUiController::emit_node_debug_overlay(maneuver_ui);
     }
 
+    OrbitalPhysicsSystem::Context GameplayState::build_orbital_physics_context()
+    {
+        return GameplayOrbitalContextBuilder(GameplayOrbitalContextInputs{
+                .renderer = _renderer,
+                .world = _world,
+                .orbit = _orbit,
+                .physics = _physics.get(),
+                .physics_context = _physics_context.get(),
+                .scenario_config = _scenario_config,
+                .spacecraft_gravity_mode =
+                        spacecraft_orbit_prediction_uses_kepler()
+                                ? SpacecraftGravityMode::SoiKepler
+                                : SpacecraftGravityMode::NBody,
+                .soi_switch_options = _kepler_prediction_options.primary_switch,
+                .kepler_propagation = _kepler_prediction_options.propagation,
+                .soi_kepler_max_step_s = 60.0,
+                .keybinds = &_keybinds,
+                .ui_capture_keyboard = [this](const GameStateContext &frame_ctx) {
+                    return ui_capture_keyboard(frame_ctx);
+                },
+                .mark_prediction_dirty = [this]() {
+                    mark_prediction_dirty();
+                },
+        }).build();
+    }
+
     void GameplayState::on_fixed_update(GameStateContext &ctx, float fixed_dt)
     {
         if (_reset_requested)
@@ -203,27 +229,9 @@ namespace Game
         _time_warp.mode = desired_mode;
 
         const double warp_factor = _time_warp.factor();
-        auto build_orbital_context = [this]() {
-            return GameplayOrbitalContextBuilder(GameplayOrbitalContextInputs{
-                    .renderer = _renderer,
-                    .world = _world,
-                    .orbit = _orbit,
-                    .physics = _physics.get(),
-                    .physics_context = _physics_context.get(),
-                    .scenario_config = _scenario_config,
-                    .keybinds = &_keybinds,
-                    .ui_capture_keyboard = [this](const GameStateContext &frame_ctx) {
-                        return ui_capture_keyboard(frame_ctx);
-                    },
-                    .mark_prediction_dirty = [this]() {
-                        mark_prediction_dirty();
-                    },
-            }).build();
-        };
-
         if (desired_mode == TimeWarpState::Mode::RailsWarp)
         {
-            OrbitalPhysicsSystem::Context orbital_physics = build_orbital_context();
+            OrbitalPhysicsSystem::Context orbital_physics = build_orbital_physics_context();
             if (!_orbital_physics.rails_warp_active())
             {
                 (void) _orbital_physics.enter_rails_warp(orbital_physics, ctx);
@@ -260,7 +268,7 @@ namespace Game
         _orbital_physics.set_last_sim_step_dt_s(static_cast<double>(fixed_dt));
 
         ComponentContext comp_ctx = build_component_context(ctx);
-        OrbitalPhysicsSystem::Context orbital_physics = build_orbital_context();
+        OrbitalPhysicsSystem::Context orbital_physics = build_orbital_physics_context();
 
         for (int i = 0; i < physics_steps; ++i)
         {

@@ -9,6 +9,8 @@
 #include "game/states/gameplay/orbital/orbiter_state_bridge.h"
 #include "game/states/gameplay/scenario/scenario_config.h"
 #include "game/state/game_state.h"
+#include "orbitsim/kepler_trajectory.hpp"
+#include "orbitsim/soi.hpp"
 #include "physics/physics_context.h"
 #include "physics/physics_world.h"
 
@@ -23,9 +25,148 @@ namespace Game
 {
     using detail::finite_vec3;
     using detail::nbody_accel_body_centered;
+    using detail::select_soi_primary_body;
+    using detail::soi_accel_body_centered;
 
     namespace
     {
+        bool finite_state(const orbitsim::State &state)
+        {
+            return finite_vec3(state.position_m) &&
+                   finite_vec3(state.velocity_mps) &&
+                   finite_vec3(state.spin.axis) &&
+                   std::isfinite(state.spin.angle_rad) &&
+                   std::isfinite(state.spin.rate_rad_per_s);
+        }
+
+        glm::dvec3 spacecraft_gravity_accel_body_centered(const OrbitalPhysicsSystem::Context &context,
+                                                          const glm::dvec3 &p_rel_m,
+                                                          orbitsim::BodyId *primary_body_id)
+        {
+            OrbitalScenario *scenario = context.orbit.scenario_owner().get();
+            if (!scenario)
+            {
+                return glm::dvec3(0.0);
+            }
+
+            switch (context.spacecraft_gravity_mode)
+            {
+                case SpacecraftGravityMode::NBody:
+                    return nbody_accel_body_centered(*scenario, p_rel_m);
+
+                case SpacecraftGravityMode::SoiKepler:
+                    return soi_accel_body_centered(*scenario,
+                                                  p_rel_m,
+                                                  primary_body_id,
+                                                  context.soi_switch_options);
+            }
+            return glm::dvec3(0.0);
+        }
+
+        void step_orbitsim_with_runtime_spacecraft_mode(
+                const OrbitalPhysicsSystem::Context &context,
+                const double dt_s)
+        {
+            OrbitalScenario *scenario = context.orbit.scenario_owner().get();
+            if (!scenario)
+            {
+                return;
+            }
+
+            if (context.spacecraft_gravity_mode != SpacecraftGravityMode::SoiKepler)
+            {
+                scenario->sim.step(dt_s);
+                return;
+            }
+
+            struct Patch
+            {
+                orbitsim::SpacecraftId spacecraft_id{orbitsim::kInvalidSpacecraftId};
+                orbitsim::BodyId primary_id{orbitsim::kInvalidBodyId};
+                orbitsim::State spacecraft0{};
+                orbitsim::State primary0{};
+                double mu{};
+            };
+
+            const double G = scenario->sim.config().gravitational_constant;
+            const double max_step_s =
+                    (std::isfinite(context.soi_kepler_max_step_s) && context.soi_kepler_max_step_s > 0.0)
+                            ? context.soi_kepler_max_step_s
+                            : 60.0;
+            double remaining_s = dt_s;
+            while (std::isfinite(remaining_s) && remaining_s != 0.0)
+            {
+                const double step_s = std::copysign(std::min(std::abs(remaining_s), max_step_s), remaining_s);
+                const double t0_s = scenario->sim.time_s();
+                std::vector<Patch> patches;
+
+                if (std::isfinite(G) && G > 0.0)
+                {
+                    for (OrbiterInfo &orbiter : context.orbit.orbiters())
+                    {
+                        const orbitsim::Spacecraft *spacecraft =
+                                orbiter.rails.active()
+                                        ? scenario->sim.spacecraft_by_id(orbiter.rails.sc_id)
+                                        : nullptr;
+                        if (!spacecraft || !finite_state(spacecraft->state))
+                        {
+                            continue;
+                        }
+
+                        const orbitsim::MassiveBody *primary =
+                                select_soi_primary_body(*scenario,
+                                                        spacecraft->state.position_m,
+                                                        &orbiter.soi_kepler_primary_body_id,
+                                                        context.soi_switch_options);
+                        if (!primary || !finite_state(primary->state))
+                        {
+                            continue;
+                        }
+
+                        patches.push_back(Patch{.spacecraft_id = spacecraft->id,
+                                                .primary_id = primary->id,
+                                                .spacecraft0 = spacecraft->state,
+                                                .primary0 = primary->state,
+                                                .mu = G * primary->mass_kg});
+                    }
+                }
+
+                scenario->sim.step(step_s);
+
+                const double t1_s = t0_s + step_s;
+                for (const Patch &patch : patches)
+                {
+                    const orbitsim::MassiveBody *primary = scenario->sim.body_by_id(patch.primary_id);
+                    if (!primary || !(patch.mu > 0.0))
+                    {
+                        continue;
+                    }
+
+                    const orbitsim::KeplerArc arc{
+                            .mu_m3_s2 = patch.mu,
+                            .primary_body_id = patch.primary_id,
+                            .t0_s = t0_s,
+                            .t1_s = t1_s,
+                            .state0_relative = orbitsim::make_state(
+                                    patch.spacecraft0.position_m - patch.primary0.position_m,
+                                    patch.spacecraft0.velocity_mps - patch.primary0.velocity_mps,
+                                    patch.spacecraft0.spin),
+                    };
+                    orbitsim::KeplerArcSample sample =
+                            orbitsim::sample_kepler_arc_state(arc, t1_s, context.kepler_propagation);
+                    if (!sample.ok())
+                    {
+                        continue;
+                    }
+
+                    sample.state_relative.position_m += primary->state.position_m;
+                    sample.state_relative.velocity_mps += primary->state.velocity_mps;
+                    (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, sample.state_relative);
+                }
+                remaining_s -= step_s;
+            }
+        }
+
         void update_rebase_anchor(GameWorld &world, const OrbitalRuntimeSystem &orbit)
         {
             const EntityId next_anchor = orbit.select_rebase_anchor_entity();
@@ -414,25 +555,37 @@ namespace Game
         if (use_orbitsim)
         {
             update_runtime_orbiter_rails(context);
-            context.orbit.scenario_owner()->sim.step(static_cast<double>(fixed_dt));
+            step_orbitsim_with_runtime_spacecraft_mode(context, static_cast<double>(fixed_dt));
             sync_celestial_render_entities(context, ctx);
             sync_runtime_orbiter_rails(context, static_cast<double>(fixed_dt));
         }
 
-        auto gravity_accel_world_at = [&](const WorldVec3 &p_world) -> glm::dvec3 {
+        auto gravity_accel_world_at = [&](const WorldVec3 &p_world,
+                                          orbitsim::BodyId *primary_body_id) -> glm::dvec3 {
             if (!use_orbitsim)
             {
                 return glm::dvec3(0.0);
             }
 
             const glm::dvec3 p_rel = glm::dvec3(p_world - cfg.system_center);
-            return nbody_accel_body_centered(*context.orbit.scenario_owner(), p_rel);
+            return spacecraft_gravity_accel_body_centered(context, p_rel, primary_body_id);
         };
 
         glm::dvec3 anchor_accel_world(0.0);
         bool have_anchor_accel = false;
         const bool per_step_sync = _velocity_origin_mode == VelocityOriginMode::PerStepAnchorSync;
         const WorldVec3 physics_origin_world = context.physics_context->origin_world();
+
+        auto primary_cache_for_entity = [&](const EntityId entity) -> orbitsim::BodyId * {
+            for (OrbiterInfo &orbiter : context.orbit.orbiters())
+            {
+                if (orbiter.entity == entity)
+                {
+                    return &orbiter.soi_kepler_primary_body_id;
+                }
+            }
+            return nullptr;
+        };
 
         EntityId anchor_eid = context.world.rebase_anchor();
         if (!anchor_eid.is_valid())
@@ -463,7 +616,8 @@ namespace Game
                         const WorldVec3 body_origin_world = physics_origin_world + WorldVec3(p_local_anchor);
                         const WorldVec3 p_world_anchor =
                                 anchor->physics_center_of_mass_world(body_origin_world, anchor_rotation);
-                        anchor_accel_world = gravity_accel_world_at(p_world_anchor);
+                        anchor_accel_world = gravity_accel_world_at(p_world_anchor,
+                                                                    primary_cache_for_entity(anchor_eid));
                         have_anchor_accel = true;
 
                         const glm::dvec3 v_origin_next =
@@ -477,8 +631,8 @@ namespace Game
         const glm::dvec3 frame_accel_world =
                 (!per_step_sync && have_anchor_accel) ? anchor_accel_world : glm::dvec3(0.0);
 
-        auto apply_gravity_accel = [&](EntityId id) {
-            Entity *ent = context.world.entities().find(id);
+        auto apply_gravity_accel = [&](OrbiterInfo &orbiter) {
+            Entity *ent = context.world.entities().find(orbiter.entity);
             if (!ent || !ent->has_physics())
             {
                 return;
@@ -496,7 +650,8 @@ namespace Game
                     OrbiterPhysicsBridge::body_world_from_body_local(p_local, physics_origin_world);
             const WorldVec3 p_world = ent->physics_center_of_mass_world(body_origin_world, rotation);
 
-            const glm::dvec3 a_local = gravity_accel_world_at(p_world) - frame_accel_world;
+            const glm::dvec3 a_local =
+                    gravity_accel_world_at(p_world, &orbiter.soi_kepler_primary_body_id) - frame_accel_world;
 
             glm::vec3 v_local = context.physics->get_linear_velocity(body_id);
             v_local += glm::vec3(a_local) * fixed_dt;
@@ -504,11 +659,11 @@ namespace Game
             context.physics->activate(body_id);
         };
 
-        for (const auto &orbiter : context.orbit.orbiters())
+        for (OrbiterInfo &orbiter : context.orbit.orbiters())
         {
             if (orbiter.apply_gravity && orbiter.entity.is_valid())
             {
-                apply_gravity_accel(orbiter.entity);
+                apply_gravity_accel(orbiter);
             }
         }
 
@@ -943,7 +1098,7 @@ namespace Game
 
         update_formation_hold(context, dt_s);
 
-        orbit.scenario_owner()->sim.step(dt_s);
+        step_orbitsim_with_runtime_spacecraft_mode(context, dt_s);
         sync_celestial_render_entities(context, ctx);
 
         for (auto &orbiter : orbit.orbiters())
@@ -1008,6 +1163,10 @@ namespace Game
             .physics = inputs.physics,
             .physics_context = inputs.physics_context,
             .scenario_config = inputs.scenario_config,
+            .spacecraft_gravity_mode = inputs.spacecraft_gravity_mode,
+            .soi_switch_options = inputs.soi_switch_options,
+            .kepler_propagation = inputs.kepler_propagation,
+            .soi_kepler_max_step_s = inputs.soi_kepler_max_step_s,
             .keybinds = inputs.keybinds,
             .orbiter_world_state_sampler =
                     [inputs](const OrbiterInfo &sample_orbiter,

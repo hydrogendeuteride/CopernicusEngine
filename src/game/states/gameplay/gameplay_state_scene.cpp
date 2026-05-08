@@ -778,21 +778,7 @@ namespace Game
         if (!_orbital_physics.rails_warp_active() && target->rails.active())
         {
             (void) _orbital_physics.demote_orbiter_from_rails(
-                    GameplayOrbitalContextBuilder(GameplayOrbitalContextInputs{
-                            .renderer = _renderer,
-                            .world = _world,
-                            .orbit = _orbit,
-                            .physics = _physics.get(),
-                            .physics_context = _physics_context.get(),
-                            .scenario_config = _scenario_config,
-                            .keybinds = &_keybinds,
-                            .ui_capture_keyboard = [this](const GameStateContext &frame_ctx) {
-                                return ui_capture_keyboard(frame_ctx);
-                            },
-                            .mark_prediction_dirty = [this]() {
-                                mark_prediction_dirty();
-                            },
-                    }).build(),
+                    build_orbital_physics_context(),
                     *target);
         }
 

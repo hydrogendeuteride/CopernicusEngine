@@ -2,6 +2,9 @@
 
 #include "game/states/gameplay/orbital/formation_hold_system.h"
 
+#include "orbitsim/kepler.hpp"
+#include "orbitsim/soi.hpp"
+
 #include <glm/glm.hpp>
 
 #include <functional>
@@ -23,6 +26,12 @@ namespace Game
     struct OrbiterInfo;
     struct ScenarioConfig;
 
+    enum class SpacecraftGravityMode
+    {
+        NBody,
+        SoiKepler
+    };
+
     struct GameplayOrbitalContextInputs
     {
         VulkanEngine *renderer{nullptr};
@@ -31,6 +40,10 @@ namespace Game
         Physics::PhysicsWorld *physics{nullptr};
         Physics::PhysicsContext *physics_context{nullptr};
         const ScenarioConfig &scenario_config;
+        SpacecraftGravityMode spacecraft_gravity_mode{SpacecraftGravityMode::NBody};
+        orbitsim::SoiSwitchOptions soi_switch_options{};
+        orbitsim::KeplerPropagationOptions kepler_propagation{};
+        double soi_kepler_max_step_s{60.0};
         const Keybinds *keybinds{nullptr};
         std::function<bool(const GameStateContext &)> ui_capture_keyboard{};
         std::function<void()> mark_prediction_dirty{};
@@ -53,6 +66,10 @@ namespace Game
             Physics::PhysicsWorld *physics{nullptr};
             Physics::PhysicsContext *physics_context{nullptr};
             const ScenarioConfig &scenario_config;
+            SpacecraftGravityMode spacecraft_gravity_mode{SpacecraftGravityMode::NBody};
+            orbitsim::SoiSwitchOptions soi_switch_options{};
+            orbitsim::KeplerPropagationOptions kepler_propagation{};
+            double soi_kepler_max_step_s{60.0};
             const Keybinds *keybinds{nullptr};
             FormationHoldSystem::OrbiterWorldStateSampler orbiter_world_state_sampler{};
             std::function<bool(const GameStateContext &)> ui_capture_keyboard{};

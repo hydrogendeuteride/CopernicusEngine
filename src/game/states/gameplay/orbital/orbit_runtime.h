@@ -6,6 +6,7 @@
 
 #include "orbitsim/game_sim.hpp"
 #include "orbitsim/orbit_utils.hpp"
+#include "orbitsim/soi.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
@@ -111,6 +112,7 @@ namespace Game
         bool formation_hold_enabled{false};
         std::string formation_leader_name;
         glm::dvec3 formation_slot_lvlh_m{0.0};
+        orbitsim::BodyId soi_kepler_primary_body_id{orbitsim::kInvalidBodyId};
 
         struct RailsState
         {
@@ -137,6 +139,11 @@ namespace Game
 
     namespace detail
     {
+        glm::dvec3 point_mass_accel(const double gravitational_constant,
+                                            const double mass_kg,
+                                            const glm::dvec3 &r_m,
+                                            const double softening_length2_m2);
+
         inline bool finite_vec3(const glm::dvec3 &v)
         {
             return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
@@ -209,6 +216,69 @@ namespace Game
             return out;
         }
 
+        inline const orbitsim::MassiveBody *select_soi_primary_body(const OrbitalScenario &scenario,
+                                                                    const glm::dvec3 &p_sc_bary_m,
+                                                                    orbitsim::BodyId *cached_primary_body_id,
+                                                                    const orbitsim::SoiSwitchOptions &options)
+        {
+            const orbitsim::MassiveBody *ref = scenario.world_reference_sim_body();
+            if (!ref)
+            {
+                return nullptr;
+            }
+
+            const orbitsim::CelestialEphemeris empty_ephemeris{};
+            const orbitsim::BodyId current =
+                    cached_primary_body_id ? *cached_primary_body_id : orbitsim::kInvalidBodyId;
+            orbitsim::BodyId selected = orbitsim::select_primary_body_id_rails(
+                    scenario.sim,
+                    empty_ephemeris,
+                    p_sc_bary_m,
+                    scenario.sim.time_s(),
+                    current,
+                    options);
+            if (selected == orbitsim::kInvalidBodyId)
+            {
+                selected = ref->id;
+            }
+
+            const orbitsim::MassiveBody *primary = scenario.sim.body_by_id(selected);
+            if (primary && primary->mass_kg > 0.0 && cached_primary_body_id)
+            {
+                *cached_primary_body_id = selected;
+            }
+            return primary;
+        }
+
+        inline glm::dvec3 body_frame_accel_delta(const OrbitalScenario &scenario,
+                                                 const orbitsim::MassiveBody &primary,
+                                                 const orbitsim::MassiveBody &ref)
+        {
+            const double G = scenario.sim.config().gravitational_constant;
+            const double eps_m = scenario.sim.config().softening_length_m;
+            const double eps2 = eps_m * eps_m;
+
+            glm::dvec3 delta(0.0);
+            for (const orbitsim::MassiveBody &body : scenario.sim.massive_bodies())
+            {
+                if (body.id != primary.id)
+                {
+                    delta += point_mass_accel(G,
+                                              body.mass_kg,
+                                              glm::dvec3(primary.state.position_m - body.state.position_m),
+                                              eps2);
+                }
+                if (body.id != ref.id)
+                {
+                    delta -= point_mass_accel(G,
+                                              body.mass_kg,
+                                              glm::dvec3(ref.state.position_m - body.state.position_m),
+                                              eps2);
+                }
+            }
+            return finite_vec3(delta) ? delta : glm::dvec3(0.0);
+        }
+
         inline glm::dvec3 point_mass_accel(const double gravitational_constant,
                                             const double mass_kg,
                                             const glm::dvec3 &r_m,
@@ -276,6 +346,46 @@ namespace Game
             }
 
             return a_sc_bary - a_ref_bary;
+        }
+
+        // SOI mode uses the selected primary body via point_mass_accel(), not full N-body gravity.
+        inline glm::dvec3 soi_accel_body_centered(
+                const OrbitalScenario &scenario,
+                const glm::dvec3 &p_rel_m,
+                orbitsim::BodyId *primary_body_id,
+                const orbitsim::SoiSwitchOptions &options)
+        {
+            const orbitsim::MassiveBody *ref = scenario.world_reference_sim_body();
+            if (!ref)
+            {
+                return glm::dvec3(0.0);
+            }
+
+            const double G = scenario.sim.config().gravitational_constant;
+            if (!(G > 0.0))
+            {
+                return glm::dvec3(0.0);
+            }
+
+            const double eps_m = scenario.sim.config().softening_length_m;
+            const double eps2 = eps_m * eps_m;
+            const glm::dvec3 p_sc_bary = glm::dvec3(ref->state.position_m) + p_rel_m;
+            const orbitsim::MassiveBody *primary =
+                    select_soi_primary_body(scenario, p_sc_bary, primary_body_id, options);
+            if (!primary || !(primary->mass_kg > 0.0))
+            {
+                return glm::dvec3(0.0);
+            }
+
+            glm::dvec3 accel = point_mass_accel(G,
+                                                primary->mass_kg,
+                                                p_sc_bary - glm::dvec3(primary->state.position_m),
+                                                eps2);
+            if (primary->id != ref->id)
+            {
+                accel += body_frame_accel_delta(scenario, *primary, *ref);
+            }
+            return finite_vec3(accel) ? accel : glm::dvec3(0.0);
         }
     } // namespace detail
 } // namespace Game

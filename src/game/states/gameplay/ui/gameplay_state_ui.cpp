@@ -31,7 +31,7 @@ namespace Game
             switch (mode)
             {
                 case SpacecraftOrbitPredictionMode::Kepler:
-                    return "Kepler";
+                    return "Kepler SOI";
                 case SpacecraftOrbitPredictionMode::NBody:
                     return "N Body";
             }
@@ -178,7 +178,7 @@ namespace Game
                 ImGui::Separator();
                 if (ImGui::CollapsingHeader("Orbit Prediction", ImGuiTreeNodeFlags_DefaultOpen))
                 {
-                    if (ImGui::RadioButton("Kepler", spacecraft_orbit_prediction_uses_kepler()))
+                    if (ImGui::RadioButton("Kepler SOI", spacecraft_orbit_prediction_uses_kepler()))
                     {
                         set_spacecraft_orbit_prediction_mode(SpacecraftOrbitPredictionMode::Kepler);
                     }

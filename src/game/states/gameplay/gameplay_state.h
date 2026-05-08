@@ -96,6 +96,7 @@ namespace Game
         // Simulation and time warp
         double current_sim_time_s() const;
         ComponentContext build_component_context(GameStateContext &ctx, float alpha = 0.0f);
+        OrbitalPhysicsSystem::Context build_orbital_physics_context();
         void reset_time_warp_state();
         void handle_time_warp_input(GameStateContext &ctx);
         void set_time_warp_level(GameStateContext &ctx, int level);
