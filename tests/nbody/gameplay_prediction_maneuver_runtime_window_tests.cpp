@@ -2251,6 +2251,22 @@ TEST(GameplayPredictionManeuverTests, ShouldRebuildPredictionTrackWhenCoverageFa
     EXPECT_TRUE(make_prediction_adapter(state).should_rebuild_prediction_track(track, 10.0, 0.016f, false, false));
 }
 
+TEST(GameplayPredictionManeuverTests, ThrustRefreshGatePreventsPerTickPredictionRebuilds)
+{
+    Game::GameplayState state{};
+    state.prediction_for_test().draw_future_segment = true;
+    state.prediction_for_test().sampling_policy.orbiter_min_window_s = 120.0;
+    state.prediction_for_test().thrust_refresh_s = 0.1;
+
+    Game::PredictionTrackState track{};
+    track.key = {Game::PredictionSubjectKind::Orbiter, 1};
+    track.cache = make_draw_ready_cache(state, 5u, 100.0, 1'000.0);
+    track.dirty = false;
+
+    EXPECT_FALSE(make_prediction_adapter(state).should_rebuild_prediction_track(track, 100.05, 0.016f, true, false));
+    EXPECT_TRUE(make_prediction_adapter(state).should_rebuild_prediction_track(track, 100.11, 0.016f, true, false));
+}
+
 TEST(GameplayPredictionManeuverTests, ShouldRebuildPredictionTrackWhenManeuverCoverageFallsShortOutsideLivePreview)
 {
     Game::GameplayState state{};

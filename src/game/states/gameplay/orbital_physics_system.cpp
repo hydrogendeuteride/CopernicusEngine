@@ -916,10 +916,6 @@ namespace Game
                     const glm::dvec3 dv_world = dir_world * dv;
                     sc->state.velocity_mps += dv_world;
                     _rails_thrust_applied_this_tick = true;
-                    if (context.mark_prediction_dirty)
-                    {
-                        context.mark_prediction_dirty();
-                    }
 
                     for (auto &follower : orbit.orbiters())
                     {
