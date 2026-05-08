@@ -85,6 +85,22 @@ namespace Game
             quality_changed = true;
         }
 
+        float spacecraft_max_chord_error_m =
+                static_cast<float>(_kepler_tessellation_options.max_chord_error_m);
+        if (ImGui::DragFloat("Spacecraft chord error (m)",
+                             &spacecraft_max_chord_error_m,
+                             10.0f,
+                             0.0f,
+                             1'000'000.0f,
+                             "%.1f"))
+        {
+            _kepler_tessellation_options.max_chord_error_m =
+                    static_cast<double>(std::clamp(spacecraft_max_chord_error_m,
+                                                   0.0f,
+                                                   1'000'000.0f));
+            quality_changed = true;
+        }
+
         int spacecraft_max_vertices_per_arc =
                 static_cast<int>(std::min<std::size_t>(_kepler_tessellation_options.max_vertices_per_arc,
                                                        200000u));
@@ -148,8 +164,9 @@ namespace Game
             draw_kepler_debug_table_value("Build time", "%.3f s", kepler.build_time_s);
             draw_kepler_debug_table_value("Horizon", "%.3f s", kepler.horizon_s);
             draw_kepler_debug_table_value(
-                    "Spacecraft dt / vertices", "%.3f s / %zu / %zu",
+                    "Spacecraft dt / chord / vertices", "%.3f s / %.1f m / %zu / %zu",
                     _kepler_tessellation_options.max_time_step_s,
+                    _kepler_tessellation_options.max_chord_error_m,
                     _kepler_tessellation_options.max_vertices_per_arc,
                     _kepler_tessellation_options.max_vertices_total);
             draw_kepler_debug_table_value(

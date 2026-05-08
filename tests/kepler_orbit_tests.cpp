@@ -55,6 +55,53 @@ namespace
                 orbitsim::make_state({1'000.0, 0.0, 0.0}, {2.0, 0.0, 0.0});
         return arc;
     }
+
+    Game::KeplerOrbitArc make_eccentric_arc(const double t0_s = 0.0, const double t1_s = 1'200.0)
+    {
+        constexpr double periapsis_m = 7'000'000.0;
+        constexpr double eccentricity = 0.85;
+        const double semi_major_axis_m = periapsis_m / (1.0 - eccentricity);
+        const double periapsis_velocity_mps =
+                std::sqrt(kEarthMu * (2.0 / periapsis_m - 1.0 / semi_major_axis_m));
+
+        Game::KeplerOrbitArc arc{};
+        arc.arc.mu_m3_s2 = kEarthMu;
+        arc.arc.primary_body_id = kEarthId;
+        arc.arc.t0_s = t0_s;
+        arc.arc.t1_s = t1_s;
+        arc.arc.state0_relative =
+                orbitsim::make_state({periapsis_m, 0.0, 0.0}, {0.0, periapsis_velocity_mps, 0.0});
+        arc.primary_state_inertial_at_t0 = orbitsim::make_state({0.0, 0.0, 0.0}, {0.0, 0.0, 0.0});
+        return arc;
+    }
+
+    double point_segment_distance_m(const WorldVec3 &p,
+                                    const WorldVec3 &a,
+                                    const WorldVec3 &b)
+    {
+        const double ab_x = b.x - a.x;
+        const double ab_y = b.y - a.y;
+        const double ab_z = b.z - a.z;
+        const double ap_x = p.x - a.x;
+        const double ap_y = p.y - a.y;
+        const double ap_z = p.z - a.z;
+        const double ab_len2 = ab_x * ab_x + ab_y * ab_y + ab_z * ab_z;
+        if (!(ab_len2 > 0.0))
+        {
+            return std::sqrt(ap_x * ap_x + ap_y * ap_y + ap_z * ap_z);
+        }
+
+        const double u = std::clamp((ap_x * ab_x + ap_y * ab_y + ap_z * ab_z) / ab_len2,
+                                    0.0,
+                                    1.0);
+        const double closest_x = a.x + u * ab_x;
+        const double closest_y = a.y + u * ab_y;
+        const double closest_z = a.z + u * ab_z;
+        const double dx = p.x - closest_x;
+        const double dy = p.y - closest_y;
+        const double dz = p.z - closest_z;
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
 } // namespace
 
 TEST(KeplerOrbit, BuilderSelectsFixedPrimaryAndBuildsRelativeArc)
@@ -277,6 +324,7 @@ TEST(KeplerOrbit, TessellatorPreservesEndpointsAndSkipsDuplicateArcBoundary)
     Game::KeplerOrbitTessellationRequest request{};
     request.arcs = solved.arcs;
     request.options.max_time_step_s = 50.0;
+    request.options.max_chord_error_m = 0.0;
     request.options.max_vertices_per_arc = 8;
     request.options.max_vertices_total = 16;
     request.world_frame.world_reference_state_inertial = {};
@@ -292,6 +340,45 @@ TEST(KeplerOrbit, TessellatorPreservesEndpointsAndSkipsDuplicateArcBoundary)
     EXPECT_NE(lines.vertices.back().flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::OrbitEnd), 0u);
     EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::ArcEnd), 0u);
     EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::ArcStart), 0u);
+}
+
+TEST(KeplerOrbit, TessellatorRefinesHighEccentricityByChordError)
+{
+    const Game::KeplerOrbitArc arc = make_eccentric_arc();
+
+    Game::KeplerOrbitTessellationRequest coarse_request{};
+    coarse_request.arcs = std::span<const Game::KeplerOrbitArc>(&arc, 1u);
+    coarse_request.options.max_time_step_s = 600.0;
+    coarse_request.options.max_chord_error_m = 0.0;
+    coarse_request.options.max_vertices_per_arc = 64;
+    coarse_request.options.max_vertices_total = 64;
+
+    const Game::KeplerOrbitLineSet coarse_lines = Game::build_kepler_orbit_lines(coarse_request);
+    ASSERT_TRUE(coarse_lines.valid) << Game::kepler_orbit_status_name(coarse_lines.diagnostics.status);
+
+    Game::KeplerOrbitTessellationRequest adaptive_request = coarse_request;
+    adaptive_request.options.max_chord_error_m = 2'000.0;
+
+    const Game::KeplerOrbitLineSet adaptive_lines = Game::build_kepler_orbit_lines(adaptive_request);
+    ASSERT_TRUE(adaptive_lines.valid) << Game::kepler_orbit_status_name(adaptive_lines.diagnostics.status);
+    EXPECT_GT(adaptive_lines.vertices.size(), coarse_lines.vertices.size());
+    EXPECT_FALSE(adaptive_lines.diagnostics.budget_hit);
+
+    for (std::size_t i = 1u; i < adaptive_lines.vertices.size(); ++i)
+    {
+        const Game::KeplerOrbitLineVertex &a = adaptive_lines.vertices[i - 1u];
+        const Game::KeplerOrbitLineVertex &b = adaptive_lines.vertices[i];
+        const double mid_t_s = 0.5 * (a.t_s + b.t_s);
+        const orbitsim::KeplerArcSample mid_sample =
+                orbitsim::sample_kepler_arc_state(arc.arc, mid_t_s);
+        ASSERT_TRUE(mid_sample.ok());
+
+        const WorldVec3 mid_world =
+                WorldVec3(arc.primary_state_inertial_at_t0.position_m +
+                          mid_sample.state_relative.position_m);
+        const double error_m = point_segment_distance_m(mid_world, a.position_world, b.position_world);
+        EXPECT_LE(error_m, adaptive_request.options.max_chord_error_m * 1.05);
+    }
 }
 
 TEST(KeplerOrbit, TessellatorAppliesMovingPrimaryProvider)

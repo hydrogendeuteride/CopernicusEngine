@@ -17,6 +17,7 @@ namespace Game
     {
         constexpr uint64_t kKeplerPickSummaryLogInterval = 300u;
         constexpr uint64_t kKeplerPickLargeLogInterval = 60u;
+        constexpr std::size_t kKeplerPickMaxSegmentsPerLineSet = 4'096u;
         constexpr std::size_t kKeplerPickLargeSegmentCount = 8'192u;
         constexpr std::size_t kKeplerPickWarnSegmentCount = 32'768u;
 
@@ -168,6 +169,75 @@ namespace Game
             }
         }
 
+        std::size_t emit_pick_segments(PickingSystem &picking,
+                                       const uint32_t pick_group,
+                                       const KeplerOrbitLineSet &line_set)
+        {
+            const std::size_t requested_segments =
+                    (line_set.vertices.size() > 1u) ? line_set.vertices.size() - 1u : 0u;
+            const std::size_t target_segments =
+                    std::min(requested_segments, kKeplerPickMaxSegmentsPerLineSet);
+            if (target_segments == 0u)
+            {
+                return 0u;
+            }
+
+            std::size_t emitted_segments = 0u;
+            const auto append_segment = [&](const std::size_t a_index,
+                                            const std::size_t b_index) {
+                if (a_index >= line_set.vertices.size() ||
+                    b_index >= line_set.vertices.size() ||
+                    b_index <= a_index)
+                {
+                    return;
+                }
+
+                const KeplerOrbitLineVertex &a = line_set.vertices[a_index];
+                const KeplerOrbitLineVertex &b = line_set.vertices[b_index];
+                if (!finite_world(a.position_world) || !finite_world(b.position_world))
+                {
+                    return;
+                }
+
+                picking.add_line_pick_segment(pick_group,
+                                              a.position_world,
+                                              b.position_world,
+                                              a.t_s,
+                                              b.t_s);
+                ++emitted_segments;
+            };
+
+            if (requested_segments <= target_segments)
+            {
+                for (std::size_t i = 1u; i < line_set.vertices.size(); ++i)
+                {
+                    append_segment(i - 1u, i);
+                }
+            }
+            else
+            {
+                const double source_span = static_cast<double>(requested_segments);
+                for (std::size_t i = 0u; i < target_segments; ++i)
+                {
+                    const double a_u = static_cast<double>(i) / static_cast<double>(target_segments);
+                    const double b_u = static_cast<double>(i + 1u) / static_cast<double>(target_segments);
+                    std::size_t a_index =
+                            static_cast<std::size_t>(std::llround(a_u * source_span));
+                    std::size_t b_index =
+                            static_cast<std::size_t>(std::llround(b_u * source_span));
+                    a_index = std::min(a_index, line_set.vertices.size() - 1u);
+                    b_index = std::min(b_index, line_set.vertices.size() - 1u);
+                    if (b_index <= a_index && a_index + 1u < line_set.vertices.size())
+                    {
+                        b_index = a_index + 1u;
+                    }
+                    append_segment(a_index, b_index);
+                }
+            }
+
+            return emitted_segments;
+        }
+
         void emit_line_set(OrbitPlotSystem &orbit_plot,
                            PickingSystem *picking,
                            const bool emit_pick,
@@ -259,19 +329,10 @@ namespace Game
                         .color = color,
                         .depth = depth,
                 });
-                if (pick_enabled)
-                {
-                    picking->add_line_pick_segment(
-                            pick_group,
-                            a.position_world,
-                            b.position_world,
-                            a.t_s,
-                            b.t_s);
-                    ++registered_pick_segments;
-                }
             }
             if (pick_enabled)
             {
+                registered_pick_segments = emit_pick_segments(*picking, pick_group, line_set);
                 const std::size_t requested_segments = line_set.vertices.size() - 1u;
                 record_pick_frame_line_set(pick_stats,
                                            pick_group,

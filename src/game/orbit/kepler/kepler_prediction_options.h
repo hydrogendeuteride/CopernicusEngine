@@ -37,6 +37,7 @@ namespace Game
     {
         double max_time_step_s{10.0};
         double min_time_step_s{1.0};
+        double max_chord_error_m{1'000.0};
         std::size_t max_vertices_per_arc{8192};
         std::size_t max_vertices_total{16384};
         bool include_start{true};
