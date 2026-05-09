@@ -94,7 +94,7 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/settings/gameplay_preload_cache.h
   game/states/gameplay/settings/gameplay_preload_cache.cpp
   game/states/gameplay/ui/gameplay_state_ui.cpp
-  game/states/gameplay/prediction_nbody/gameplay_state_orbit_prediction.cpp
+  game/states/gameplay/gameplay_state_orbit_prediction.cpp
   game/states/gameplay/prediction_kepler/gameplay_state_kepler_prediction.cpp
   game/states/gameplay/ui/gameplay_state_kepler_prediction_debug_ui.cpp
   game/states/gameplay/ui/gameplay_state_nbody_orbit_debug_ui.cpp

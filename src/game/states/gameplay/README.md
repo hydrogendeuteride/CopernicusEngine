@@ -93,8 +93,8 @@ gameplay/
 - `prediction_kepler/gameplay_state_kepler_prediction.cpp`
   `GameplayState` adapter for Kepler prediction mode.
 
-- `prediction_nbody/gameplay_state_orbit_prediction.cpp`
-  `GameplayState` adapter for N-body prediction mode.
+- `gameplay_state_orbit_prediction.cpp`
+  `GameplayState` prediction mode router for Kepler and N-body prediction.
 
 - `prediction_kepler/`, `prediction_nbody/`, and `maneuver_nbody/`
   Keep their internal README files as the starting point for deeper changes.
