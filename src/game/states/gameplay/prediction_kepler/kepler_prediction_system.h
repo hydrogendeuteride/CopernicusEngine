@@ -76,5 +76,6 @@ namespace Game
 
         KeplerPredictionState _state{};
         CelestialNBodyEphemerisCache _celestial_nbody_cache{};
+        mutable std::vector<Picking::LinePickSegmentData> _pick_segment_scratch{};
     };
 } // namespace Game

@@ -107,7 +107,7 @@ set(GAME_ORBIT_KEPLER_SOURCES
 )
 
 set(GAMEPLAY_KEPLER_PREDICTION_SOURCES
-  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_nbody/gameplay_state_orbit_prediction.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_orbit_prediction.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/gameplay_state_kepler_prediction.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_subject.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_builder.cpp"

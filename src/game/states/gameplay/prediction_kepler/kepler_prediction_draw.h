@@ -1,9 +1,12 @@
 #pragma once
 
+#include "core/picking/line_pick_segment.h"
 #include "core/orbit_plot/orbit_plot.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_state.h"
 
 #include <glm/glm.hpp>
+
+#include <vector>
 
 class PickingSystem;
 
@@ -13,6 +16,7 @@ namespace Game
     {
         OrbitPlotSystem *orbit_plot{nullptr};
         PickingSystem *picking{nullptr};
+        std::vector<Picking::LinePickSegmentData> *pick_segment_scratch{nullptr};
         bool emit_pick{true};
         bool draw_planned{true};
         bool draw_orbiter_tracks{true};

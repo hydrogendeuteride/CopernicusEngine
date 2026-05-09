@@ -81,6 +81,8 @@ namespace Game
         kepler_draw.draw_orbiter_tracks = _kepler_draw_orbiter_tracks;
         kepler_draw.draw_celestial_kepler_tracks = _kepler_draw_celestial_kepler_tracks;
         kepler_draw.draw_celestial_nbody_tracks = _kepler_draw_celestial_nbody_tracks;
+        kepler_draw.depth = OrbitPlotDepth::DepthTested;
+        kepler_draw.line_overlay_boost = 0.0f;
         _kepler_prediction->draw(kepler_draw);
     }
 } // namespace Game

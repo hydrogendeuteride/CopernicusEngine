@@ -171,7 +171,8 @@ namespace Game
 
         std::size_t emit_pick_segments(PickingSystem &picking,
                                        const uint32_t pick_group,
-                                       const KeplerOrbitLineSet &line_set)
+                                       const KeplerOrbitLineSet &line_set,
+                                       std::vector<Picking::LinePickSegmentData> *scratch)
         {
             const std::size_t requested_segments =
                     (line_set.vertices.size() > 1u) ? line_set.vertices.size() - 1u : 0u;
@@ -199,14 +200,27 @@ namespace Game
                     return;
                 }
 
-                picking.add_line_pick_segment(pick_group,
-                                              a.position_world,
-                                              b.position_world,
-                                              a.t_s,
-                                              b.t_s);
+                if (scratch)
+                {
+                    scratch->push_back(Picking::LinePickSegmentData{
+                            .a_world = a.position_world,
+                            .b_world = b.position_world,
+                            .a_time_s = a.t_s,
+                            .b_time_s = b.t_s,
+                    });
+                }
+                else
+                {
+                    picking.add_line_pick_segment(pick_group,
+                                                  a.position_world,
+                                                  b.position_world,
+                                                  a.t_s,
+                                                  b.t_s);
+                }
                 ++emitted_segments;
             };
 
+            const std::size_t batch_begin = scratch ? scratch->size() : 0u;
             if (requested_segments <= target_segments)
             {
                 for (std::size_t i = 1u; i < line_set.vertices.size(); ++i)
@@ -235,7 +249,23 @@ namespace Game
                 }
             }
 
+            if (scratch && emitted_segments > 0u)
+            {
+                picking.add_line_pick_segments(
+                        pick_group,
+                        std::span<const PickingSystem::LinePickSegmentData>(scratch->data() + batch_begin,
+                                                                            emitted_segments));
+            }
             return emitted_segments;
+        }
+
+        std::size_t target_pick_segment_count(const KeplerOrbitLineSet &line_set)
+        {
+            if (!line_set.valid || line_set.vertices.size() < 2u)
+            {
+                return 0u;
+            }
+            return std::min(line_set.vertices.size() - 1u, kKeplerPickMaxSegmentsPerLineSet);
         }
 
         void emit_line_set(OrbitPlotSystem &orbit_plot,
@@ -247,6 +277,7 @@ namespace Game
                            const glm::vec4 &color,
                            const OrbitPlotDepth depth,
                            const float line_overlay_boost,
+                           std::vector<Picking::LinePickSegmentData> *pick_segment_scratch,
                            KeplerPickFrameStats &pick_stats)
         {
             if (!line_set.valid || line_set.vertices.size() < 2u)
@@ -262,7 +293,9 @@ namespace Game
             }
 
             std::vector<OrbitPlotSystem::LineCommand> lines{};
-            lines.reserve(line_set.vertices.size() - 1u);
+            const std::size_t segment_count = line_set.vertices.size() - 1u;
+            const bool overlay_enabled = line_overlay_boost > 0.0f && color.a > 0.0f;
+            lines.reserve(segment_count * (overlay_enabled ? 2u : 1u));
             std::size_t skipped_nonfinite_position_segments = 0u;
             std::size_t invalid_time_segments = 0u;
             std::size_t nonfinite_length_segments = 0u;
@@ -296,32 +329,35 @@ namespace Game
                     continue;
                 }
 
-                const bool valid_time =
-                        std::isfinite(a.t_s) &&
-                        std::isfinite(b.t_s) &&
-                        b.t_s >= a.t_s;
-                if (!valid_time)
+                if (pick_enabled)
                 {
-                    ++invalid_time_segments;
-                }
-                if (std::isfinite(a.t_s))
-                {
-                    record_line_set_time(a.t_s);
-                }
-                if (std::isfinite(b.t_s))
-                {
-                    record_line_set_time(b.t_s);
-                }
+                    const bool valid_time =
+                            std::isfinite(a.t_s) &&
+                            std::isfinite(b.t_s) &&
+                            b.t_s >= a.t_s;
+                    if (!valid_time)
+                    {
+                        ++invalid_time_segments;
+                    }
+                    if (std::isfinite(a.t_s))
+                    {
+                        record_line_set_time(a.t_s);
+                    }
+                    if (std::isfinite(b.t_s))
+                    {
+                        record_line_set_time(b.t_s);
+                    }
 
-                const double segment_length_m =
-                        glm::length(glm::dvec3(b.position_world - a.position_world));
-                if (std::isfinite(segment_length_m))
-                {
-                    max_segment_length_m = std::max(max_segment_length_m, segment_length_m);
-                }
-                else
-                {
-                    ++nonfinite_length_segments;
+                    const double segment_length_m =
+                            glm::length(glm::dvec3(b.position_world - a.position_world));
+                    if (std::isfinite(segment_length_m))
+                    {
+                        max_segment_length_m = std::max(max_segment_length_m, segment_length_m);
+                    }
+                    else
+                    {
+                        ++nonfinite_length_segments;
+                    }
                 }
 
                 lines.push_back(OrbitPlotSystem::LineCommand{
@@ -347,7 +383,8 @@ namespace Game
             }
             if (pick_enabled)
             {
-                registered_pick_segments = emit_pick_segments(*picking, pick_group, line_set);
+                registered_pick_segments =
+                        emit_pick_segments(*picking, pick_group, line_set, pick_segment_scratch);
                 const std::size_t requested_segments = line_set.vertices.size() - 1u;
                 record_pick_frame_line_set(pick_stats,
                                            pick_group,
@@ -377,6 +414,64 @@ namespace Game
                     track.celestial_nbody ? 0.42f : (track.celestial ? 0.58f : context.base_color.a);
             return glm::vec4(track.orbit_rgb, alpha);
         }
+
+        void reserve_pick_segment_scratch(const KeplerPredictionState &state,
+                                          const KeplerPredictionDrawContext &context)
+        {
+            if (!context.pick_segment_scratch)
+            {
+                return;
+            }
+
+            context.pick_segment_scratch->clear();
+            if (!context.emit_pick || !state.enabled || !state.valid)
+            {
+                return;
+            }
+
+            std::size_t target_segments = 0u;
+            if (!state.tracks.empty())
+            {
+                for (const KeplerPredictionState::Track &track : state.tracks)
+                {
+                    if (!track.valid)
+                    {
+                        continue;
+                    }
+                    if (track.celestial_nbody && !context.draw_celestial_nbody_tracks)
+                    {
+                        continue;
+                    }
+                    if (track.celestial && !track.celestial_nbody && !context.draw_celestial_kepler_tracks)
+                    {
+                        continue;
+                    }
+                    if (!track.celestial && !context.draw_orbiter_tracks)
+                    {
+                        continue;
+                    }
+
+                    if (!track.celestial)
+                    {
+                        target_segments += target_pick_segment_count(track.base_lines);
+                    }
+                    if (context.draw_planned && track.active_player)
+                    {
+                        target_segments += target_pick_segment_count(track.planned_lines);
+                    }
+                }
+            }
+            else
+            {
+                target_segments += target_pick_segment_count(state.base_lines);
+                if (context.draw_planned)
+                {
+                    target_segments += target_pick_segment_count(state.planned_lines);
+                }
+            }
+
+            context.pick_segment_scratch->reserve(target_segments);
+        }
     } // namespace
 
     void draw_kepler_prediction(const KeplerPredictionState &state,
@@ -394,6 +489,7 @@ namespace Game
         {
             context.orbit_plot->clear_pending();
         }
+        reserve_pick_segment_scratch(state, context);
 
         if (!state.enabled || !state.valid || !context.orbit_plot)
         {
@@ -433,6 +529,7 @@ namespace Game
                               track_base_color(track, context),
                               context.depth,
                               context.line_overlay_boost,
+                              context.pick_segment_scratch,
                               pick_stats);
 
                 if (context.draw_planned && track.active_player)
@@ -446,6 +543,7 @@ namespace Game
                                   context.planned_color,
                                   context.depth,
                                   context.line_overlay_boost,
+                                  context.pick_segment_scratch,
                                   pick_stats);
                 }
             }
@@ -462,6 +560,7 @@ namespace Game
                       context.base_color,
                       context.depth,
                       context.line_overlay_boost,
+                      context.pick_segment_scratch,
                       pick_stats);
 
         if (context.draw_planned)
@@ -475,6 +574,7 @@ namespace Game
                           context.planned_color,
                           context.depth,
                           context.line_overlay_boost,
+                          context.pick_segment_scratch,
                           pick_stats);
         }
 
@@ -483,6 +583,8 @@ namespace Game
 
     void KeplerPredictionSystem::draw(const KeplerPredictionDrawContext &context) const
     {
-        draw_kepler_prediction(_state, context);
+        KeplerPredictionDrawContext draw_context = context;
+        draw_context.pick_segment_scratch = &_pick_segment_scratch;
+        draw_kepler_prediction(_state, draw_context);
     }
 } // namespace Game

@@ -109,6 +109,32 @@ namespace Game
         return comp_ctx;
     }
 
+    OrbitalPhysicsSystem::Context GameplayState::build_orbital_physics_context()
+    {
+        return GameplayOrbitalContextBuilder(GameplayOrbitalContextInputs{
+                .renderer = _renderer,
+                .world = _world,
+                .orbit = _orbit,
+                .physics = _physics.get(),
+                .physics_context = _physics_context.get(),
+                .scenario_config = _scenario_config,
+                .spacecraft_gravity_mode =
+                        spacecraft_orbit_prediction_uses_kepler()
+                                ? SpacecraftGravityMode::SoiKepler
+                                : SpacecraftGravityMode::NBody,
+                .soi_switch_options = _kepler_prediction_options.primary_switch,
+                .kepler_propagation = _kepler_prediction_options.propagation,
+                .soi_kepler_max_step_s = 60.0,
+                .keybinds = &_keybinds,
+                .ui_capture_keyboard = [this](const GameStateContext &frame_ctx) {
+                    return ui_capture_keyboard(frame_ctx);
+                },
+                .mark_prediction_dirty = [this]() {
+                    mark_prediction_dirty();
+                },
+        }).build();
+    }
+
     void GameplayState::update_rebase_anchor()
     {
         const EntityId next_anchor = _orbit.select_rebase_anchor_entity();
