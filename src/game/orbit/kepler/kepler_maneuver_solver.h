@@ -6,7 +6,7 @@
 
 namespace Game
 {
-    [[nodiscard]] KeplerManeuverSolveResult build_kepler_maneuver_arcs(
+    KeplerManeuverSolveResult build_kepler_maneuver_arcs(
             const KeplerOrbitArc &base_arc,
             std::span<const KeplerManeuverNode> nodes,
             const orbitsim::KeplerPropagationOptions &propagation_options = {});

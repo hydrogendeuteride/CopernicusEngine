@@ -18,8 +18,8 @@ namespace Game
         KeplerPredictionOptions options{};
     };
 
-    [[nodiscard]] double select_kepler_horizon_s(const orbitsim::KeplerArc &arc,
-                                                 const KeplerPredictionOptions &options);
+    double select_kepler_horizon_s(const orbitsim::KeplerArc &arc,
+                                   const KeplerPredictionOptions &options);
 
-    [[nodiscard]] KeplerOrbitBuildResult build_kepler_orbit(const KeplerOrbitBuildRequest &request);
+    KeplerOrbitBuildResult build_kepler_orbit(const KeplerOrbitBuildRequest &request);
 } // namespace Game

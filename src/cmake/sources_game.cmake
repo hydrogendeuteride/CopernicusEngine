@@ -188,6 +188,15 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/prediction_kepler/kepler_prediction_draw.cpp
   game/states/gameplay/prediction_kepler/kepler_prediction_system.h
   game/states/gameplay/prediction_kepler/kepler_prediction_system.cpp
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_types.h
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_plan.h
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_plan.cpp
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_node_resolver.h
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_node_resolver.cpp
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_commands.h
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_commands.cpp
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_system.h
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_system.cpp
   game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_colors.h
   game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_types.h
   game/states/gameplay/maneuver_nbody/gameplay_state_maneuver_util.h

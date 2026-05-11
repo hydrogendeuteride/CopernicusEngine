@@ -3,6 +3,7 @@
 #include "game/game_world.h"
 #include "game/state/game_state.h"
 #include "core/game_api.h"
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_system.h"
 #include "game/states/gameplay/maneuver_nbody/maneuver_system.h"
 #include "game/states/gameplay/settings/gameplay_settings.h"
 #include "game/orbit/kepler/kepler_prediction_options.h"
@@ -34,6 +35,8 @@ namespace Game
     struct GameplayPredictionAccess;
     struct GameplayPredictionContext;
     struct GameplayPredictionState;
+    struct KeplerManeuverCommand;
+    struct KeplerManeuverCommandResult;
     struct ManeuverCommand;
     struct ManeuverCommandResult;
     struct ManeuverPredictionBridgeContext;
@@ -125,6 +128,7 @@ namespace Game
         void clear_prediction_runtime();
 
         // Maneuver adapters
+        KeplerManeuverCommandResult apply_kepler_maneuver_command(const KeplerManeuverCommand &command);
         ManeuverPredictionBridgeContext build_maneuver_prediction_context();
         ManeuverUiControllerContext build_maneuver_ui_context(GameStateContext &ctx);
         void draw_nbody_orbit_debug_window(GameStateContext &ctx);
@@ -194,6 +198,7 @@ namespace Game
         bool _kepler_draw_celestial_nbody_tracks{true};
         std::unique_ptr<PredictionSystem> _prediction;
         std::unique_ptr<KeplerPredictionSystem> _kepler_prediction;
+        KeplerManeuverSystem _kepler_maneuver{};
         ManeuverSystem _maneuver{};
 
         float _elapsed{0.0f};

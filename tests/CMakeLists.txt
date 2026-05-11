@@ -106,7 +106,15 @@ set(GAME_ORBIT_KEPLER_SOURCES
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_debug.cpp"
 )
 
+set(GAMEPLAY_KEPLER_MANEUVER_SYSTEM_SOURCES
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_plan.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_node_resolver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_commands.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_system.cpp"
+)
+
 set(GAMEPLAY_KEPLER_PREDICTION_SOURCES
+  ${GAMEPLAY_KEPLER_MANEUVER_SYSTEM_SOURCES}
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/gameplay_state_orbit_prediction.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/gameplay_state_kepler_prediction.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_subject.cpp"
@@ -244,6 +252,26 @@ target_link_libraries(kepler_prediction_tests PRIVATE
 )
 
 add_test(NAME kepler_prediction_tests COMMAND kepler_prediction_tests)
+
+add_executable(kepler_maneuver_tests
+  kepler_maneuver_tests.cpp
+  ${GAMEPLAY_KEPLER_MANEUVER_SYSTEM_SOURCES}
+)
+
+set_property(TARGET kepler_maneuver_tests PROPERTY CXX_STANDARD 20)
+
+target_include_directories(kepler_maneuver_tests PRIVATE
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_SOURCE_DIR}/third_party/vma"
+  "${PROJECT_SOURCE_DIR}/third_party/taskflow/3rd-party"
+)
+
+target_link_libraries(kepler_maneuver_tests PRIVATE
+  gtest
+  orbitsim
+)
+
+add_test(NAME kepler_maneuver_tests COMMAND kepler_maneuver_tests)
 
 add_executable(orbit_prediction_planner_tests
   orbit_prediction_planner_tests.cpp

@@ -23,6 +23,7 @@ namespace Game
         {
             _kepler_prediction->reset();
         }
+        _kepler_maneuver.clear_node_display_states();
     }
 
     void GameplayState::update_kepler_prediction(GameStateContext &ctx)
@@ -48,6 +49,8 @@ namespace Game
         kepler_context.current_sim_time_s = current_sim_time_s();
         kepler_context.options = _kepler_prediction_options;
         kepler_context.tessellation = _kepler_tessellation_options;
+        kepler_context.maneuver_nodes = _kepler_maneuver.prediction_nodes();
+        kepler_context.maneuver_revision = _kepler_maneuver.revision();
         kepler_context.build_celestial_kepler_tracks = _kepler_draw_celestial_kepler_tracks;
         kepler_context.build_celestial_nbody_tracks = _kepler_draw_celestial_nbody_tracks;
 
@@ -65,6 +68,7 @@ namespace Game
         }
 
         _kepler_prediction->update(kepler_context);
+        _kepler_maneuver.resolve_node_display_states(_kepler_prediction->state());
     }
 
     void GameplayState::draw_kepler_prediction(GameStateContext &ctx)
@@ -84,5 +88,16 @@ namespace Game
         kepler_draw.depth = OrbitPlotDepth::DepthTested;
         kepler_draw.line_overlay_boost = 0.0f;
         _kepler_prediction->draw(kepler_draw);
+    }
+
+    KeplerManeuverCommandResult GameplayState::apply_kepler_maneuver_command(
+            const KeplerManeuverCommand &command)
+    {
+        KeplerManeuverCommandResult result = _kepler_maneuver.apply_command(command);
+        if (result.prediction_dirty)
+        {
+            mark_kepler_prediction_dirty();
+        }
+        return result;
     }
 } // namespace Game

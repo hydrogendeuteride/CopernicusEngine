@@ -47,6 +47,7 @@ namespace Game
         _elapsed = 0.0f;
         _fixed_time_s = 0.0;
         reset_time_warp_state();
+        _kepler_maneuver.reset_session();
         _maneuver.reset_session();
         _reset_requested = false;
         _scenario_io_status.clear();
@@ -124,6 +125,7 @@ namespace Game
             _outline_settings_saved = false;
         }
 
+        _kepler_maneuver.clear_interaction();
         _maneuver.clear_gizmo_interaction();
 
         _world.clear_rebase_anchor();
@@ -141,6 +143,7 @@ namespace Game
             ctx.renderer->_context->orbit_plot->clear_all();
         }
         reset_time_warp_state();
+        _kepler_maneuver.reset_session();
         _maneuver.reset_session();
 #if defined(VULKAN_ENGINE_USE_JOLT) && VULKAN_ENGINE_USE_JOLT
         if (ctx.renderer && ctx.renderer->_context)

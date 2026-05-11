@@ -345,3 +345,11 @@ void PickingSystem::add_line_pick_segment(const uint32_t group_id,
     (void) a_time_s;
     (void) b_time_s;
 }
+
+void PickingSystem::add_line_pick_segments(
+        const uint32_t group_id,
+        const std::span<const LinePickSegmentData> segments)
+{
+    (void) group_id;
+    (void) segments;
+}

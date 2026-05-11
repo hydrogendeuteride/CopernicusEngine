@@ -30,6 +30,8 @@ namespace Game
             orbitsim::BodyId primary_body_id{orbitsim::kInvalidBodyId};
 
             KeplerOrbitBuildResult orbit{};
+            KeplerWorldFrame world_frame{};
+            KeplerBodyStateProvider body_state_provider{};
             std::vector<KeplerOrbitArc> base_arcs{};
             std::vector<KeplerOrbitArc> planned_arcs{};
             KeplerOrbitLineSet base_lines{};

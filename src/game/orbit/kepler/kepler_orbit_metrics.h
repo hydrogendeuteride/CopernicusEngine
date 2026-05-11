@@ -24,5 +24,5 @@ namespace Game
         orbitsim::Vec3 apoapsis_rel_m{0.0, 0.0, 0.0};
     };
 
-    [[nodiscard]] KeplerOrbitMetrics compute_kepler_orbit_metrics(const KeplerOrbitArc &arc);
+    KeplerOrbitMetrics compute_kepler_orbit_metrics(const KeplerOrbitArc &arc);
 } // namespace Game

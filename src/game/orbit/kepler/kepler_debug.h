@@ -4,6 +4,6 @@
 
 namespace Game
 {
-    [[nodiscard]] const char *kepler_orbit_status_name(KeplerOrbitStatus status);
-    [[nodiscard]] const char *kepler_orbit_regime_name(orbitsim::KeplerOrbitRegime regime);
+    const char *kepler_orbit_status_name(KeplerOrbitStatus status);
+    const char *kepler_orbit_regime_name(orbitsim::KeplerOrbitRegime regime);
 } // namespace Game

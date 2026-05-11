@@ -50,20 +50,20 @@ namespace Game
         bool capped{false};
     };
 
-    [[nodiscard]] KeplerCelestialNBodyHorizonLimit limit_kepler_celestial_nbody_horizon(
+    KeplerCelestialNBodyHorizonLimit limit_kepler_celestial_nbody_horizon(
             double horizon_s,
             const KeplerPredictionOptions &options);
 
-    [[nodiscard]] double select_kepler_celestial_nbody_ephemeris_horizon_s(
+    double select_kepler_celestial_nbody_ephemeris_horizon_s(
             const KeplerCelestialNBodyEphemerisRequest &request);
 
-    [[nodiscard]] KeplerBodyStateProvider make_kepler_celestial_nbody_state_provider(
+    KeplerBodyStateProvider make_kepler_celestial_nbody_state_provider(
             KeplerSharedCelestialEphemeris ephemeris,
             const orbitsim::GameSimulation *fallback_simulation = nullptr);
 
-    [[nodiscard]] KeplerCelestialNBodyEphemerisResult build_kepler_celestial_nbody_ephemeris(
+    KeplerCelestialNBodyEphemerisResult build_kepler_celestial_nbody_ephemeris(
             const KeplerCelestialNBodyEphemerisRequest &request);
 
-    [[nodiscard]] KeplerOrbitLineSet build_kepler_celestial_nbody_lines(
+    KeplerOrbitLineSet build_kepler_celestial_nbody_lines(
             const KeplerCelestialNBodyLineRequest &request);
 } // namespace Game

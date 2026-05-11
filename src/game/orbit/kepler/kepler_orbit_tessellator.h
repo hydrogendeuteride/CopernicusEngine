@@ -15,5 +15,5 @@ namespace Game
         KeplerWorldFrame world_frame{};
     };
 
-    [[nodiscard]] KeplerOrbitLineSet build_kepler_orbit_lines(const KeplerOrbitTessellationRequest &request);
+    KeplerOrbitLineSet build_kepler_orbit_lines(const KeplerOrbitTessellationRequest &request);
 } // namespace Game

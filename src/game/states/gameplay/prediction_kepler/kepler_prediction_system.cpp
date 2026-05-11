@@ -220,6 +220,8 @@ namespace Game
             track.horizon_s = built.valid ? built.orbit.horizon_s : 0.0;
             track.primary_body_id = built.valid ? built.orbit.primary.body_id : orbitsim::kInvalidBodyId;
             track.orbit = std::move(built.orbit);
+            track.world_frame = world_frame;
+            track.body_state_provider = body_state_provider;
             track.base_arcs = std::move(built.base_arcs);
             track.planned_arcs = std::move(built.planned_arcs);
             track.base_lines = std::move(built.base_lines);

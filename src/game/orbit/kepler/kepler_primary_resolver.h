@@ -19,5 +19,5 @@ namespace Game
         double fallback_primary_hysteresis_keep_ratio{0.90};
     };
 
-    [[nodiscard]] KeplerPrimaryResolution resolve_kepler_primary(const KeplerPrimaryResolveRequest &request);
+    KeplerPrimaryResolution resolve_kepler_primary(const KeplerPrimaryResolveRequest &request);
 } // namespace Game
