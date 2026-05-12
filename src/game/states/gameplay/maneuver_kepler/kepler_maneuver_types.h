@@ -3,6 +3,8 @@
 #include "core/world.h"
 #include "game/orbit/kepler/kepler_types.h"
 
+#include <glm/vec2.hpp>
+
 #include <cstdint>
 #include <limits>
 #include <vector>
@@ -68,6 +70,27 @@ namespace Game
         [[nodiscard]] std::vector<KeplerManeuverNode> to_prediction_nodes() const;
     };
 
+    enum class KeplerManeuverHandleAxis : uint8_t
+    {
+        None = 0,
+        Hub,
+        TangentialPos,
+        TangentialNeg,
+        RadialPos,
+        RadialNeg,
+        NormalPos,
+        NormalNeg,
+    };
+
+    struct KeplerManeuverNodeDisplaySnapshot
+    {
+        int node_id{-1};
+        WorldVec3 position_world{0.0, 0.0, 0.0};
+        orbitsim::Vec3 basis_r_world{1.0, 0.0, 0.0};
+        orbitsim::Vec3 basis_t_world{0.0, 1.0, 0.0};
+        orbitsim::Vec3 basis_n_world{0.0, 0.0, 1.0};
+    };
+
     struct KeplerManeuverInteraction
     {
         enum class State
@@ -81,5 +104,16 @@ namespace Game
 
         State state{State::Idle};
         int node_id{-1};
+        KeplerManeuverHandleAxis axis{KeplerManeuverHandleAxis::None};
+        orbitsim::Vec3 start_dv_rtn_mps{0.0, 0.0, 0.0};
+        double start_axis_t_m{0.0};
+        orbitsim::Vec3 drag_basis_r_world{1.0, 0.0, 0.0};
+        orbitsim::Vec3 drag_basis_t_world{0.0, 1.0, 0.0};
+        orbitsim::Vec3 drag_basis_n_world{0.0, 0.0, 1.0};
+        glm::vec2 drag_start_mouse_window_pos{0.0f, 0.0f};
+        glm::vec2 drag_last_sample_mouse_window_pos{0.0f, 0.0f};
+        bool drag_threshold_passed{false};
+        std::vector<KeplerManeuverNodeDisplaySnapshot> drag_display_snapshots{};
+        bool applied_delta{false};
     };
 } // namespace Game

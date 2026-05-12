@@ -18,6 +18,15 @@ namespace Game
             result.plan_changed = true;
             result.prediction_dirty = !command.defer_prediction_dirty;
         }
+
+        bool should_preserve_drag_display(const KeplerManeuverCommand &command,
+                                          const KeplerManeuverInteraction &interaction)
+        {
+            return command.kind == KeplerManeuverCommandKind::SetNodeDv &&
+                   command.defer_prediction_dirty &&
+                   interaction.state == KeplerManeuverInteraction::State::DragAxis &&
+                   interaction.node_id == command.node_id;
+        }
     } // namespace
 
     KeplerManeuverPlanState &KeplerManeuverSystem::plan()
@@ -249,8 +258,16 @@ namespace Game
         }
         if (result.plan_changed)
         {
+            const bool preserve_drag_display = should_preserve_drag_display(command, _interaction);
             sync_prediction_nodes();
-            clear_node_display_states();
+            if (preserve_drag_display)
+            {
+                _interaction.applied_delta = true;
+            }
+            else
+            {
+                clear_node_display_states();
+            }
             increment_revision();
         }
         else if (result.selection_changed)
