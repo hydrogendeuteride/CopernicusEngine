@@ -65,6 +65,7 @@ enum class Key : uint16_t
     Period = 55,
     Slash = 56,
 
+    Delete = 76,
     ArrowRight = 79,
     ArrowLeft = 80,
     ArrowDown = 81,

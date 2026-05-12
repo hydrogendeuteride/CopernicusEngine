@@ -43,6 +43,7 @@ namespace Game
         bool set_node_primary_body(int node_id, bool primary_body_auto, orbitsim::BodyId primary_body_id);
         bool sort_by_time();
         KeplerManeuverNodeRemovalResult remove_node(int node_id, int hint_index);
+        KeplerManeuverNodeRemovalResult prune_past_nodes(double current_time_s);
 
     private:
         KeplerManeuverPlanState &_state;

@@ -173,6 +173,7 @@ TEST(KeplerManeuverSystem, RemoveNodeClearsDependentInteraction)
     ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(make_node(2, 20.0))).applied);
     system.interaction().state = Game::KeplerManeuverInteraction::State::DragAxis;
     system.interaction().node_id = 1;
+    system.interaction().suppress_orbit_pick_until_left_release = true;
 
     const Game::KeplerManeuverCommandResult result =
             system.apply_command(Game::KeplerManeuverCommand::remove_node(1, 0));
@@ -183,10 +184,114 @@ TEST(KeplerManeuverSystem, RemoveNodeClearsDependentInteraction)
     EXPECT_EQ(system.plan().selected_node_id, 2);
     EXPECT_EQ(system.interaction().state, Game::KeplerManeuverInteraction::State::Idle);
     EXPECT_EQ(system.interaction().node_id, -1);
+    EXPECT_TRUE(system.interaction().suppress_orbit_pick_until_left_release);
 
     const std::span<const Game::KeplerManeuverNode> nodes = system.prediction_nodes();
     ASSERT_EQ(nodes.size(), 1u);
     EXPECT_EQ(nodes[0].node_id, 2);
+}
+
+TEST(KeplerManeuverSystem, PrunesPastNodesAndUnlocksBaseOrbitCreation)
+{
+    Game::KeplerManeuverSystem system{};
+    ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(make_node(1, 10.0))).applied);
+    ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(make_node(2, 30.0))).applied);
+    system.interaction().state = Game::KeplerManeuverInteraction::State::HoverHub;
+    system.interaction().node_id = 1;
+
+    const Game::KeplerManeuverCommandResult first =
+            system.apply_command(Game::KeplerManeuverCommand::prune_past_nodes(10.0));
+
+    EXPECT_TRUE(first.applied);
+    EXPECT_TRUE(first.nodes_removed);
+    EXPECT_TRUE(first.prediction_dirty);
+    EXPECT_FALSE(first.plan_empty);
+    ASSERT_EQ(first.removed_node_ids.size(), 1u);
+    EXPECT_EQ(first.removed_node_ids.front(), 1);
+    ASSERT_EQ(system.plan().nodes.size(), 1u);
+    EXPECT_EQ(system.plan().nodes.front().id, 2);
+    EXPECT_EQ(system.plan().selected_node_id, 2);
+    EXPECT_EQ(system.interaction().state, Game::KeplerManeuverInteraction::State::Idle);
+    ASSERT_EQ(system.prediction_nodes().size(), 1u);
+    EXPECT_EQ(system.prediction_nodes().front().node_id, 2);
+
+    const Game::KeplerManeuverCommandResult second =
+            system.apply_command(Game::KeplerManeuverCommand::prune_past_nodes(31.0));
+
+    EXPECT_TRUE(second.applied);
+    EXPECT_TRUE(second.plan_empty);
+    EXPECT_TRUE(system.plan().nodes.empty());
+    EXPECT_EQ(system.plan().selected_node_id, -1);
+    EXPECT_TRUE(system.prediction_nodes().empty());
+
+    const orbitsim::State primary = orbitsim::make_state({}, {});
+    const Game::KeplerPredictionState prediction =
+            make_prediction_with_active_track(make_circular_arc(31.0, 120.0, primary), "Player");
+    EXPECT_TRUE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Base/Player", 45.0),
+            system.plan(),
+            prediction,
+            31.0));
+}
+
+TEST(KeplerManeuverSystem, DeferredDvDragWaitsForExplicitDirty)
+{
+    Game::KeplerManeuverSystem system{};
+    ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(
+            make_node(1, 10.0))).applied);
+    const uint64_t after_add_revision = system.revision();
+
+    system.interaction().state = Game::KeplerManeuverInteraction::State::DragAxis;
+    system.interaction().node_id = 1;
+
+    const Game::KeplerManeuverCommandResult drag_result =
+            system.apply_command(Game::KeplerManeuverCommand::set_node_dv(
+                    1,
+                    {0.0, 5.0, 0.0},
+                    true));
+
+    EXPECT_TRUE(drag_result.applied);
+    EXPECT_TRUE(drag_result.plan_changed);
+    EXPECT_FALSE(drag_result.prediction_dirty);
+    EXPECT_EQ(system.revision(), after_add_revision + 1u);
+    EXPECT_TRUE(system.interaction().applied_delta);
+
+    const Game::KeplerManeuverCommandResult dirty_result =
+            system.apply_command(Game::KeplerManeuverCommand::mark_plan_dirty());
+
+    EXPECT_TRUE(dirty_result.applied);
+    EXPECT_TRUE(dirty_result.plan_changed);
+    EXPECT_TRUE(dirty_result.prediction_dirty);
+    EXPECT_EQ(system.revision(), after_add_revision + 2u);
+}
+
+TEST(KeplerManeuverSystem, DirtyDvDragPreservesDragDisplay)
+{
+    Game::KeplerManeuverSystem system{};
+    ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(
+            make_node(1, 10.0))).applied);
+
+    const orbitsim::State primary = orbitsim::make_state({}, {});
+    Game::KeplerPredictionState prediction =
+            make_prediction_with_active_track(make_circular_arc(0.0, 120.0, primary));
+    ASSERT_EQ(system.resolve_node_display_states(prediction).valid_node_count, 1u);
+    ASSERT_EQ(system.node_display_states().size(), 1u);
+    system.interaction().state = Game::KeplerManeuverInteraction::State::DragAxis;
+    system.interaction().node_id = 1;
+
+    const Game::KeplerManeuverCommandResult result =
+            system.apply_command(Game::KeplerManeuverCommand::set_node_dv(
+                    1,
+                    {0.0, 4.0, 0.0}));
+
+    EXPECT_TRUE(result.applied);
+    EXPECT_TRUE(result.plan_changed);
+    EXPECT_TRUE(result.prediction_dirty);
+    EXPECT_EQ(system.interaction().state, Game::KeplerManeuverInteraction::State::DragAxis);
+    EXPECT_EQ(system.interaction().node_id, 1);
+    EXPECT_TRUE(system.interaction().applied_delta);
+    ASSERT_EQ(system.node_display_states().size(), 1u);
+    EXPECT_EQ(system.node_display_states().front().node_id, 1);
 }
 
 TEST(KeplerManeuverSystem, ResolvesNodeDisplayStateFromActiveKeplerTrack)

@@ -339,7 +339,7 @@ namespace Game
 
         KeplerManeuverDeleteMarker delete_marker{};
         delete_marker.node_id = selected_node_id;
-        delete_marker.screen = hub_screen + glm::vec2(overlay_size_px * 0.95f, -overlay_size_px * 0.95f);
+        delete_marker.screen = hub_screen + glm::vec2(overlay_size_px * 1.45f, -overlay_size_px * 1.45f);
         delete_marker.depth_m = hub_depth_m;
         out_deletes.push_back(delete_marker);
     }

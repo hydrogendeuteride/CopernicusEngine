@@ -39,6 +39,10 @@ namespace Game
             return;
         }
 
+        const double sim_time_s = current_sim_time_s();
+        (void) apply_kepler_maneuver_command(
+                KeplerManeuverCommand::prune_past_nodes(sim_time_s));
+
         KeplerPredictionUpdateContext kepler_context{};
         kepler_context.orbit = &_orbit;
         kepler_context.world = &_world;
@@ -46,7 +50,7 @@ namespace Game
         kepler_context.physics_context = _physics_context.get();
         kepler_context.scenario_config = &_scenario_config;
         kepler_context.enabled = _prediction->state().enabled;
-        kepler_context.current_sim_time_s = current_sim_time_s();
+        kepler_context.current_sim_time_s = sim_time_s;
         kepler_context.options = _kepler_prediction_options;
         kepler_context.line_options = _kepler_arc_line_options;
         kepler_context.maneuver_nodes = _kepler_maneuver.prediction_nodes();
@@ -87,6 +91,7 @@ namespace Game
         kepler_draw.draw_celestial_nbody_tracks = _kepler_draw_celestial_nbody_tracks;
         kepler_draw.depth = OrbitPlotDepth::DepthTested;
         kepler_draw.line_overlay_boost = 0.0f;
+        kepler_draw.planned_line_overlay_boost = _kepler_maneuver.prediction_nodes().empty() ? 0.0f : 0.65f;
         _kepler_prediction->draw(kepler_draw);
     }
 

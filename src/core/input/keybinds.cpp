@@ -27,6 +27,7 @@ namespace
         {Key::Num9, "9"}, {Key::Num0, "0"},
 
         {Key::Enter, "Enter"}, {Key::Escape, "Escape"}, {Key::Backspace, "Backspace"},
+        {Key::Delete, "Delete"},
         {Key::Tab, "Tab"}, {Key::Space, "Space"},
         {Key::LeftBracket, "LeftBracket"}, {Key::RightBracket, "RightBracket"},
         {Key::Comma, "Comma"}, {Key::Period, "Period"}, {Key::Slash, "Slash"},

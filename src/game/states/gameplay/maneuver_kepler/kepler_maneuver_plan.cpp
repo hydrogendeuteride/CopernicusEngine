@@ -317,4 +317,53 @@ namespace Game
         result.plan_empty = _state.nodes.empty();
         return result;
     }
+
+    KeplerManeuverNodeRemovalResult KeplerManeuverPlanModel::prune_past_nodes(
+            const double current_time_s)
+    {
+        KeplerManeuverNodeRemovalResult result{};
+        if (!std::isfinite(current_time_s) || _state.nodes.empty())
+        {
+            return result;
+        }
+
+        const int previous_selected_node_id = _state.selected_node_id;
+        for (const KeplerManeuverEditorNode &node : _state.nodes)
+        {
+            if (std::isfinite(node.time_s) && node.time_s <= current_time_s)
+            {
+                result.removed_node_ids.push_back(node.id);
+                if (node.id == previous_selected_node_id)
+                {
+                    result.removed_selected = true;
+                }
+            }
+        }
+        if (result.removed_node_ids.empty())
+        {
+            return result;
+        }
+
+        _state.nodes.erase(
+                std::remove_if(_state.nodes.begin(),
+                               _state.nodes.end(),
+                               [current_time_s](const KeplerManeuverEditorNode &node) {
+                                   return std::isfinite(node.time_s) &&
+                                          node.time_s <= current_time_s;
+                               }),
+                _state.nodes.end());
+
+        result.removed = true;
+        result.plan_empty = _state.nodes.empty();
+        if (result.plan_empty)
+        {
+            _state.selected_node_id = -1;
+        }
+        else if (result.removed_selected || !_state.find_node(_state.selected_node_id))
+        {
+            _state.selected_node_id = _state.nodes.front().id;
+            result.removed_selected = true;
+        }
+        return result;
+    }
 } // namespace Game

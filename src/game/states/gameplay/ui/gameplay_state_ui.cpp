@@ -199,8 +199,22 @@ namespace Game
         if (!spacecraft_orbit_prediction_uses_kepler() ||
             !_kepler_prediction ||
             !ctx.input ||
-            !ctx.renderer ||
-            !ctx.input->mouse_released(MouseButton::Left) ||
+            !ctx.renderer)
+        {
+            return;
+        }
+
+        if (_kepler_maneuver.interaction().suppress_orbit_pick_until_left_release)
+        {
+            if (!ctx.input->mouse_down(MouseButton::Left) ||
+                ctx.input->mouse_released(MouseButton::Left))
+            {
+                _kepler_maneuver.interaction().suppress_orbit_pick_until_left_release = false;
+            }
+            return;
+        }
+
+        if (!ctx.input->mouse_released(MouseButton::Left) ||
             ImGui::GetIO().WantCaptureMouse)
         {
             return;
@@ -782,7 +796,26 @@ namespace Game
         }
         if (spacecraft_orbit_prediction_uses_kepler())
         {
+            KeplerManeuverGizmoViewContext kepler_gizmo_view{};
+            if (_kepler_prediction &&
+                build_kepler_maneuver_gizmo_view_context(ctx, kepler_gizmo_view))
+            {
+                KeplerManeuverGizmoDrawContext kepler_gizmo{
+                        .ctx = ctx,
+                        .maneuver = _kepler_maneuver,
+                        .view = kepler_gizmo_view,
+                        .apply_command = [this](const KeplerManeuverCommand &command) {
+                            return apply_kepler_maneuver_command(command);
+                        },
+                };
+                KeplerManeuverGizmo::draw(kepler_gizmo);
+            }
             update_kepler_maneuver_orbit_pick_creation(ctx);
+            if (_kepler_prediction && _kepler_prediction->state().dirty)
+            {
+                update_kepler_prediction(ctx);
+                draw_kepler_prediction(ctx);
+            }
         }
         if (_show_nbody_orbit_debug && spacecraft_orbit_prediction_uses_nbody())
         {

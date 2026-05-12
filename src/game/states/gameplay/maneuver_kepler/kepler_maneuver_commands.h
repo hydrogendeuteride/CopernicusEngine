@@ -15,6 +15,7 @@ namespace Game
         SelectNodeByIndex,
         EnsureSelection,
         RemoveNode,
+        PrunePastNodes,
         SetNodeTime,
         SetNodeDv,
         SetNodePrimaryBody,
@@ -42,6 +43,7 @@ namespace Game
         static KeplerManeuverCommand select_node_by_index(int node_index);
         static KeplerManeuverCommand ensure_selection();
         static KeplerManeuverCommand remove_node(int node_id, int hint_index = -1);
+        static KeplerManeuverCommand prune_past_nodes(double current_time_s);
         static KeplerManeuverCommand set_node_time(int node_id,
                                                    double time_s,
                                                    bool defer_prediction_dirty = false);

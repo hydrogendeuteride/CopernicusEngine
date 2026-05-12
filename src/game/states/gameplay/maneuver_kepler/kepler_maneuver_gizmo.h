@@ -1,15 +1,20 @@
 #pragma once
 
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_commands.h"
 #include "game/states/gameplay/maneuver_kepler/kepler_maneuver_types.h"
 
 #include <glm/glm.hpp>
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <vector>
 
 namespace Game
 {
+    class KeplerManeuverSystem;
+    struct GameStateContext;
+
     struct KeplerManeuverViewportRect
     {
         int32_t x{0};
@@ -71,25 +76,44 @@ namespace Game
         KeplerManeuverInteraction::State state{KeplerManeuverInteraction::State::Idle};
     };
 
+    struct KeplerManeuverGizmoDrawContext
+    {
+        GameStateContext &ctx;
+        KeplerManeuverSystem &maneuver;
+        KeplerManeuverGizmoViewContext view{};
+        std::function<KeplerManeuverCommandResult(const KeplerManeuverCommand &)> apply_command;
+    };
+
     namespace KeplerManeuverGizmo
     {
-         const char *axis_label(KeplerManeuverHandleAxis axis);
-         uint32_t axis_color(KeplerManeuverHandleAxis axis);
-         bool is_axis(KeplerManeuverHandleAxis axis);
-         bool resolve_axis(KeplerManeuverHandleAxis axis, const orbitsim::Vec3 &basis_r_world,
-                                        const orbitsim::Vec3 &basis_t_world, const orbitsim::Vec3 &basis_n_world,
-                                        orbitsim::Vec3 &out_axis_dir_world, int &out_component, double &out_sign);
-         bool is_occluded(const KeplerManeuverGizmoViewContext &view, const WorldVec3 &point_world);
-         bool project_point(const KeplerManeuverGizmoViewContext &view, const WorldVec3 &point_world,
-                                         glm::vec2 &out_screen, double &out_depth_m);
-         const KeplerManeuverNodeDisplayState *find_display_state(
-            std::span<const KeplerManeuverNodeDisplayState> display_states, int node_id);
-         const KeplerManeuverNodeDisplaySnapshot *find_display_snapshot(
-            std::span<const KeplerManeuverNodeDisplaySnapshot> snapshots, int node_id);
-         KeplerManeuverGizmoHover find_hover(std::span<const KeplerManeuverHubMarker> hubs,
-                                                          std::span<const KeplerManeuverAxisMarker> axes,
-                                                          std::span<const KeplerManeuverDeleteMarker> deletes,
-                                                          const glm::vec2 &mouse_pos, float hub_hit_px2,
-                                                          float axis_hit_px2, float delete_hit_px2);
+        const char *axis_label(KeplerManeuverHandleAxis axis);
+        uint32_t axis_color(KeplerManeuverHandleAxis axis);
+        bool is_axis(KeplerManeuverHandleAxis axis);
+        bool resolve_axis(KeplerManeuverHandleAxis axis,
+                          const orbitsim::Vec3 &basis_r_world,
+                          const orbitsim::Vec3 &basis_t_world,
+                          const orbitsim::Vec3 &basis_n_world,
+                          orbitsim::Vec3 &out_axis_dir_world,
+                          int &out_component,
+                          double &out_sign);
+        bool is_occluded(const KeplerManeuverGizmoViewContext &view, const WorldVec3 &point_world);
+        bool project_point(const KeplerManeuverGizmoViewContext &view,
+                           const WorldVec3 &point_world,
+                           glm::vec2 &out_screen,
+                           double &out_depth_m);
+        const KeplerManeuverNodeDisplayState *find_display_state(
+                std::span<const KeplerManeuverNodeDisplayState> display_states,
+                int node_id);
+        const KeplerManeuverNodeDisplaySnapshot *find_display_snapshot(
+                std::span<const KeplerManeuverNodeDisplaySnapshot> snapshots,
+                int node_id);
+        KeplerManeuverGizmoHover find_hover(std::span<const KeplerManeuverHubMarker> hubs,
+                                            std::span<const KeplerManeuverAxisMarker> axes,
+                                            std::span<const KeplerManeuverDeleteMarker> deletes,
+                                            const glm::vec2 &mouse_pos,
+                                            float hub_hit_px2,
+                                            float axis_hit_px2,
+                                            float delete_hit_px2);
+        void draw(KeplerManeuverGizmoDrawContext &context);
     } // namespace KeplerManeuverGizmo
 } // namespace Game

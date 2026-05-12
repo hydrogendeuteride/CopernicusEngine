@@ -23,7 +23,6 @@ namespace Game
                                           const KeplerManeuverInteraction &interaction)
         {
             return command.kind == KeplerManeuverCommandKind::SetNodeDv &&
-                   command.defer_prediction_dirty &&
                    interaction.state == KeplerManeuverInteraction::State::DragAxis &&
                    interaction.node_id == command.node_id;
         }
@@ -129,7 +128,9 @@ namespace Game
     {
         if (contains_node_id(removed_node_ids, _interaction.node_id))
         {
+            const bool suppress_orbit_pick = _interaction.suppress_orbit_pick_until_left_release;
             _interaction = {};
+            _interaction.suppress_orbit_pick_until_left_release = suppress_orbit_pick;
         }
     }
 
@@ -194,6 +195,22 @@ namespace Game
             {
                 KeplerManeuverNodeRemovalResult removal =
                         model.remove_node(command.node_id, command.hint_index);
+                result.applied = removal.removed;
+                if (result.applied)
+                {
+                    result.nodes_removed = true;
+                    result.plan_empty = removal.plan_empty;
+                    result.removed_node_ids = std::move(removal.removed_node_ids);
+                    result.selection_changed = removal.removed_selected;
+                    mark_plan_changed(result, command);
+                }
+                break;
+            }
+
+            case KeplerManeuverCommandKind::PrunePastNodes:
+            {
+                KeplerManeuverNodeRemovalResult removal =
+                        model.prune_past_nodes(command.time_s);
                 result.applied = removal.removed;
                 if (result.applied)
                 {

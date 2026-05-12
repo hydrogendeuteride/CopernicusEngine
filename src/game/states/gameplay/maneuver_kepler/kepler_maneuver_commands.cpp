@@ -52,6 +52,14 @@ namespace Game
         return command;
     }
 
+    KeplerManeuverCommand KeplerManeuverCommand::prune_past_nodes(const double current_time_s)
+    {
+        KeplerManeuverCommand command{};
+        command.kind = KeplerManeuverCommandKind::PrunePastNodes;
+        command.time_s = current_time_s;
+        return command;
+    }
+
     KeplerManeuverCommand KeplerManeuverCommand::set_node_time(const int node_id,
                                                                const double time_s,
                                                                const bool defer_prediction_dirty)

@@ -115,5 +115,6 @@ namespace Game
         bool drag_threshold_passed{false};
         std::vector<KeplerManeuverNodeDisplaySnapshot> drag_display_snapshots{};
         bool applied_delta{false};
+        bool suppress_orbit_pick_until_left_release{false};
     };
 } // namespace Game

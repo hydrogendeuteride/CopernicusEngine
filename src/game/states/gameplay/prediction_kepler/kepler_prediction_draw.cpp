@@ -292,6 +292,7 @@ namespace Game
                            const glm::vec4 &color,
                            const OrbitPlotDepth depth,
                            const float line_overlay_boost,
+                           const bool dashed,
                            std::vector<Picking::LinePickSegmentData> *pick_segment_scratch,
                            KeplerPickFrameStats &pick_stats)
         {
@@ -373,6 +374,12 @@ namespace Game
                     {
                         ++nonfinite_length_segments;
                     }
+                }
+
+                const bool draw_segment = !dashed || ((i - 1u) % 3u) != 2u;
+                if (!draw_segment)
+                {
+                    continue;
                 }
 
                 lines.push_back(OrbitPlotSystem::LineCommand{
@@ -546,6 +553,7 @@ namespace Game
                               track_base_color(track, context),
                               context.depth,
                               context.line_overlay_boost,
+                              false,
                               context.pick_segment_scratch,
                               pick_stats);
 
@@ -553,6 +561,8 @@ namespace Game
                 {
                     const std::string planned_owner =
                             kepler_orbit_pick_owner(KeplerManeuverOrbitPickRole::Planned, track.label);
+                    const float planned_overlay_boost =
+                            std::max(context.line_overlay_boost, context.planned_line_overlay_boost);
                     emit_line_set(*context.orbit_plot,
                                   context.picking,
                                   context.emit_pick,
@@ -561,7 +571,8 @@ namespace Game
                                   track.planned_lines,
                                   context.planned_color,
                                   context.depth,
-                                  context.line_overlay_boost,
+                                  planned_overlay_boost,
+                                  context.planned_dashed,
                                   context.pick_segment_scratch,
                                   pick_stats);
                 }
@@ -579,11 +590,14 @@ namespace Game
                       context.base_color,
                       context.depth,
                       context.line_overlay_boost,
+                      false,
                       context.pick_segment_scratch,
                       pick_stats);
 
         if (context.draw_planned)
         {
+            const float planned_overlay_boost =
+                    std::max(context.line_overlay_boost, context.planned_line_overlay_boost);
             emit_line_set(*context.orbit_plot,
                           context.picking,
                           context.emit_pick,
@@ -592,7 +606,8 @@ namespace Game
                           state.planned_lines,
                           context.planned_color,
                           context.depth,
-                          context.line_overlay_boost,
+                          planned_overlay_boost,
+                          context.planned_dashed,
                           context.pick_segment_scratch,
                           pick_stats);
         }
