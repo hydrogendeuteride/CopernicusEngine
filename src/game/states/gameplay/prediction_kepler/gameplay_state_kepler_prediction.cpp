@@ -48,7 +48,7 @@ namespace Game
         kepler_context.enabled = _prediction->state().enabled;
         kepler_context.current_sim_time_s = current_sim_time_s();
         kepler_context.options = _kepler_prediction_options;
-        kepler_context.tessellation = _kepler_tessellation_options;
+        kepler_context.line_options = _kepler_arc_line_options;
         kepler_context.maneuver_nodes = _kepler_maneuver.prediction_nodes();
         kepler_context.maneuver_revision = _kepler_maneuver.revision();
         kepler_context.build_celestial_kepler_tracks = _kepler_draw_celestial_kepler_tracks;
@@ -58,13 +58,13 @@ namespace Game
         if (render_segment_budget > 1)
         {
             constexpr std::size_t kKeplerCurveSourceVertexCap = 16384u;
-            kepler_context.tessellation.max_vertices_total =
-                    std::min(kepler_context.tessellation.max_vertices_total,
+            kepler_context.line_options.max_vertices_total =
+                    std::min(kepler_context.line_options.max_vertices_total,
                              static_cast<std::size_t>(std::min(render_segment_budget + 1,
                                                                static_cast<int>(kKeplerCurveSourceVertexCap))));
-            kepler_context.tessellation.max_vertices_per_arc =
-                    std::min(kepler_context.tessellation.max_vertices_per_arc,
-                             kepler_context.tessellation.max_vertices_total);
+            kepler_context.line_options.max_vertices_per_arc =
+                    std::min(kepler_context.line_options.max_vertices_per_arc,
+                             kepler_context.line_options.max_vertices_total);
         }
 
         _kepler_prediction->update(kepler_context);

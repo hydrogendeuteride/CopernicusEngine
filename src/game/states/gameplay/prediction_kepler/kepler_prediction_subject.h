@@ -44,17 +44,17 @@ namespace Game
         orbitsim::State state_inertial{};
     };
 
-    [[nodiscard]] std::vector<KeplerPredictionSubject> resolve_kepler_prediction_orbiter_subjects(
+    std::vector<KeplerPredictionSubject> resolve_kepler_prediction_orbiter_subjects(
             const KeplerPredictionSubjectContext &context,
             const KeplerWorldFrame &world_frame);
 
-    [[nodiscard]] std::vector<KeplerPredictionSubject> resolve_kepler_prediction_celestial_subjects(
+    std::vector<KeplerPredictionSubject> resolve_kepler_prediction_celestial_subjects(
             const KeplerPredictionSubjectContext &context);
 
-    [[nodiscard]] bool resolve_kepler_prediction_world_frame(
+    bool resolve_kepler_prediction_world_frame(
             const KeplerPredictionSubjectContext &context,
             KeplerWorldFrame &out_frame);
 
-    [[nodiscard]] KeplerBodyStateProvider make_current_kepler_body_state_provider(
+    KeplerBodyStateProvider make_current_kepler_body_state_provider(
             const OrbitalRuntimeSystem &orbit);
 } // namespace Game

@@ -192,7 +192,7 @@ namespace Game
         bool _reset_requested{false};
         SpacecraftOrbitPredictionMode _spacecraft_orbit_prediction_mode{SpacecraftOrbitPredictionMode::Kepler};
         KeplerPredictionOptions _kepler_prediction_options{};
-        KeplerOrbitTessellationOptions _kepler_tessellation_options{};
+        KeplerArcLineOptions _kepler_arc_line_options{};
         bool _kepler_draw_orbiter_tracks{true};
         bool _kepler_draw_celestial_kepler_tracks{false};
         bool _kepler_draw_celestial_nbody_tracks{true};

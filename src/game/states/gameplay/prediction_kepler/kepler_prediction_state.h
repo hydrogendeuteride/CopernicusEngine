@@ -1,6 +1,6 @@
 #pragma once
 
-#include "game/orbit/kepler/kepler_orbit_metrics.h"
+#include "game/orbit/kepler/kepler_arc_info.h"
 #include "game/orbit/kepler/kepler_types.h"
 #include "game/entity.h"
 
@@ -29,14 +29,14 @@ namespace Game
             double horizon_s{0.0};
             orbitsim::BodyId primary_body_id{orbitsim::kInvalidBodyId};
 
-            KeplerOrbitBuildResult orbit{};
+            KeplerArcBuildResult orbit{};
             KeplerWorldFrame world_frame{};
             KeplerBodyStateProvider body_state_provider{};
             std::vector<KeplerOrbitArc> base_arcs{};
             std::vector<KeplerOrbitArc> planned_arcs{};
-            KeplerOrbitLineSet base_lines{};
-            KeplerOrbitLineSet planned_lines{};
-            KeplerOrbitMetrics metrics{};
+            KeplerArcLineSet base_lines{};
+            KeplerArcLineSet planned_lines{};
+            KeplerArcMetrics metrics{};
         };
 
         struct CelestialNBodyEphemerisDebug
@@ -75,12 +75,12 @@ namespace Game
         orbitsim::BodyId primary_body_id{orbitsim::kInvalidBodyId};
         orbitsim::BodyId world_reference_body_id{orbitsim::kInvalidBodyId};
 
-        KeplerOrbitBuildResult orbit{};
+        KeplerArcBuildResult orbit{};
         std::vector<KeplerOrbitArc> base_arcs{};
         std::vector<KeplerOrbitArc> planned_arcs{};
-        KeplerOrbitLineSet base_lines{};
-        KeplerOrbitLineSet planned_lines{};
-        KeplerOrbitMetrics metrics{};
+        KeplerArcLineSet base_lines{};
+        KeplerArcLineSet planned_lines{};
+        KeplerArcMetrics metrics{};
         std::vector<Track> tracks{};
         CelestialNBodyEphemerisDebug celestial_nbody_ephemeris{};
 

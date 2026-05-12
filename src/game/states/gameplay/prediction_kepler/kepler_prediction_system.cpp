@@ -85,11 +85,11 @@ namespace Game
             return track;
         }
 
-        KeplerOrbitTessellationOptions make_celestial_track_tessellation(
-                const KeplerOrbitTessellationOptions &base,
+        KeplerArcLineOptions make_celestial_track_line_options(
+                const KeplerArcLineOptions &base,
                 const KeplerPredictionOptions &options)
         {
-            KeplerOrbitTessellationOptions out = base;
+            KeplerArcLineOptions out = base;
             if (std::isfinite(options.celestial_line_max_time_step_s) &&
                 options.celestial_line_max_time_step_s > 0.0)
             {
@@ -196,10 +196,10 @@ namespace Game
             request.current_primary_body_id =
                     subject.active_player ? previous_primary_body_id : orbitsim::kInvalidBodyId;
             request.options = context.options;
-            request.tessellation =
+            request.line_options =
                     subject.celestial
-                            ? make_celestial_track_tessellation(context.tessellation, context.options)
-                            : context.tessellation;
+                            ? make_celestial_track_line_options(context.line_options, context.options)
+                            : context.line_options;
             if (subject.active_player)
             {
                 request.maneuver_nodes = context.maneuver_nodes;
@@ -248,14 +248,14 @@ namespace Game
                                                           KeplerOrbitStatus::EphemerisUnavailable);
             }
 
-            KeplerOrbitLineSet lines = build_kepler_celestial_nbody_lines(
+            KeplerArcLineSet lines = build_kepler_celestial_nbody_lines(
                     KeplerCelestialNBodyLineRequest{
                             .ephemeris = ephemeris,
                             .body_id = subject.body_id,
                             .world_frame = world_frame,
                             .t0_s = context.current_sim_time_s,
                             .requested_horizon_s = horizon_s,
-                            .tessellation = make_celestial_track_tessellation(context.tessellation,
+                            .line_options = make_celestial_track_line_options(context.line_options,
                                                                               context.options),
                     });
 
@@ -309,7 +309,7 @@ namespace Game
             }
 
             const orbitsim::GameSimulation &simulation = context.orbit->scenario()->sim;
-            KeplerOrbitBuildRequest request{};
+            KeplerArcBuildRequest request{};
             request.simulation = &simulation;
             request.ephemeris = nullptr;
             request.subject_state_inertial = subject.state_inertial;
@@ -323,7 +323,7 @@ namespace Game
                     subject.active_player ? previous_primary_body_id : orbitsim::kInvalidBodyId;
             request.options = context.options;
 
-            const KeplerOrbitBuildResult orbit = build_kepler_orbit(request);
+            const KeplerArcBuildResult orbit = build_kepler_arc(request);
             return (orbit.valid && std::isfinite(orbit.horizon_s) && orbit.horizon_s > 0.0)
                            ? orbit.horizon_s
                            : 0.0;
@@ -386,9 +386,9 @@ namespace Game
         double prediction_rebuild_interval_s(const KeplerPredictionUpdateContext &context)
         {
             const double source_dt_s =
-                    (std::isfinite(context.tessellation.max_time_step_s) &&
-                     context.tessellation.max_time_step_s > 0.0)
-                            ? context.tessellation.max_time_step_s
+                    (std::isfinite(context.line_options.max_time_step_s) &&
+                     context.line_options.max_time_step_s > 0.0)
+                            ? context.line_options.max_time_step_s
                             : 10.0;
             return std::clamp(source_dt_s * 0.005, 1.0 / 60.0, 0.05);
         }

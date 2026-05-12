@@ -10,20 +10,6 @@ namespace Game
 {
     namespace
     {
-        bool finite_vec3(const orbitsim::Vec3 &v)
-        {
-            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-        }
-
-        bool finite_state(const orbitsim::State &state)
-        {
-            return finite_vec3(state.position_m) &&
-                   finite_vec3(state.velocity_mps) &&
-                   finite_vec3(state.spin.axis) &&
-                   std::isfinite(state.spin.angle_rad) &&
-                   std::isfinite(state.spin.rate_rad_per_s);
-        }
-
         bool resolve_body_state(const orbitsim::GameSimulation &sim,
                                 const orbitsim::CelestialEphemeris *ephemeris,
                                 const orbitsim::BodyId body_id,
@@ -44,7 +30,7 @@ namespace Game
             {
                 out_state = body->state;
             }
-            return finite_state(out_state);
+            return true;
         }
 
         KeplerPrimaryResolution make_resolution(const orbitsim::GameSimulation &sim,
@@ -62,9 +48,7 @@ namespace Game
 
             const double g = sim.config().gravitational_constant;
             const double mu = g * body->mass_kg;
-            if (!(g > 0.0) || !std::isfinite(g) ||
-                !(body->mass_kg > 0.0) || !std::isfinite(body->mass_kg) ||
-                !(mu > 0.0) || !std::isfinite(mu))
+            if (!(g > 0.0) || !(body->mass_kg > 0.0) || !(mu > 0.0))
             {
                 out.status = KeplerOrbitStatus::InvalidPrimary;
                 return out;
@@ -94,7 +78,7 @@ namespace Game
                                                 const double query_time_s)
         {
             const orbitsim::MassiveBody *body = sim.body_by_id(body_id);
-            if (!body || !(body->mass_kg > 0.0) || !std::isfinite(body->mass_kg))
+            if (!body || !(body->mass_kg > 0.0))
             {
                 return std::nullopt;
             }
@@ -108,7 +92,7 @@ namespace Game
             {
                 body_position_m = body->state.position_m;
             }
-            if (!finite_vec3(body_position_m))
+            if (!kepler_finite_vec3(body_position_m))
             {
                 return std::nullopt;
             }
@@ -116,7 +100,7 @@ namespace Game
             const double eps2 = sim.config().softening_length_m * sim.config().softening_length_m;
             const orbitsim::Vec3 dr = body_position_m - query_position_m;
             const double r2 = glm::dot(dr, dr) + eps2;
-            if (!(r2 > 0.0) || !std::isfinite(r2))
+            if (!(r2 > 0.0))
             {
                 return std::nullopt;
             }
@@ -162,8 +146,8 @@ namespace Game
             }
 
             const double keep_ratio =
-                    std::isfinite(hysteresis_keep_ratio)
-                            ? std::clamp(hysteresis_keep_ratio, 0.0, 1.0)
+                    (hysteresis_keep_ratio > 0.0)
+                            ? std::min(hysteresis_keep_ratio, 1.0)
                             : 0.0;
             if (current_primary_body_id != orbitsim::kInvalidBodyId &&
                 current_metric.has_value() &&
@@ -185,7 +169,7 @@ namespace Game
             out.status = KeplerOrbitStatus::InvalidSimulation;
             return out;
         }
-        if (!finite_vec3(request.query_position_m) || !std::isfinite(request.query_time_s))
+        if (!kepler_finite_vec3(request.query_position_m) || !std::isfinite(request.query_time_s))
         {
             out.status = KeplerOrbitStatus::InvalidInput;
             return out;

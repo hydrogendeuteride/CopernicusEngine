@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "game/orbit/kepler/kepler_celestial_nbody.h"
-#include "game/orbit/kepler/kepler_debug.h"
+#include "game/orbit/kepler/kepler_arc_info.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_builder.h"
 
 #include <glm/geometric.hpp>
@@ -65,9 +65,9 @@ namespace
                     out_state = body->state;
                     return true;
                 };
-        request.tessellation.max_time_step_s = 30.0;
-        request.tessellation.max_vertices_per_arc = 16;
-        request.tessellation.max_vertices_total = 32;
+        request.line_options.max_time_step_s = 30.0;
+        request.line_options.max_vertices_per_arc = 16;
+        request.line_options.max_vertices_total = 32;
         return request;
     }
 
@@ -184,12 +184,12 @@ TEST(KeplerPrediction, CelestialNBodyEphemerisBuildsMovingBodyLines)
     ASSERT_TRUE(ephemeris.body_state_provider.state_at(kEarthId, 3'600.0, earth_t1));
     EXPECT_GT(glm::length(earth_t1.position_m - earth_t0.position_m), 0.0);
 
-    Game::KeplerOrbitTessellationOptions tessellation{};
-    tessellation.max_time_step_s = 600.0;
-    tessellation.max_vertices_per_arc = 16u;
-    tessellation.max_vertices_total = 16u;
+    Game::KeplerArcLineOptions line_options{};
+    line_options.max_time_step_s = 600.0;
+    line_options.max_vertices_per_arc = 16u;
+    line_options.max_vertices_total = 16u;
 
-    const Game::KeplerOrbitLineSet moon_lines =
+    const Game::KeplerArcLineSet moon_lines =
             Game::build_kepler_celestial_nbody_lines(
                     Game::KeplerCelestialNBodyLineRequest{
                             .ephemeris = ephemeris.ephemeris,
@@ -197,7 +197,7 @@ TEST(KeplerPrediction, CelestialNBodyEphemerisBuildsMovingBodyLines)
                             .world_frame = world_frame,
                             .t0_s = 0.0,
                             .requested_horizon_s = 3'600.0,
-                            .tessellation = tessellation,
+                            .line_options = line_options,
                     });
 
     ASSERT_TRUE(moon_lines.valid) << Game::kepler_orbit_status_name(moon_lines.diagnostics.status);

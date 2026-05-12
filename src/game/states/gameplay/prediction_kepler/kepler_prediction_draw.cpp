@@ -171,7 +171,7 @@ namespace Game
 
         std::size_t emit_pick_segments(PickingSystem &picking,
                                        const uint32_t pick_group,
-                                       const KeplerOrbitLineSet &line_set,
+                                       const KeplerArcLineSet &line_set,
                                        std::vector<Picking::LinePickSegmentData> *scratch)
         {
             const std::size_t requested_segments =
@@ -193,8 +193,8 @@ namespace Game
                     return;
                 }
 
-                const KeplerOrbitLineVertex &a = line_set.vertices[a_index];
-                const KeplerOrbitLineVertex &b = line_set.vertices[b_index];
+                const KeplerArcLineVertex &a = line_set.vertices[a_index];
+                const KeplerArcLineVertex &b = line_set.vertices[b_index];
                 if (!finite_world(a.position_world) || !finite_world(b.position_world))
                 {
                     return;
@@ -259,7 +259,7 @@ namespace Game
             return emitted_segments;
         }
 
-        std::size_t target_pick_segment_count(const KeplerOrbitLineSet &line_set)
+        std::size_t target_pick_segment_count(const KeplerArcLineSet &line_set)
         {
             if (!line_set.valid || line_set.vertices.size() < 2u)
             {
@@ -273,7 +273,7 @@ namespace Game
                            const bool emit_pick,
                            const char *pick_owner_name,
                            const char *line_role,
-                           const KeplerOrbitLineSet &line_set,
+                           const KeplerArcLineSet &line_set,
                            const glm::vec4 &color,
                            const OrbitPlotDepth depth,
                            const float line_overlay_boost,
@@ -321,8 +321,8 @@ namespace Game
             };
             for (std::size_t i = 1; i < line_set.vertices.size(); ++i)
             {
-                const KeplerOrbitLineVertex &a = line_set.vertices[i - 1u];
-                const KeplerOrbitLineVertex &b = line_set.vertices[i];
+                const KeplerArcLineVertex &a = line_set.vertices[i - 1u];
+                const KeplerArcLineVertex &b = line_set.vertices[i];
                 if (!finite_world(a.position_world) || !finite_world(b.position_world))
                 {
                     ++skipped_nonfinite_position_segments;

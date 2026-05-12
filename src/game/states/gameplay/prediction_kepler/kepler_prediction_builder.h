@@ -1,9 +1,8 @@
 #pragma once
 
-#include "game/orbit/kepler/kepler_maneuver_solver.h"
-#include "game/orbit/kepler/kepler_orbit_builder.h"
-#include "game/orbit/kepler/kepler_orbit_metrics.h"
-#include "game/orbit/kepler/kepler_orbit_tessellator.h"
+#include "game/orbit/kepler/kepler_arc_builder.h"
+#include "game/orbit/kepler/kepler_arc_info.h"
+#include "game/orbit/kepler/kepler_arc_line_builder.h"
 
 #include <cstdint>
 #include <span>
@@ -23,7 +22,7 @@ namespace Game
         orbitsim::BodyId fixed_primary_body_id{orbitsim::kInvalidBodyId};
         orbitsim::BodyId current_primary_body_id{orbitsim::kInvalidBodyId};
         KeplerPredictionOptions options{};
-        KeplerOrbitTessellationOptions tessellation{};
+        KeplerArcLineOptions line_options{};
         std::span<const KeplerManeuverNode> maneuver_nodes{};
         uint64_t maneuver_revision{0};
     };
@@ -33,14 +32,14 @@ namespace Game
         bool valid{false};
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
         uint64_t maneuver_revision{0};
-        KeplerOrbitBuildResult orbit{};
+        KeplerArcBuildResult orbit{};
         std::vector<KeplerOrbitArc> base_arcs{};
         std::vector<KeplerOrbitArc> planned_arcs{};
-        KeplerOrbitLineSet base_lines{};
-        KeplerOrbitLineSet planned_lines{};
-        KeplerOrbitMetrics metrics{};
+        KeplerArcLineSet base_lines{};
+        KeplerArcLineSet planned_lines{};
+        KeplerArcMetrics metrics{};
     };
 
-    [[nodiscard]] KeplerPredictionBuildOutput build_kepler_prediction(
+    KeplerPredictionBuildOutput build_kepler_prediction(
             const KeplerPredictionBuildRequest &request);
 } // namespace Game

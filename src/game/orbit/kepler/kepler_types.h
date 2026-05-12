@@ -7,6 +7,7 @@
 #include "orbitsim/kepler_maneuver.hpp"
 #include "orbitsim/kepler_trajectory.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -31,7 +32,7 @@ namespace Game
         NoSamples,
     };
 
-    enum class KeplerOrbitLineVertexFlags : uint32_t
+    enum class KeplerArcLineVertexFlags : uint32_t
     {
         None = 0u,
         OrbitStart = 1u << 0u,
@@ -40,6 +41,7 @@ namespace Game
         ArcEnd = 1u << 3u,
     };
 
+    // Selected primary body and its state.
     struct KeplerPrimaryResolution
     {
         bool valid{false};
@@ -51,13 +53,15 @@ namespace Game
         orbitsim::State state_inertial{};
     };
 
+    // Kepler arc, primary state at t0.
     struct KeplerOrbitArc
     {
         orbitsim::KeplerArc arc{};
         orbitsim::State primary_state_inertial_at_t0{};
     };
 
-    struct KeplerOrbitBuildResult
+    // Base arc build result for one subject.
+    struct KeplerArcBuildResult
     {
         bool valid{false};
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
@@ -66,6 +70,7 @@ namespace Game
         double horizon_s{0.0};
     };
 
+    // Maneuver node as a timed RTN impulse.
     struct KeplerManeuverNode
     {
         int node_id{-1};
@@ -74,7 +79,8 @@ namespace Game
         orbitsim::Vec3 dv_rtn_mps{0.0, 0.0, 0.0};
     };
 
-    struct KeplerManeuverSolveResult
+    // Maneuvered arc chain and diagnostics.
+    struct KeplerManeuverArcBuildResult
     {
         bool valid{false};
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
@@ -82,11 +88,13 @@ namespace Game
         orbitsim::KeplerManeuverDiagnostics diagnostics{};
     };
 
+    // Moving-body state sampler.
     struct KeplerBodyStateProvider
     {
         std::function<bool(orbitsim::BodyId body_id, double t_s, orbitsim::State &out_state)> state_at{};
     };
 
+    // Inertial-to-world conversion frame.
     struct KeplerWorldFrame
     {
         WorldVec3 world_reference_body_world{0.0, 0.0, 0.0};
@@ -94,7 +102,8 @@ namespace Game
         orbitsim::State world_reference_state_inertial{};
     };
 
-    struct KeplerOrbitLineVertex
+    // Sampled orbit point in world space.
+    struct KeplerArcLineVertex
     {
         WorldVec3 position_world{0.0, 0.0, 0.0};
         double t_s{std::numeric_limits<double>::quiet_NaN()};
@@ -102,7 +111,8 @@ namespace Game
         uint32_t flags{0u};
     };
 
-    struct KeplerOrbitTessellationDiagnostics
+    // Orbit line sampling diagnostics.
+    struct KeplerArcLineDiagnostics
     {
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
         std::size_t requested_arcs{0};
@@ -114,10 +124,28 @@ namespace Game
         bool budget_hit{false};
     };
 
-    struct KeplerOrbitLineSet
+    // Polyline output for one or more arcs.
+    struct KeplerArcLineSet
     {
         bool valid{false};
-        std::vector<KeplerOrbitLineVertex> vertices{};
-        KeplerOrbitTessellationDiagnostics diagnostics{};
+        std::vector<KeplerArcLineVertex> vertices{};
+        KeplerArcLineDiagnostics diagnostics{};
     };
+
+    inline bool kepler_finite_vec3(const orbitsim::Vec3 &v)
+    {
+        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    }
+
+    inline double kepler_positive_or_default(const double value,
+                                             const double fallback)
+    {
+        return (std::isfinite(value) && value > 0.0) ? value : fallback;
+    }
+
+    inline bool kepler_same_sample_time(const double a,
+                                        const double b)
+    {
+        return std::isfinite(a) && std::isfinite(b) && std::abs(a - b) <= 1.0e-9;
+    }
 } // namespace Game

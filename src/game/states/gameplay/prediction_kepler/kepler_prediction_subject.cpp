@@ -5,7 +5,6 @@
 #include "game/states/gameplay/orbital/orbital_runtime_system.h"
 #include "game/states/gameplay/scenario/scenario_config.h"
 
-#include <cmath>
 #include <utility>
 
 namespace Game
@@ -19,20 +18,6 @@ namespace Game
                 {0.28f, 0.88f, 0.38f},
         };
         constexpr glm::vec3 kDefaultCelestialColor{0.80f, 0.82f, 0.86f};
-
-        bool finite_vec3(const glm::dvec3 &v)
-        {
-            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-        }
-
-        bool finite_state(const orbitsim::State &state)
-        {
-            return finite_vec3(state.position_m) &&
-                   finite_vec3(state.velocity_mps) &&
-                   finite_vec3(state.spin.axis) &&
-                   std::isfinite(state.spin.angle_rad) &&
-                   std::isfinite(state.spin.rate_rad_per_s);
-        }
 
         glm::vec3 orbiter_color(const ScenarioConfig &config,
                                 const OrbiterInfo &orbiter,
@@ -96,7 +81,7 @@ namespace Game
 
         out_frame.world_reference_body_id = world_ref_info->sim_id;
         out_frame.world_reference_state_inertial = world_ref_sim->state;
-        return finite_state(out_frame.world_reference_state_inertial);
+        return kepler_finite_vec3(out_frame.world_reference_state_inertial.position_m);
     }
 
     std::vector<KeplerPredictionSubject> resolve_kepler_prediction_orbiter_subjects(
@@ -152,7 +137,8 @@ namespace Game
                     world_ref_sim->state.position_m + position_rel_ref_m;
             const glm::dvec3 velocity_inertial_mps =
                     world_ref_sim->state.velocity_mps + velocity_world_mps;
-            if (!finite_vec3(position_inertial_m) || !finite_vec3(velocity_inertial_mps))
+            if (!kepler_finite_vec3(position_inertial_m) ||
+                !kepler_finite_vec3(velocity_inertial_mps))
             {
                 continue;
             }
@@ -166,10 +152,7 @@ namespace Game
             subject.position_world = position_world;
             subject.velocity_world_mps = velocity_world_mps;
             subject.state_inertial = orbitsim::make_state(position_inertial_m, velocity_inertial_mps);
-            if (finite_state(subject.state_inertial))
-            {
-                out.push_back(std::move(subject));
-            }
+            out.push_back(std::move(subject));
         }
 
         return out;
@@ -200,7 +183,9 @@ namespace Game
             }
 
             const orbitsim::MassiveBody *body = scenario->sim.body_by_id(body_info.sim_id);
-            if (!body || !finite_state(body->state))
+            if (!body ||
+                !kepler_finite_vec3(body->state.position_m) ||
+                !kepler_finite_vec3(body->state.velocity_mps))
             {
                 continue;
             }
@@ -237,7 +222,7 @@ namespace Game
             }
 
             out_state = body->state;
-            return finite_state(out_state);
+            return kepler_finite_vec3(out_state.position_m);
         };
         return provider;
     }

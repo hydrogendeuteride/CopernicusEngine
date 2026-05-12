@@ -6,7 +6,7 @@
 
 namespace Game
 {
-    struct KeplerOrbitMetrics
+    struct KeplerArcMetrics
     {
         bool valid{false};
         orbitsim::BodyId primary_body_id{orbitsim::kInvalidBodyId};
@@ -24,5 +24,7 @@ namespace Game
         orbitsim::Vec3 apoapsis_rel_m{0.0, 0.0, 0.0};
     };
 
-    KeplerOrbitMetrics compute_kepler_orbit_metrics(const KeplerOrbitArc &arc);
+    KeplerArcMetrics compute_kepler_arc_metrics(const KeplerOrbitArc &arc);
+    const char *kepler_orbit_status_name(KeplerOrbitStatus status);
+    const char *kepler_orbit_regime_name(orbitsim::KeplerOrbitRegime regime);
 } // namespace Game

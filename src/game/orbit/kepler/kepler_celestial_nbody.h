@@ -11,8 +11,10 @@
 
 namespace Game
 {
+    // Cached ephemeris shared by tracks and body-state providers.
     using KeplerSharedCelestialEphemeris = std::shared_ptr<const orbitsim::CelestialEphemeris>;
 
+    // N-body ephemeris build request; integration stays in inertial space.
     struct KeplerCelestialNBodyEphemerisRequest
     {
         const orbitsim::GameSimulation *simulation{nullptr};
@@ -22,6 +24,7 @@ namespace Game
         KeplerPredictionOptions options{};
     };
 
+    // Ephemeris plus lookup provider for moving primary/reference bodies.
     struct KeplerCelestialNBodyEphemerisResult
     {
         bool valid{false};
@@ -32,6 +35,7 @@ namespace Game
         KeplerBodyStateProvider body_state_provider{};
     };
 
+    // Samples one ephemeris body into world-space OrbitPlot vertices.
     struct KeplerCelestialNBodyLineRequest
     {
         KeplerSharedCelestialEphemeris ephemeris{};
@@ -39,9 +43,10 @@ namespace Game
         KeplerWorldFrame world_frame{};
         double t0_s{0.0};
         double requested_horizon_s{0.0};
-        KeplerOrbitTessellationOptions tessellation{};
+        KeplerArcLineOptions line_options{};
     };
 
+    // Horizon after n-body cap, with original value kept for diagnostics.
     struct KeplerCelestialNBodyHorizonLimit
     {
         double uncapped_horizon_s{0.0};
@@ -50,20 +55,16 @@ namespace Game
         bool capped{false};
     };
 
+    // Apply KeplerPredictionOptions::celestial_nbody_horizon_cap_s.
     KeplerCelestialNBodyHorizonLimit limit_kepler_celestial_nbody_horizon(
             double horizon_s,
             const KeplerPredictionOptions &options);
 
-    double select_kepler_celestial_nbody_ephemeris_horizon_s(
-            const KeplerCelestialNBodyEphemerisRequest &request);
-
-    KeplerBodyStateProvider make_kepler_celestial_nbody_state_provider(
-            KeplerSharedCelestialEphemeris ephemeris,
-            const orbitsim::GameSimulation *fallback_simulation = nullptr);
-
+    // Integrate massive bodies into an adaptive ephemeris.
     KeplerCelestialNBodyEphemerisResult build_kepler_celestial_nbody_ephemeris(
             const KeplerCelestialNBodyEphemerisRequest &request);
 
-    KeplerOrbitLineSet build_kepler_celestial_nbody_lines(
+    // Build a world-space line strip for one ephemeris body.
+    KeplerArcLineSet build_kepler_celestial_nbody_lines(
             const KeplerCelestialNBodyLineRequest &request);
 } // namespace Game

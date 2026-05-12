@@ -99,11 +99,9 @@ set(GAMEPLAY_NBODY_PREDICTION_CACHE_SOURCES
 set(GAME_ORBIT_KEPLER_SOURCES
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_celestial_nbody.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_primary_resolver.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_builder.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_maneuver_solver.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_tessellator.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_orbit_metrics.cpp"
-  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_debug.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_line_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_info.cpp"
 )
 
 set(GAMEPLAY_KEPLER_MANEUVER_SYSTEM_SOURCES

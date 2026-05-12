@@ -24,7 +24,7 @@ namespace Game
         double requested_horizon_s{0.0};
         orbitsim::BodyId fixed_primary_body_id{orbitsim::kInvalidBodyId};
         KeplerPredictionOptions options{};
-        KeplerOrbitTessellationOptions tessellation{};
+        KeplerArcLineOptions line_options{};
         std::span<const KeplerManeuverNode> maneuver_nodes{};
         uint64_t maneuver_revision{0};
         bool build_celestial_kepler_tracks{false};
@@ -34,8 +34,8 @@ namespace Game
     class KeplerPredictionSystem
     {
     public:
-        [[nodiscard]] KeplerPredictionState &state() { return _state; }
-        [[nodiscard]] const KeplerPredictionState &state() const { return _state; }
+        KeplerPredictionState &state() { return _state; }
+        const KeplerPredictionState &state() const { return _state; }
 
         void reset();
         void mark_dirty();
@@ -66,7 +66,7 @@ namespace Game
             orbitsim::AdaptiveEphemerisDiagnostics diagnostics{};
         };
 
-        [[nodiscard]] const CelestialNBodyEphemerisCache &resolve_celestial_nbody_cache(
+        const CelestialNBodyEphemerisCache &resolve_celestial_nbody_cache(
                 const KeplerPredictionUpdateContext &context,
                 const KeplerWorldFrame &world_frame,
                 double required_horizon_s,

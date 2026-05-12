@@ -1,4 +1,4 @@
-#include "game/orbit/kepler/kepler_orbit_metrics.h"
+#include "game/orbit/kepler/kepler_arc_info.h"
 
 #include <cmath>
 
@@ -25,9 +25,9 @@ namespace Game
         }
     } // namespace
 
-    KeplerOrbitMetrics compute_kepler_orbit_metrics(const KeplerOrbitArc &arc)
+    KeplerArcMetrics compute_kepler_arc_metrics(const KeplerOrbitArc &arc)
     {
-        KeplerOrbitMetrics out{};
+        KeplerArcMetrics out{};
         if (!orbitsim::kepler_arc_valid(arc.arc))
         {
             return out;
@@ -64,5 +64,55 @@ namespace Game
         out.periapsis_rel_m = apsides.periapsis_rel_m;
         out.apoapsis_rel_m = apsides.apoapsis_rel_m;
         return out;
+    }
+
+    const char *kepler_orbit_status_name(const KeplerOrbitStatus status)
+    {
+        switch (status)
+        {
+            case KeplerOrbitStatus::Ok:
+                return "Ok";
+            case KeplerOrbitStatus::InvalidInput:
+                return "InvalidInput";
+            case KeplerOrbitStatus::InvalidSimulation:
+                return "InvalidSimulation";
+            case KeplerOrbitStatus::InvalidSubjectState:
+                return "InvalidSubjectState";
+            case KeplerOrbitStatus::PrimaryUnavailable:
+                return "PrimaryUnavailable";
+            case KeplerOrbitStatus::InvalidPrimary:
+                return "InvalidPrimary";
+            case KeplerOrbitStatus::InvalidArc:
+                return "InvalidArc";
+            case KeplerOrbitStatus::PrimaryMismatch:
+                return "PrimaryMismatch";
+            case KeplerOrbitStatus::EphemerisUnavailable:
+                return "EphemerisUnavailable";
+            case KeplerOrbitStatus::ContinuityFailed:
+                return "ContinuityFailed";
+            case KeplerOrbitStatus::PropagationFailed:
+                return "PropagationFailed";
+            case KeplerOrbitStatus::SampleBudgetExceeded:
+                return "SampleBudgetExceeded";
+            case KeplerOrbitStatus::NoSamples:
+                return "NoSamples";
+        }
+        return "Unknown";
+    }
+
+    const char *kepler_orbit_regime_name(const orbitsim::KeplerOrbitRegime regime)
+    {
+        switch (regime)
+        {
+            case orbitsim::KeplerOrbitRegime::Unknown:
+                return "Unknown";
+            case orbitsim::KeplerOrbitRegime::Elliptic:
+                return "Elliptic";
+            case orbitsim::KeplerOrbitRegime::NearParabolic:
+                return "NearParabolic";
+            case orbitsim::KeplerOrbitRegime::Hyperbolic:
+                return "Hyperbolic";
+        }
+        return "Unknown";
     }
 } // namespace Game

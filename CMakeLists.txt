@@ -3,6 +3,12 @@ cmake_minimum_required(VERSION 3.20)
 project(vulkan_engine LANGUAGES C CXX)
 
 option(VULKAN_ENGINE_OUTPUT_TO_SOURCE_ROOT "Place executables and shared libraries under the source tree bin/ and lib/ directories" ON)
+option(VULKAN_ENGINE_QUIET_BUILD "Reduce per-file build progress messages where the CMake generator supports it" ON)
+
+if(VULKAN_ENGINE_QUIET_BUILD)
+    set(CMAKE_RULE_MESSAGES OFF CACHE BOOL "Report per-rule build messages" FORCE)
+    set_property(GLOBAL PROPERTY RULE_MESSAGES OFF)
+endif()
 
 if(WIN32)
     if(DEFINED ENV{VULKAN_SDK})

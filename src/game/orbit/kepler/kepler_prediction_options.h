@@ -33,7 +33,7 @@ namespace Game
         KeplerCelestialNBodyEphemerisOptions celestial_nbody_ephemeris{};
     };
 
-    struct KeplerOrbitTessellationOptions
+    struct KeplerArcLineOptions
     {
         double max_time_step_s{60.0};
         double min_time_step_s{1.0};

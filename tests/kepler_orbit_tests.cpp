@@ -1,10 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "game/orbit/kepler/kepler_debug.h"
-#include "game/orbit/kepler/kepler_maneuver_solver.h"
-#include "game/orbit/kepler/kepler_orbit_builder.h"
-#include "game/orbit/kepler/kepler_orbit_metrics.h"
-#include "game/orbit/kepler/kepler_orbit_tessellator.h"
+#include "game/orbit/kepler/kepler_arc_info.h"
+#include "game/orbit/kepler/kepler_arc_builder.h"
+#include "game/orbit/kepler/kepler_arc_line_builder.h"
 
 #include <algorithm>
 #include <cmath>
@@ -111,7 +109,7 @@ namespace
     }
 } // namespace
 
-TEST(KeplerOrbit, BuilderSelectsFixedPrimaryAndBuildsRelativeArc)
+TEST(KeplerOrbit, ArcBuilderSelectsFixedPrimaryAndBuildsRelativeArc)
 {
     orbitsim::GameSimulation sim = make_single_body_sim();
     const orbitsim::MassiveBody *earth = sim.body_by_id(kEarthId);
@@ -123,14 +121,14 @@ TEST(KeplerOrbit, BuilderSelectsFixedPrimaryAndBuildsRelativeArc)
             orbitsim::make_state(earth->state.position_m + orbitsim::Vec3{r_m, 0.0, 0.0},
                                  earth->state.velocity_mps + orbitsim::Vec3{0.0, v_mps, 0.0});
 
-    Game::KeplerOrbitBuildRequest request{};
+    Game::KeplerArcBuildRequest request{};
     request.simulation = &sim;
     request.subject_state_inertial = ship_state;
     request.t0_s = 10.0;
     request.requested_horizon_s = 600.0;
     request.fixed_primary_body_id = kEarthId;
 
-    const Game::KeplerOrbitBuildResult result = Game::build_kepler_orbit(request);
+    const Game::KeplerArcBuildResult result = Game::build_kepler_arc(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_EQ(result.primary.body_id, kEarthId);
@@ -145,7 +143,7 @@ TEST(KeplerOrbit, BuilderSelectsFixedPrimaryAndBuildsRelativeArc)
     EXPECT_TRUE(near_abs(result.base_arc.arc.t1_s, 610.0, 1.0e-12));
 }
 
-TEST(KeplerOrbit, BuilderHonorsExplicitHorizonWithoutMinimumClamp)
+TEST(KeplerOrbit, ArcBuilderHonorsExplicitHorizonWithoutMinimumClamp)
 {
     orbitsim::GameSimulation sim = make_single_body_sim();
     const orbitsim::MassiveBody *earth = sim.body_by_id(kEarthId);
@@ -157,21 +155,21 @@ TEST(KeplerOrbit, BuilderHonorsExplicitHorizonWithoutMinimumClamp)
             orbitsim::make_state(earth->state.position_m + orbitsim::Vec3{r_m, 0.0, 0.0},
                                  earth->state.velocity_mps + orbitsim::Vec3{0.0, v_mps, 0.0});
 
-    Game::KeplerOrbitBuildRequest request{};
+    Game::KeplerArcBuildRequest request{};
     request.simulation = &sim;
     request.subject_state_inertial = ship_state;
     request.t0_s = 10.0;
     request.requested_horizon_s = 1.0;
     request.fixed_primary_body_id = kEarthId;
 
-    const Game::KeplerOrbitBuildResult result = Game::build_kepler_orbit(request);
+    const Game::KeplerArcBuildResult result = Game::build_kepler_arc(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_TRUE(near_abs(result.horizon_s, 1.0, 1.0e-12));
     EXPECT_TRUE(near_abs(result.base_arc.arc.t1_s, 11.0, 1.0e-12));
 }
 
-TEST(KeplerOrbit, BuilderUsesOpenOrbitWindowForHyperbolicArc)
+TEST(KeplerOrbit, ArcBuilderUsesOpenOrbitWindowForHyperbolicArc)
 {
     orbitsim::GameSimulation sim = make_single_body_sim();
     const orbitsim::MassiveBody *earth = sim.body_by_id(kEarthId);
@@ -182,14 +180,14 @@ TEST(KeplerOrbit, BuilderUsesOpenOrbitWindowForHyperbolicArc)
             orbitsim::make_state(earth->state.position_m + orbitsim::Vec3{r_m, 0.0, 0.0},
                                  earth->state.velocity_mps + orbitsim::Vec3{0.0, 12'000.0, 0.0});
 
-    Game::KeplerOrbitBuildRequest request{};
+    Game::KeplerArcBuildRequest request{};
     request.simulation = &sim;
     request.subject_state_inertial = ship_state;
     request.t0_s = 0.0;
     request.fixed_primary_body_id = kEarthId;
     request.options.open_orbit_window_s = 45.0 * 24.0 * 60.0 * 60.0;
 
-    const Game::KeplerOrbitBuildResult result = Game::build_kepler_orbit(request);
+    const Game::KeplerArcBuildResult result = Game::build_kepler_arc(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_TRUE(near_abs(result.horizon_s, request.options.open_orbit_window_s, 1.0e-12));
@@ -260,7 +258,7 @@ TEST(KeplerOrbit, PrimaryResolverKeepsCurrentPrimaryDuringMaxAccelFallbackHyster
     EXPECT_EQ(switched.body_id, challenger.id);
 }
 
-TEST(KeplerOrbit, ManeuverSolverSplitsArcAtTangentialImpulse)
+TEST(KeplerOrbit, ArcBuilderSplitsArcAtTangentialImpulse)
 {
     const Game::KeplerOrbitArc base = make_circular_arc(0.0, 1'000.0);
     const std::vector<Game::KeplerManeuverNode> nodes{
@@ -272,8 +270,8 @@ TEST(KeplerOrbit, ManeuverSolverSplitsArcAtTangentialImpulse)
             },
     };
 
-    const Game::KeplerManeuverSolveResult result =
-            Game::build_kepler_maneuver_arcs(base, nodes);
+    const Game::KeplerManeuverArcBuildResult result =
+            Game::build_kepler_maneuver_arc_chain(base, nodes);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     ASSERT_EQ(result.arcs.size(), 2u);
@@ -295,7 +293,7 @@ TEST(KeplerOrbit, ManeuverSolverSplitsArcAtTangentialImpulse)
                              1.0e-9));
 }
 
-TEST(KeplerOrbit, ManeuverSolverRejectsCrossPrimaryImpulseForNow)
+TEST(KeplerOrbit, ArcBuilderRejectsCrossPrimaryImpulseForNow)
 {
     const Game::KeplerOrbitArc base = make_circular_arc(0.0, 1'000.0);
     const std::vector<Game::KeplerManeuverNode> nodes{
@@ -307,14 +305,14 @@ TEST(KeplerOrbit, ManeuverSolverRejectsCrossPrimaryImpulseForNow)
             },
     };
 
-    const Game::KeplerManeuverSolveResult result =
-            Game::build_kepler_maneuver_arcs(base, nodes);
+    const Game::KeplerManeuverArcBuildResult result =
+            Game::build_kepler_maneuver_arc_chain(base, nodes);
 
     EXPECT_FALSE(result.valid);
     EXPECT_EQ(result.status, Game::KeplerOrbitStatus::PrimaryMismatch);
 }
 
-TEST(KeplerOrbit, TessellatorPreservesEndpointsAndSkipsDuplicateArcBoundary)
+TEST(KeplerOrbit, ArcLineBuilderPreservesEndpointsAndSkipsDuplicateArcBoundary)
 {
     const Game::KeplerOrbitArc base = make_circular_arc(0.0, 100.0);
     const std::vector<Game::KeplerManeuverNode> nodes{
@@ -325,10 +323,10 @@ TEST(KeplerOrbit, TessellatorPreservesEndpointsAndSkipsDuplicateArcBoundary)
                     .dv_rtn_mps = {0.0, 5.0, 0.0},
             },
     };
-    const Game::KeplerManeuverSolveResult solved = Game::build_kepler_maneuver_arcs(base, nodes);
+    const Game::KeplerManeuverArcBuildResult solved = Game::build_kepler_maneuver_arc_chain(base, nodes);
     ASSERT_TRUE(solved.valid);
 
-    Game::KeplerOrbitTessellationRequest request{};
+    Game::KeplerArcLineBuildRequest request{};
     request.arcs = solved.arcs;
     request.options.max_time_step_s = 50.0;
     request.options.max_chord_error_m = 0.0;
@@ -336,25 +334,25 @@ TEST(KeplerOrbit, TessellatorPreservesEndpointsAndSkipsDuplicateArcBoundary)
     request.options.max_vertices_total = 16;
     request.world_frame.world_reference_state_inertial = {};
 
-    const Game::KeplerOrbitLineSet lines = Game::build_kepler_orbit_lines(request);
+    const Game::KeplerArcLineSet lines = Game::build_kepler_arc_lines(request);
 
     ASSERT_TRUE(lines.valid) << Game::kepler_orbit_status_name(lines.diagnostics.status);
     ASSERT_EQ(lines.vertices.size(), 3u);
     EXPECT_TRUE(near_abs(lines.vertices[0].t_s, 0.0, 1.0e-12));
     EXPECT_TRUE(near_abs(lines.vertices[1].t_s, 50.0, 1.0e-12));
     EXPECT_TRUE(near_abs(lines.vertices[2].t_s, 100.0, 1.0e-12));
-    EXPECT_NE(lines.vertices.front().flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::OrbitStart), 0u);
-    EXPECT_NE(lines.vertices.back().flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::OrbitEnd), 0u);
-    EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::ArcEnd), 0u);
-    EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerOrbitLineVertexFlags::ArcStart), 0u);
+    EXPECT_NE(lines.vertices.front().flags & static_cast<uint32_t>(Game::KeplerArcLineVertexFlags::OrbitStart), 0u);
+    EXPECT_NE(lines.vertices.back().flags & static_cast<uint32_t>(Game::KeplerArcLineVertexFlags::OrbitEnd), 0u);
+    EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerArcLineVertexFlags::ArcEnd), 0u);
+    EXPECT_NE(lines.vertices[1].flags & static_cast<uint32_t>(Game::KeplerArcLineVertexFlags::ArcStart), 0u);
 }
 
-TEST(KeplerOrbit, TessellatorMovesClosedOrbitEndpointAwayFromCurrentPosition)
+TEST(KeplerOrbit, ArcLineBuilderMovesClosedOrbitEndpointAwayFromCurrentPosition)
 {
     const double period_s = circular_period_s();
     const Game::KeplerOrbitArc arc = make_circular_arc(0.0, period_s);
 
-    Game::KeplerOrbitTessellationRequest request{};
+    Game::KeplerArcLineBuildRequest request{};
     request.arcs = std::span<const Game::KeplerOrbitArc>(&arc, 1u);
     request.options.max_time_step_s = 20.0;
     request.options.max_chord_error_m = 0.0;
@@ -362,7 +360,7 @@ TEST(KeplerOrbit, TessellatorMovesClosedOrbitEndpointAwayFromCurrentPosition)
     request.options.max_vertices_total = 1024;
     request.world_frame.world_reference_state_inertial = {};
 
-    const Game::KeplerOrbitLineSet lines = Game::build_kepler_orbit_lines(request);
+    const Game::KeplerArcLineSet lines = Game::build_kepler_arc_lines(request);
 
     ASSERT_TRUE(lines.valid) << Game::kepler_orbit_status_name(lines.diagnostics.status);
     ASSERT_GE(lines.vertices.size(), 4u);
@@ -373,7 +371,7 @@ TEST(KeplerOrbit, TessellatorMovesClosedOrbitEndpointAwayFromCurrentPosition)
 
     const auto current_it = std::find_if(lines.vertices.begin(),
                                          lines.vertices.end(),
-                                         [](const Game::KeplerOrbitLineVertex &vertex) {
+                                         [](const Game::KeplerArcLineVertex &vertex) {
                                              return near_abs(vertex.t_s, 0.0, 1.0e-9);
                                          });
     EXPECT_EQ(current_it, lines.vertices.end());
@@ -388,38 +386,38 @@ TEST(KeplerOrbit, TessellatorMovesClosedOrbitEndpointAwayFromCurrentPosition)
 
     const auto exact_end_it = std::find_if(lines.vertices.begin(),
                                            lines.vertices.end(),
-                                           [period_s](const Game::KeplerOrbitLineVertex &vertex) {
+                                           [period_s](const Game::KeplerArcLineVertex &vertex) {
                                                return near_abs(vertex.t_s, period_s, 1.0e-9);
                                            });
     EXPECT_EQ(exact_end_it, lines.vertices.end());
 }
 
-TEST(KeplerOrbit, TessellatorRefinesHighEccentricityByChordError)
+TEST(KeplerOrbit, ArcLineBuilderRefinesHighEccentricityByChordError)
 {
     const Game::KeplerOrbitArc arc = make_eccentric_arc();
 
-    Game::KeplerOrbitTessellationRequest coarse_request{};
+    Game::KeplerArcLineBuildRequest coarse_request{};
     coarse_request.arcs = std::span<const Game::KeplerOrbitArc>(&arc, 1u);
     coarse_request.options.max_time_step_s = 600.0;
     coarse_request.options.max_chord_error_m = 0.0;
     coarse_request.options.max_vertices_per_arc = 64;
     coarse_request.options.max_vertices_total = 64;
 
-    const Game::KeplerOrbitLineSet coarse_lines = Game::build_kepler_orbit_lines(coarse_request);
+    const Game::KeplerArcLineSet coarse_lines = Game::build_kepler_arc_lines(coarse_request);
     ASSERT_TRUE(coarse_lines.valid) << Game::kepler_orbit_status_name(coarse_lines.diagnostics.status);
 
-    Game::KeplerOrbitTessellationRequest adaptive_request = coarse_request;
+    Game::KeplerArcLineBuildRequest adaptive_request = coarse_request;
     adaptive_request.options.max_chord_error_m = 2'000.0;
 
-    const Game::KeplerOrbitLineSet adaptive_lines = Game::build_kepler_orbit_lines(adaptive_request);
+    const Game::KeplerArcLineSet adaptive_lines = Game::build_kepler_arc_lines(adaptive_request);
     ASSERT_TRUE(adaptive_lines.valid) << Game::kepler_orbit_status_name(adaptive_lines.diagnostics.status);
     EXPECT_GT(adaptive_lines.vertices.size(), coarse_lines.vertices.size());
     EXPECT_FALSE(adaptive_lines.diagnostics.budget_hit);
 
     for (std::size_t i = 1u; i < adaptive_lines.vertices.size(); ++i)
     {
-        const Game::KeplerOrbitLineVertex &a = adaptive_lines.vertices[i - 1u];
-        const Game::KeplerOrbitLineVertex &b = adaptive_lines.vertices[i];
+        const Game::KeplerArcLineVertex &a = adaptive_lines.vertices[i - 1u];
+        const Game::KeplerArcLineVertex &b = adaptive_lines.vertices[i];
         const double mid_t_s = 0.5 * (a.t_s + b.t_s);
         const orbitsim::KeplerArcSample mid_sample =
                 orbitsim::sample_kepler_arc_state(arc.arc, mid_t_s);
@@ -433,21 +431,21 @@ TEST(KeplerOrbit, TessellatorRefinesHighEccentricityByChordError)
     }
 }
 
-TEST(KeplerOrbit, TessellatorAppliesMovingPrimaryProvider)
+TEST(KeplerOrbit, ArcLineBuilderAppliesMovingPrimaryProvider)
 {
     const Game::KeplerOrbitArc arc = make_circular_arc(0.0, 20.0);
 
-    Game::KeplerOrbitTessellationRequest fallback_request{};
+    Game::KeplerArcLineBuildRequest fallback_request{};
     fallback_request.arcs = std::span<const Game::KeplerOrbitArc>(&arc, 1u);
     fallback_request.options.max_time_step_s = 10.0;
     fallback_request.options.max_vertices_per_arc = 4;
     fallback_request.options.max_vertices_total = 4;
 
-    const Game::KeplerOrbitLineSet fallback_lines = Game::build_kepler_orbit_lines(fallback_request);
+    const Game::KeplerArcLineSet fallback_lines = Game::build_kepler_arc_lines(fallback_request);
     ASSERT_TRUE(fallback_lines.valid);
     ASSERT_EQ(fallback_lines.vertices.size(), 3u);
 
-    Game::KeplerOrbitTessellationRequest moving_request = fallback_request;
+    Game::KeplerArcLineBuildRequest moving_request = fallback_request;
     moving_request.body_state_provider.state_at =
             [](const orbitsim::BodyId body_id, const double t_s, orbitsim::State &out_state) {
                 if (body_id != kEarthId)
@@ -459,7 +457,7 @@ TEST(KeplerOrbit, TessellatorAppliesMovingPrimaryProvider)
                 return true;
             };
 
-    const Game::KeplerOrbitLineSet moving_lines = Game::build_kepler_orbit_lines(moving_request);
+    const Game::KeplerArcLineSet moving_lines = Game::build_kepler_arc_lines(moving_request);
     ASSERT_TRUE(moving_lines.valid);
     ASSERT_EQ(moving_lines.vertices.size(), fallback_lines.vertices.size());
 
@@ -472,7 +470,7 @@ TEST(KeplerOrbit, TessellatorAppliesMovingPrimaryProvider)
 TEST(KeplerOrbit, MetricsClassifyCircularOrbit)
 {
     const Game::KeplerOrbitArc arc = make_circular_arc();
-    const Game::KeplerOrbitMetrics metrics = Game::compute_kepler_orbit_metrics(arc);
+    const Game::KeplerArcMetrics metrics = Game::compute_kepler_arc_metrics(arc);
 
     ASSERT_TRUE(metrics.valid);
     EXPECT_EQ(metrics.primary_body_id, kEarthId);

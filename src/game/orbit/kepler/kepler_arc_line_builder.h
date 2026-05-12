@@ -7,13 +7,15 @@
 
 namespace Game
 {
-    struct KeplerOrbitTessellationRequest
+    // Inputs for sampling arcs into world-space line vertices.
+    struct KeplerArcLineBuildRequest
     {
         std::span<const KeplerOrbitArc> arcs{};
-        KeplerOrbitTessellationOptions options{};
+        KeplerArcLineOptions options{};
         KeplerBodyStateProvider body_state_provider{};
         KeplerWorldFrame world_frame{};
     };
 
-    KeplerOrbitLineSet build_kepler_orbit_lines(const KeplerOrbitTessellationRequest &request);
+    // Samples one or more arcs into a drawable orbit polyline.
+    KeplerArcLineSet build_kepler_arc_lines(const KeplerArcLineBuildRequest &request);
 } // namespace Game
