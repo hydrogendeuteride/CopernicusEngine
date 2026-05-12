@@ -137,6 +137,7 @@ namespace Game
         void update_maneuver_nodes_time_warp(GameStateContext &ctx, float fixed_dt);
         void update_maneuver_nodes_execution(GameStateContext &ctx);
         ManeuverCommandResult apply_maneuver_command(const ManeuverCommand &command);
+        void update_kepler_maneuver_orbit_pick_creation(GameStateContext &ctx);
 
         // Owned state
         GameWorld _world;

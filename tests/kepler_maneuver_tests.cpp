@@ -1,8 +1,13 @@
 #include "game/states/gameplay/maneuver_kepler/kepler_maneuver_system.h"
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_orbit_pick.h"
 
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
+#include <string>
+#include <string_view>
+#include <utility>
 
 namespace
 {
@@ -40,7 +45,8 @@ namespace
     }
 
     Game::KeplerPredictionState make_prediction_with_active_track(
-            const Game::KeplerOrbitArc &base_arc)
+            const Game::KeplerOrbitArc &base_arc,
+            std::string label = {})
     {
         Game::KeplerPredictionState prediction{};
         prediction.valid = true;
@@ -48,6 +54,7 @@ namespace
         Game::KeplerPredictionState::Track track{};
         track.valid = true;
         track.active_player = true;
+        track.label = std::move(label);
         track.primary_body_id = kEarthId;
         track.orbit.valid = true;
         track.orbit.status = Game::KeplerOrbitStatus::Ok;
@@ -70,6 +77,18 @@ namespace
                 };
         prediction.tracks.push_back(track);
         return prediction;
+    }
+
+    Game::KeplerManeuverOrbitPickInfo make_orbit_pick(const std::string_view owner_name,
+                                                      const double time_s,
+                                                      const bool line = true)
+    {
+        Game::KeplerManeuverOrbitPickInfo pick{};
+        pick.valid = true;
+        pick.line = line;
+        pick.owner_name = owner_name;
+        pick.time_s = time_s;
+        return pick;
     }
 } // namespace
 
@@ -250,6 +269,122 @@ TEST(KeplerManeuverSystem, MarksNodeDisplayInvalidWithoutActiveTrack)
     EXPECT_FALSE(system.node_display_states().front().valid);
     EXPECT_EQ(system.node_display_states().front().status,
               Game::KeplerManeuverNodeDisplayStatus::MissingActiveTrack);
+}
+
+TEST(KeplerManeuverOrbitPick, ParsesRoleQualifiedOwnerNames)
+{
+    std::string_view label{};
+
+    EXPECT_EQ(Game::KeplerManeuverPick::parse_owner("KeplerOrbit/Base", &label),
+              Game::KeplerManeuverOrbitPickRole::Base);
+    EXPECT_TRUE(label.empty());
+
+    EXPECT_EQ(Game::KeplerManeuverPick::parse_owner("KeplerOrbit/Planned/Player", &label),
+              Game::KeplerManeuverOrbitPickRole::Planned);
+    EXPECT_EQ(label, "Player");
+
+    EXPECT_EQ(Game::KeplerManeuverPick::parse_owner("KeplerOrbit/Base/Player", &label),
+              Game::KeplerManeuverOrbitPickRole::Base);
+    EXPECT_EQ(label, "Player");
+
+    EXPECT_EQ(Game::KeplerManeuverPick::parse_owner("OrbitPlot/Base", &label),
+              Game::KeplerManeuverOrbitPickRole::None);
+    EXPECT_TRUE(label.empty());
+}
+
+TEST(KeplerManeuverOrbitPick, AllowsBaseOnlyForEmptyPlanAndPlannedOnlyAfterNodesExist)
+{
+    const orbitsim::State primary = orbitsim::make_state({}, {});
+    Game::KeplerPredictionState prediction =
+            make_prediction_with_active_track(make_circular_arc(0.0, 120.0, primary), "Player");
+    Game::KeplerManeuverPlanState plan{};
+
+    EXPECT_TRUE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Base/Player", 30.0),
+            plan,
+            prediction,
+            10.0));
+    EXPECT_FALSE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Planned/Player", 30.0),
+            plan,
+            prediction,
+            10.0));
+
+    plan.nodes.push_back(make_node(1, 20.0));
+    EXPECT_FALSE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Base/Player", 40.0),
+            plan,
+            prediction,
+            10.0));
+    EXPECT_TRUE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Planned/Player", 40.0),
+            plan,
+            prediction,
+            10.0));
+}
+
+TEST(KeplerManeuverOrbitPick, RejectsInvalidTimeTrackAndKind)
+{
+    const orbitsim::State primary = orbitsim::make_state({}, {});
+    Game::KeplerPredictionState prediction =
+            make_prediction_with_active_track(make_circular_arc(0.0, 120.0, primary), "Player");
+    Game::KeplerManeuverPlanState plan{};
+
+    EXPECT_FALSE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Base/Player", 10.0),
+            plan,
+            prediction,
+            10.0));
+    EXPECT_FALSE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Base/Player", std::numeric_limits<double>::quiet_NaN()),
+            plan,
+            prediction,
+            10.0));
+    EXPECT_FALSE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Base/Other", 30.0),
+            plan,
+            prediction,
+            10.0));
+    EXPECT_FALSE(Game::KeplerManeuverPick::can_create_node(
+            make_orbit_pick("KeplerOrbit/Base/Player",
+                            30.0,
+                            false),
+            plan,
+            prediction,
+            10.0));
+}
+
+TEST(KeplerManeuverOrbitPick, CreatesAutoPrimaryZeroDvEditorNode)
+{
+    const orbitsim::State primary = orbitsim::make_state({}, {});
+    Game::KeplerPredictionState prediction =
+            make_prediction_with_active_track(make_circular_arc(0.0, 120.0, primary), "Player");
+    const Game::KeplerManeuverOrbitPickInfo pick =
+            make_orbit_pick("KeplerOrbit/Base/Player", 45.0);
+
+    Game::KeplerManeuverSystem system{};
+    ASSERT_TRUE(Game::KeplerManeuverPick::can_create_node(
+            pick,
+            system.plan(),
+            prediction,
+            10.0));
+
+    const Game::KeplerManeuverCommandResult result =
+            system.apply_command(Game::KeplerManeuverCommand::add_node(
+                    Game::KeplerManeuverPick::make_node(pick)));
+
+    ASSERT_TRUE(result.applied);
+    ASSERT_EQ(system.plan().nodes.size(), 1u);
+    const Game::KeplerManeuverEditorNode &node = system.plan().nodes.front();
+    EXPECT_DOUBLE_EQ(node.time_s, 45.0);
+    EXPECT_TRUE(node.primary_body_auto);
+    EXPECT_EQ(node.primary_body_id, orbitsim::kInvalidBodyId);
+    EXPECT_DOUBLE_EQ(node.dv_rtn_mps.x, 0.0);
+    EXPECT_DOUBLE_EQ(node.dv_rtn_mps.y, 0.0);
+    EXPECT_DOUBLE_EQ(node.dv_rtn_mps.z, 0.0);
+
+    ASSERT_EQ(system.prediction_nodes().size(), 1u);
+    EXPECT_EQ(system.prediction_nodes().front().primary_body_id, orbitsim::kInvalidBodyId);
 }
 
 int main(int argc, char **argv)

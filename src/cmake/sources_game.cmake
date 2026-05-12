@@ -189,6 +189,8 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/states/gameplay/maneuver_kepler/kepler_maneuver_plan.cpp
   game/states/gameplay/maneuver_kepler/kepler_maneuver_node_resolver.h
   game/states/gameplay/maneuver_kepler/kepler_maneuver_node_resolver.cpp
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_orbit_pick.h
+  game/states/gameplay/maneuver_kepler/kepler_maneuver_orbit_pick.cpp
   game/states/gameplay/maneuver_kepler/kepler_maneuver_gizmo.h
   game/states/gameplay/maneuver_kepler/kepler_maneuver_gizmo.cpp
   game/states/gameplay/maneuver_kepler/kepler_maneuver_gizmo_controller.h

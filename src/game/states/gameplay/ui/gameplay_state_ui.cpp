@@ -1,13 +1,19 @@
 #include "game/states/gameplay/gameplay_state.h"
 #include "game/states/gameplay/orbital/orbit_runtime.h"
 #include "game/states/gameplay/settings/gameplay_settings.h"
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_gizmo.h"
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_orbit_pick.h"
 #include "game/states/gameplay/maneuver_nbody/maneuver_ui_controller.h"
+#include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 #include "game/states/gameplay/prediction_nbody/gameplay_prediction_adapter.h"
 #include "game/states/gameplay/prediction_nbody/prediction_host_context_builder.h"
 #include "game/states/gameplay/scenario/scenario_loader.h"
 #include "game/component/ship_controller.h"
 #include "core/engine.h"
 #include "core/game_api.h"
+#include "core/input/input_system.h"
+#include "core/picking/picking_system.h"
+#include "core/render_viewport.h"
 #include "core/util/logger.h"
 #include "physics/physics_context.h"
 #include "physics/physics_world.h"
@@ -56,6 +62,91 @@ namespace Game
             return rel.string();
         }
 
+        bool build_kepler_maneuver_gizmo_view_context(const GameStateContext &ctx,
+                                                      KeplerManeuverGizmoViewContext &out_view)
+        {
+            out_view = {};
+            if (!ctx.renderer || !ctx.renderer->_sceneManager)
+            {
+                return false;
+            }
+
+            render::RenderViewportMetrics viewport{};
+            if (!render::query_render_viewport_metrics(*ctx.renderer, viewport))
+            {
+                return false;
+            }
+
+            const Camera &cam = ctx.renderer->_sceneManager->getMainCamera();
+            out_view.camera_world = cam.position_world;
+            out_view.world_to_cam = glm::transpose(glm::dmat3(cam.getRotationMatrix()));
+            out_view.letterbox_rect = KeplerManeuverViewportRect{
+                    .x = viewport.letterbox_rect.offset.x,
+                    .y = viewport.letterbox_rect.offset.y,
+                    .width = viewport.letterbox_rect.extent.width,
+                    .height = viewport.letterbox_rect.extent.height,
+            };
+            out_view.logical_w = static_cast<double>(viewport.logical_extent.width);
+            out_view.logical_h = static_cast<double>(viewport.logical_extent.height);
+            if (!(out_view.logical_w > 0.0) || !(out_view.logical_h > 0.0))
+            {
+                return false;
+            }
+
+            const double fov_rad = glm::radians(static_cast<double>(cam.fovDegrees));
+            out_view.tan_half_fov = std::tan(fov_rad * 0.5);
+            out_view.aspect = out_view.logical_w / out_view.logical_h;
+            if (!std::isfinite(out_view.tan_half_fov) ||
+                out_view.tan_half_fov <= 1.0e-8 ||
+                !std::isfinite(out_view.aspect) ||
+                out_view.aspect <= 0.0)
+            {
+                return false;
+            }
+
+            out_view.draw_from_swap_x = viewport.draw_from_swap_x;
+            out_view.draw_from_swap_y = viewport.draw_from_swap_y;
+            out_view.window_from_draw_x = viewport.window_from_draw_x;
+            out_view.window_from_draw_y = viewport.window_from_draw_y;
+            return std::isfinite(out_view.draw_from_swap_x) &&
+                   std::isfinite(out_view.draw_from_swap_y) &&
+                   std::isfinite(out_view.window_from_draw_x) &&
+                   std::isfinite(out_view.window_from_draw_y);
+        }
+
+        bool kepler_orbit_pick_matches_mouse_release(const GameStateContext &ctx,
+                                                     const PickingSystem::PickInfo &pick,
+                                                     const KeplerManeuverPlanState &plan,
+                                                     const KeplerPredictionState &prediction,
+                                                     const double current_time_s)
+        {
+            const KeplerManeuverOrbitPickInfo pick_info{
+                    .valid = pick.valid,
+                    .line = pick.kind == PickingSystem::PickInfo::Kind::Line,
+                    .owner_name = pick.ownerName,
+                    .time_s = pick.time_s,
+            };
+            if (!ctx.input ||
+                !KeplerManeuverPick::can_create_node(pick_info, plan, prediction, current_time_s))
+            {
+                return false;
+            }
+
+            KeplerManeuverGizmoViewContext view{};
+            glm::vec2 pick_screen{0.0f, 0.0f};
+            double pick_depth_m = 0.0;
+            if (!build_kepler_maneuver_gizmo_view_context(ctx, view) ||
+                !KeplerManeuverGizmo::project_point(view, pick.worldPos, pick_screen, pick_depth_m))
+            {
+                return false;
+            }
+
+            const glm::vec2 mouse_pos = ctx.input->mouse_position();
+            const glm::vec2 d = mouse_pos - pick_screen;
+            constexpr float kOrbitPickActivateRadiusPx = 24.0f;
+            return glm::dot(d, d) <= (kOrbitPickActivateRadiusPx * kOrbitPickActivateRadiusPx);
+        }
+
     } // anonymous namespace
 
     GameplaySettings GameplayState::extract_settings() const
@@ -101,6 +192,54 @@ namespace Game
         _contact_log_enabled = s.contact_log_enabled;
         _contact_log_print_console = s.contact_log_print_console;
         mark_prediction_dirty();
+    }
+
+    void GameplayState::update_kepler_maneuver_orbit_pick_creation(GameStateContext &ctx)
+    {
+        if (!spacecraft_orbit_prediction_uses_kepler() ||
+            !_kepler_prediction ||
+            !ctx.input ||
+            !ctx.renderer ||
+            !ctx.input->mouse_released(MouseButton::Left) ||
+            ImGui::GetIO().WantCaptureMouse)
+        {
+            return;
+        }
+
+        const KeplerManeuverInteraction::State interaction_state = _kepler_maneuver.interaction().state;
+        if (interaction_state == KeplerManeuverInteraction::State::HoverHub ||
+            interaction_state == KeplerManeuverInteraction::State::HoverAxis ||
+            interaction_state == KeplerManeuverInteraction::State::HoverDelete ||
+            interaction_state == KeplerManeuverInteraction::State::DragAxis)
+        {
+            return;
+        }
+
+        PickingSystem *picking = ctx.renderer->picking();
+        if (!picking)
+        {
+            return;
+        }
+
+        const PickingSystem::PickInfo &pick = picking->last_pick();
+        const KeplerManeuverOrbitPickInfo pick_info{
+                .valid = pick.valid,
+                .line = pick.kind == PickingSystem::PickInfo::Kind::Line,
+                .owner_name = pick.ownerName,
+                .time_s = pick.time_s,
+        };
+        if (!kepler_orbit_pick_matches_mouse_release(ctx,
+                                                     pick,
+                                                     _kepler_maneuver.plan(),
+                                                     _kepler_prediction->state(),
+                                                     current_sim_time_s()))
+        {
+            return;
+        }
+
+        (void) apply_kepler_maneuver_command(
+                KeplerManeuverCommand::add_node(
+                        KeplerManeuverPick::make_node(pick_info)));
     }
 
     void GameplayState::on_draw_ui(GameStateContext &ctx)
@@ -640,6 +779,10 @@ namespace Game
                 ManeuverUiController::draw_nodes_panel(maneuver_ui);
             }
             ManeuverUiController::draw_imgui_gizmo(maneuver_ui);
+        }
+        if (spacecraft_orbit_prediction_uses_kepler())
+        {
+            update_kepler_maneuver_orbit_pick_creation(ctx);
         }
         if (_show_nbody_orbit_debug && spacecraft_orbit_prediction_uses_nbody())
         {

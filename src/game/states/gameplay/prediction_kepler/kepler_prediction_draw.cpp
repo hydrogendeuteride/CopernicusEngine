@@ -2,6 +2,7 @@
 
 #include "core/picking/picking_system.h"
 #include "core/util/logger.h"
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_orbit_pick.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 
 #include <algorithm>
@@ -24,6 +25,20 @@ namespace Game
         bool finite_world(const WorldVec3 &p)
         {
             return std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z);
+        }
+
+        std::string kepler_orbit_pick_owner(const KeplerManeuverOrbitPickRole role,
+                                            const std::string &track_label)
+        {
+            std::string owner = (role == KeplerManeuverOrbitPickRole::Planned)
+                                        ? "KeplerOrbit/Planned"
+                                        : "KeplerOrbit/Base";
+            if (!track_label.empty())
+            {
+                owner += "/";
+                owner += track_label;
+            }
+            return owner;
         }
 
         struct KeplerPickFrameStats
@@ -451,7 +466,7 @@ namespace Game
                         continue;
                     }
 
-                    if (!track.celestial)
+                    if (!track.celestial && track.active_player)
                     {
                         target_segments += target_pick_segment_count(track.base_lines);
                     }
@@ -520,10 +535,12 @@ namespace Game
                     continue;
                 }
 
+                const std::string base_owner =
+                        kepler_orbit_pick_owner(KeplerManeuverOrbitPickRole::Base, track.label);
                 emit_line_set(*context.orbit_plot,
                               context.picking,
-                              context.emit_pick && !track.celestial,
-                              track.label.empty() ? "KeplerOrbit/Base" : track.label.c_str(),
+                              context.emit_pick && track.active_player && !track.celestial,
+                              base_owner.c_str(),
                               "base",
                               track.base_lines,
                               track_base_color(track, context),
@@ -534,10 +551,12 @@ namespace Game
 
                 if (context.draw_planned && track.active_player)
                 {
+                    const std::string planned_owner =
+                            kepler_orbit_pick_owner(KeplerManeuverOrbitPickRole::Planned, track.label);
                     emit_line_set(*context.orbit_plot,
                                   context.picking,
                                   context.emit_pick,
-                                  track.label.empty() ? "KeplerOrbit/Planned" : track.label.c_str(),
+                                  planned_owner.c_str(),
                                   "planned",
                                   track.planned_lines,
                                   context.planned_color,

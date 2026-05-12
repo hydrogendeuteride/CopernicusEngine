@@ -107,6 +107,7 @@ set(GAME_ORBIT_KEPLER_SOURCES
 set(GAMEPLAY_KEPLER_MANEUVER_SYSTEM_SOURCES
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_plan.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_node_resolver.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_orbit_pick.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_commands.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/maneuver_kepler/kepler_maneuver_system.cpp"
 )
