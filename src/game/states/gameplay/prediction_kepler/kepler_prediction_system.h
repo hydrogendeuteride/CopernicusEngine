@@ -21,6 +21,7 @@ namespace Game
         const ScenarioConfig *scenario_config{nullptr};
         bool enabled{true};
         double current_sim_time_s{0.0};
+        double current_wall_time_s{0.0};
         double requested_horizon_s{0.0};
         orbitsim::BodyId fixed_primary_body_id{orbitsim::kInvalidBodyId};
         KeplerPredictionOptions options{};

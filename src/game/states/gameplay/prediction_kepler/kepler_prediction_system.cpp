@@ -385,6 +385,16 @@ namespace Game
 
         double prediction_rebuild_interval_s(const KeplerPredictionUpdateContext &context)
         {
+            if (!context.maneuver_nodes.empty())
+            {
+                const double planned_interval_s =
+                        (std::isfinite(context.line_options.max_time_step_s) &&
+                         context.line_options.max_time_step_s > 0.0)
+                                ? context.line_options.max_time_step_s
+                                : 10.0;
+                return std::clamp(planned_interval_s, 1.0, 60.0);
+            }
+
             const double source_dt_s =
                     (std::isfinite(context.line_options.max_time_step_s) &&
                      context.line_options.max_time_step_s > 0.0)
@@ -414,7 +424,22 @@ namespace Game
             }
 
             const double elapsed_s = context.current_sim_time_s - state.build_time_s;
-            return elapsed_s < prediction_rebuild_interval_s(context);
+            if (elapsed_s < prediction_rebuild_interval_s(context))
+            {
+                return true;
+            }
+
+            if (!context.maneuver_nodes.empty() &&
+                std::isfinite(state.build_wall_time_s) &&
+                std::isfinite(context.current_wall_time_s) &&
+                context.current_wall_time_s >= state.build_wall_time_s)
+            {
+                constexpr double kPlannedWallRebuildIntervalS = 0.20;
+                return (context.current_wall_time_s - state.build_wall_time_s) <
+                       kPlannedWallRebuildIntervalS;
+            }
+
+            return false;
         }
     } // namespace
 
@@ -622,6 +647,7 @@ namespace Game
         const orbitsim::BodyId previous_primary_body_id = _state.primary_body_id;
         ++_state.revision;
         _state.build_time_s = context.current_sim_time_s;
+        _state.build_wall_time_s = context.current_wall_time_s;
         _state.maneuver_revision = context.maneuver_revision;
         _state.world_reference_body_id = world_frame.world_reference_body_id;
         _state.dirty = false;

@@ -292,7 +292,6 @@ namespace Game
                            const glm::vec4 &color,
                            const OrbitPlotDepth depth,
                            const float line_overlay_boost,
-                           const bool dashed,
                            std::vector<Picking::LinePickSegmentData> *pick_segment_scratch,
                            KeplerPickFrameStats &pick_stats)
         {
@@ -374,12 +373,6 @@ namespace Game
                     {
                         ++nonfinite_length_segments;
                     }
-                }
-
-                const bool draw_segment = !dashed || ((i - 1u) % 3u) != 2u;
-                if (!draw_segment)
-                {
-                    continue;
                 }
 
                 lines.push_back(OrbitPlotSystem::LineCommand{
@@ -553,7 +546,6 @@ namespace Game
                               track_base_color(track, context),
                               context.depth,
                               context.line_overlay_boost,
-                              false,
                               context.pick_segment_scratch,
                               pick_stats);
 
@@ -572,7 +564,6 @@ namespace Game
                                   context.planned_color,
                                   context.depth,
                                   planned_overlay_boost,
-                                  context.planned_dashed,
                                   context.pick_segment_scratch,
                                   pick_stats);
                 }
@@ -590,7 +581,6 @@ namespace Game
                       context.base_color,
                       context.depth,
                       context.line_overlay_boost,
-                      false,
                       context.pick_segment_scratch,
                       pick_stats);
 
@@ -607,7 +597,6 @@ namespace Game
                           context.planned_color,
                           context.depth,
                           planned_overlay_boost,
-                          context.planned_dashed,
                           context.pick_segment_scratch,
                           pick_stats);
         }

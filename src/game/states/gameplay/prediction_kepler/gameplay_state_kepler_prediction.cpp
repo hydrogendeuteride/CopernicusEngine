@@ -51,6 +51,7 @@ namespace Game
         kepler_context.scenario_config = &_scenario_config;
         kepler_context.enabled = _prediction->state().enabled;
         kepler_context.current_sim_time_s = sim_time_s;
+        kepler_context.current_wall_time_s = static_cast<double>(_elapsed);
         kepler_context.options = _kepler_prediction_options;
         kepler_context.line_options = _kepler_arc_line_options;
         kepler_context.maneuver_nodes = _kepler_maneuver.prediction_nodes();

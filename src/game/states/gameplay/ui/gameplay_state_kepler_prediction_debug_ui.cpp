@@ -38,30 +38,6 @@ namespace Game
                                value ? "yes" : "no");
         }
 
-        const char *kepler_maneuver_display_status_name(const KeplerManeuverNodeDisplayStatus status)
-        {
-            switch (status)
-            {
-                case KeplerManeuverNodeDisplayStatus::Unresolved:
-                    return "Unresolved";
-                case KeplerManeuverNodeDisplayStatus::Resolved:
-                    return "Resolved";
-                case KeplerManeuverNodeDisplayStatus::MissingActiveTrack:
-                    return "MissingActiveTrack";
-                case KeplerManeuverNodeDisplayStatus::InvalidTrack:
-                    return "InvalidTrack";
-                case KeplerManeuverNodeDisplayStatus::InvalidNode:
-                    return "InvalidNode";
-                case KeplerManeuverNodeDisplayStatus::OutsideArc:
-                    return "OutsideArc";
-                case KeplerManeuverNodeDisplayStatus::PropagationFailed:
-                    return "PropagationFailed";
-                case KeplerManeuverNodeDisplayStatus::PrimaryUnavailable:
-                    return "PrimaryUnavailable";
-            }
-            return "Unknown";
-        }
-
     } // namespace
 
     void GameplayState::draw_kepler_orbit_debug_window(GameStateContext &ctx)
@@ -187,6 +163,69 @@ namespace Game
         ImGui::Separator();
 
         const KeplerPredictionState &kepler = _kepler_prediction->state();
+        const KeplerManeuverPlanState &maneuver_plan = _kepler_maneuver.plan();
+        const KeplerManeuverNodeResolveResult &maneuver_resolve =
+                _kepler_maneuver.last_node_resolve_result();
+        const KeplerPredictionState::Track *active_track = find_active_player_kepler_track(kepler);
+
+        ImGui::SeparatorText("Maneuver");
+        if (ImGui::BeginTable("##kepler_maneuver_summary", 2,
+                              ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
+                                      ImGuiTableFlags_SizingStretchProp))
+        {
+            draw_kepler_arc_info_table_value("Revision", "%llu",
+                                             static_cast<unsigned long long>(_kepler_maneuver.revision()));
+            draw_kepler_arc_info_table_value("Nodes", "%zu editor / %zu prediction",
+                                             maneuver_plan.nodes.size(),
+                                             _kepler_maneuver.prediction_nodes().size());
+            draw_kepler_arc_info_table_value("Selected node", "%d", maneuver_plan.selected_node_id);
+            if (const KeplerManeuverEditorNode *selected =
+                    maneuver_plan.find_node(maneuver_plan.selected_node_id))
+            {
+                draw_kepler_arc_info_table_value("Selected DV RTN", "%.3f / %.3f / %.3f m/s",
+                                                 selected->dv_rtn_mps.x,
+                                                 selected->dv_rtn_mps.y,
+                                                 selected->dv_rtn_mps.z);
+            }
+            else
+            {
+                draw_kepler_arc_info_table_value("Selected DV RTN", "%s", "none");
+            }
+            draw_kepler_arc_info_table_value("Display states", "%zu total / %zu valid",
+                                             _kepler_maneuver.node_display_states().size(),
+                                             maneuver_resolve.valid_node_count);
+            if (!maneuver_plan.nodes.empty())
+            {
+                const auto [min_it, max_it] = std::minmax_element(
+                        maneuver_plan.nodes.begin(),
+                        maneuver_plan.nodes.end(),
+                        [](const KeplerManeuverEditorNode &a, const KeplerManeuverEditorNode &b) {
+                            return a.time_s < b.time_s;
+                        });
+                draw_kepler_arc_info_table_value("Node time range", "%.3f - %.3f s",
+                                                 min_it->time_s,
+                                                 max_it->time_s);
+            }
+            else
+            {
+                draw_kepler_arc_info_table_value("Node time range", "%s", "empty");
+            }
+            if (active_track)
+            {
+                draw_kepler_arc_info_table_value("Active track planned", "%zu arcs / %zu samples",
+                                                 active_track->planned_arcs.size(),
+                                                 active_track->planned_lines.vertices.size());
+                draw_kepler_arc_info_table_value("Active track base end", "%.3f s",
+                                                 active_track->orbit.base_arc.arc.t1_s);
+            }
+            else
+            {
+                draw_kepler_arc_info_table_value("Active track planned", "%s", "missing");
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::SeparatorText("Prediction");
         if (ImGui::BeginTable("##kepler_prediction_status", 2,
                               ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV |
                                       ImGuiTableFlags_SizingStretchProp))
@@ -196,32 +235,11 @@ namespace Game
             draw_kepler_arc_info_table_bool("Dirty", kepler.dirty);
             draw_kepler_arc_info_table_value("Status", "%s", kepler_orbit_status_name(kepler.status));
             draw_kepler_arc_info_table_value("Revision", "%llu",
-                                          static_cast<unsigned long long>(kepler.revision));
+                                           static_cast<unsigned long long>(kepler.revision));
             draw_kepler_arc_info_table_value("Maneuver revision", "%llu",
-                                          static_cast<unsigned long long>(kepler.maneuver_revision));
-            const KeplerManeuverPlanState &maneuver_plan = _kepler_maneuver.plan();
-            const KeplerManeuverNodeResolveResult &maneuver_resolve =
-                    _kepler_maneuver.last_node_resolve_result();
-            draw_kepler_arc_info_table_value("Maneuver nodes", "%zu editor / %zu prediction",
-                                          maneuver_plan.nodes.size(),
-                                          _kepler_maneuver.prediction_nodes().size());
-            draw_kepler_arc_info_table_value("Maneuver selected", "%d", maneuver_plan.selected_node_id);
-            draw_kepler_arc_info_table_value("Maneuver display states", "%zu / %zu valid",
-                                          _kepler_maneuver.node_display_states().size(),
-                                          maneuver_resolve.valid_node_count);
-            draw_kepler_arc_info_table_value("Maneuver resolve", "track %s / %s",
-                                          maneuver_resolve.active_track_found ? "found" : "missing",
-                                          maneuver_resolve.active_track_valid ? "valid" : "invalid");
-            if (const KeplerManeuverNodeDisplayState *selected_display =
-                    _kepler_maneuver.find_node_display_state(maneuver_plan.selected_node_id))
-            {
-                draw_kepler_arc_info_table_value(
-                        "Selected display", "%s (%s)",
-                        selected_display->valid ? "valid" : "invalid",
-                        kepler_maneuver_display_status_name(selected_display->status));
-            }
+                                           static_cast<unsigned long long>(kepler.maneuver_revision));
             draw_kepler_arc_info_table_value("Primary body", "%u",
-                                          static_cast<unsigned int>(kepler.primary_body_id));
+                                           static_cast<unsigned int>(kepler.primary_body_id));
             draw_kepler_arc_info_table_value("World ref body", "%u",
                                           static_cast<unsigned int>(kepler.world_reference_body_id));
             draw_kepler_arc_info_table_value("Build time", "%.3f s", kepler.build_time_s);

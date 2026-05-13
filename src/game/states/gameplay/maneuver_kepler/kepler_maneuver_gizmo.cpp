@@ -17,6 +17,8 @@ namespace Game::KeplerManeuverGizmo
 {
     namespace
     {
+        constexpr double kAxisDragSensitivityMpsPerM = 1.0e-4;
+
         constexpr uint32_t rgba_u32(const uint32_t r, const uint32_t g, const uint32_t b, const uint32_t a)
         {
             return (a << 24u) | (b << 16u) | (g << 8u) | r;
@@ -681,7 +683,7 @@ namespace Game::KeplerManeuverGizmo
                                     mouse_pos,
                                     ray,
                                     std::max(io.MouseDragThreshold, 2.0f),
-                                    1.0,
+                                    kAxisDragSensitivityMpsPerM,
                                     mods.ctrl,
                                     mods.shift);
                     if (update.clear_interaction)

@@ -27,7 +27,6 @@ namespace Game
         OrbitPlotDepth depth{OrbitPlotDepth::DepthTested};
         float line_overlay_boost{0.35f};
         float planned_line_overlay_boost{0.55f};
-        bool planned_dashed{true};
     };
 
     void draw_kepler_prediction(const KeplerPredictionState &state,

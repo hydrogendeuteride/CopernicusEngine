@@ -16,6 +16,28 @@ namespace Game
             line_request.world_frame = request.world_frame;
             return build_kepler_arc_lines(line_request);
         }
+
+        void extend_last_planned_arc_to_preview_orbit(std::vector<KeplerOrbitArc> &arcs,
+                                                      const KeplerPredictionOptions &options)
+        {
+            if (arcs.empty())
+            {
+                return;
+            }
+
+            KeplerOrbitArc &last_arc = arcs.back();
+            const double preview_horizon_s = select_kepler_arc_horizon_s(last_arc.arc, options);
+            if (!std::isfinite(preview_horizon_s) || preview_horizon_s <= 0.0)
+            {
+                return;
+            }
+
+            const double preview_end_s = last_arc.arc.t0_s + preview_horizon_s;
+            if (std::isfinite(preview_end_s) && preview_end_s > last_arc.arc.t1_s)
+            {
+                last_arc.arc.t1_s = preview_end_s;
+            }
+        }
     } // namespace
 
     KeplerPredictionBuildOutput build_kepler_prediction(const KeplerPredictionBuildRequest &request)
@@ -65,18 +87,16 @@ namespace Game
                     build_kepler_maneuver_arc_chain(out.orbit.base_arc,
                                                     request.maneuver_nodes,
                                                     request.options.propagation);
-            if (!planned.valid)
+            if (planned.valid)
             {
-                out.status = planned.status;
-                return out;
-            }
-
-            out.planned_arcs = planned.arcs;
-            out.planned_lines = build_lines_for_arcs(out.planned_arcs, request);
-            if (!out.planned_lines.valid)
-            {
-                out.status = out.planned_lines.diagnostics.status;
-                return out;
+                out.planned_arcs = planned.arcs;
+                extend_last_planned_arc_to_preview_orbit(out.planned_arcs, request.options);
+                out.planned_lines = build_lines_for_arcs(out.planned_arcs, request);
+                if (!out.planned_lines.valid)
+                {
+                    out.planned_arcs.clear();
+                    out.planned_lines = {};
+                }
             }
         }
 

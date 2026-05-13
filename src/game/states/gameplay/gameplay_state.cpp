@@ -187,8 +187,11 @@ namespace Game
 
         // Draw orbit debug using the same interpolation alpha as rendering to avoid visual offset.
         draw_prediction(ctx);
-        ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
-        ManeuverUiController::emit_node_debug_overlay(maneuver_ui);
+        if (spacecraft_orbit_prediction_uses_nbody())
+        {
+            ManeuverUiController::Context maneuver_ui = build_maneuver_ui_context(ctx);
+            ManeuverUiController::emit_node_debug_overlay(maneuver_ui);
+        }
     }
 
     OrbitalPhysicsSystem::Context GameplayState::build_orbital_physics_context()

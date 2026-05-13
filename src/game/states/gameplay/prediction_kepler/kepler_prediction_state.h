@@ -70,6 +70,7 @@ namespace Game
 
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
         double build_time_s{0.0};
+        double build_wall_time_s{0.0};
         double horizon_s{0.0};
 
         orbitsim::BodyId primary_body_id{orbitsim::kInvalidBodyId};
@@ -88,6 +89,7 @@ namespace Game
         {
             valid = false;
             status = new_status;
+            build_wall_time_s = 0.0;
             horizon_s = 0.0;
             primary_body_id = orbitsim::kInvalidBodyId;
             world_reference_body_id = orbitsim::kInvalidBodyId;
