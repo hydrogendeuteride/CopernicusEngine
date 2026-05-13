@@ -38,6 +38,19 @@ namespace Game
                                value ? "yes" : "no");
         }
 
+        const KeplerPredictionState::Track *find_first_valid_kepler_track(
+                const KeplerPredictionState &kepler)
+        {
+            for (const KeplerPredictionState::Track &track : kepler.tracks)
+            {
+                if (track.valid)
+                {
+                    return &track;
+                }
+            }
+            return nullptr;
+        }
+
     } // namespace
 
     void GameplayState::draw_kepler_orbit_debug_window(GameStateContext &ctx)
@@ -167,6 +180,8 @@ namespace Game
         const KeplerManeuverNodeResolveResult &maneuver_resolve =
                 _kepler_maneuver.last_node_resolve_result();
         const KeplerPredictionState::Track *active_track = find_active_player_kepler_track(kepler);
+        const KeplerPredictionState::Track *summary_track =
+                active_track ? active_track : find_first_valid_kepler_track(kepler);
 
         ImGui::SeparatorText("Maneuver");
         if (ImGui::BeginTable("##kepler_maneuver_summary", 2,
@@ -298,21 +313,29 @@ namespace Game
                     kepler.celestial_nbody_ephemeris.rejected_splits,
                     kepler.celestial_nbody_ephemeris.forced_boundary_splits);
             draw_kepler_arc_info_table_bool("Celestial ephem cap hit",
-                                         kepler.celestial_nbody_ephemeris.hard_cap_hit);
-            draw_kepler_arc_info_table_value("Base arcs / samples", "%zu / %zu",
-                                          kepler.base_arcs.size(),
-                                          kepler.base_lines.vertices.size());
-            draw_kepler_arc_info_table_value("Planned arcs / samples", "%zu / %zu",
-                                          kepler.planned_arcs.size(),
-                                          kepler.planned_lines.vertices.size());
-            if (kepler.metrics.valid)
+                                          kepler.celestial_nbody_ephemeris.hard_cap_hit);
+            if (summary_track)
+            {
+                draw_kepler_arc_info_table_value("Base arcs / samples", "%zu / %zu",
+                                              summary_track->base_arcs.size(),
+                                              summary_track->base_lines.vertices.size());
+                draw_kepler_arc_info_table_value("Planned arcs / samples", "%zu / %zu",
+                                              summary_track->planned_arcs.size(),
+                                              summary_track->planned_lines.vertices.size());
+            }
+            else
+            {
+                draw_kepler_arc_info_table_value("Base arcs / samples", "%s", "missing");
+                draw_kepler_arc_info_table_value("Planned arcs / samples", "%s", "missing");
+            }
+            if (summary_track && summary_track->metrics.valid)
             {
                 draw_kepler_arc_info_table_value("Regime", "%s",
-                                              kepler_orbit_regime_name(kepler.metrics.regime));
-                draw_kepler_arc_info_table_value("Eccentricity", "%.6f", kepler.metrics.eccentricity);
+                                              kepler_orbit_regime_name(summary_track->metrics.regime));
+                draw_kepler_arc_info_table_value("Eccentricity", "%.6f", summary_track->metrics.eccentricity);
                 draw_kepler_arc_info_table_value("Semi-major axis", "%.3f km",
-                                              kepler.metrics.semi_major_axis_m / 1000.0);
-                draw_kepler_arc_info_table_value("Period", "%.3f s", kepler.metrics.period_s);
+                                              summary_track->metrics.semi_major_axis_m / 1000.0);
+                draw_kepler_arc_info_table_value("Period", "%.3f s", summary_track->metrics.period_s);
             }
             ImGui::EndTable();
         }

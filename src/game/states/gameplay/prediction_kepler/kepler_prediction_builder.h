@@ -10,6 +10,7 @@
 
 namespace Game
 {
+    // Inputs for one Kepler prediction track.
     struct KeplerPredictionBuildRequest
     {
         const orbitsim::GameSimulation *simulation{nullptr};
@@ -27,6 +28,7 @@ namespace Game
         uint64_t maneuver_revision{0};
     };
 
+    // Built arcs and render lines for one subject.
     struct KeplerPredictionBuildOutput
     {
         bool valid{false};
@@ -40,6 +42,7 @@ namespace Game
         KeplerArcMetrics metrics{};
     };
 
+    // Builds analytic arcs and their renderable line vertices.
     KeplerPredictionBuildOutput build_kepler_prediction(
             const KeplerPredictionBuildRequest &request);
 } // namespace Game

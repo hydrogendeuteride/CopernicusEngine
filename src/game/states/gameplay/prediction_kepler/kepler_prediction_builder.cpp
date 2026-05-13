@@ -9,6 +9,7 @@ namespace Game
 {
     namespace
     {
+        // Converts arcs into renderable world-space lines.
         KeplerArcLineSet build_lines_for_arcs(const std::vector<KeplerOrbitArc> &arcs,
                                               const KeplerPredictionBuildRequest &request)
         {
@@ -20,6 +21,7 @@ namespace Game
             return build_kepler_arc_lines(line_request);
         }
 
+        // Used to extend the base arc far enough for all burns.
         double latest_finite_maneuver_node_time_s(const std::span<const KeplerManeuverNode> nodes)
         {
             double latest_t_s = -std::numeric_limits<double>::infinity();
@@ -33,6 +35,7 @@ namespace Game
             return latest_t_s;
         }
 
+        // Used to avoid drawing a duplicate pre-burn segment.
         double earliest_finite_maneuver_node_time_s(const std::span<const KeplerManeuverNode> nodes)
         {
             double earliest_t_s = std::numeric_limits<double>::infinity();
@@ -59,6 +62,7 @@ namespace Game
             return base_arc;
         }
 
+        // Skips duplicate planned segments before the first burn.
         std::vector<KeplerOrbitArc> planned_arcs_for_line_build(
                 const std::vector<KeplerOrbitArc> &arcs,
                 const std::span<const KeplerManeuverNode> nodes)
@@ -81,6 +85,7 @@ namespace Game
                                                arcs.end());
         }
 
+        // Keeps the post-burn orbit visible after the last node.
         void extend_last_planned_arc_to_preview_orbit(std::vector<KeplerOrbitArc> &arcs,
                                                       const KeplerPredictionOptions &options)
         {
@@ -104,6 +109,7 @@ namespace Game
         }
     } // namespace
 
+    // Builds one subject's base and optional maneuver prediction.
     KeplerPredictionBuildOutput build_kepler_prediction(const KeplerPredictionBuildRequest &request)
     {
         KeplerPredictionBuildOutput out{};
@@ -128,6 +134,7 @@ namespace Game
         orbit_request.current_primary_body_id = request.current_primary_body_id;
         orbit_request.options = request.options;
 
+        // Everything else depends on a valid base orbit.
         out.orbit = build_kepler_arc(orbit_request);
         if (!out.orbit.valid)
         {
@@ -147,6 +154,7 @@ namespace Game
 
         if (!request.maneuver_nodes.empty())
         {
+            // Turn normalized maneuver nodes into planned arcs.
             const KeplerOrbitArc maneuver_base_arc =
                     extend_base_arc_to_cover_maneuver_nodes(out.orbit.base_arc,
                                                             request.maneuver_nodes);

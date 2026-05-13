@@ -12,6 +12,7 @@
 
 namespace Game
 {
+    // Frame inputs collected by GameplayState.
     struct KeplerPredictionUpdateContext
     {
         const OrbitalRuntimeSystem *orbit{nullptr};
@@ -32,6 +33,7 @@ namespace Game
         bool build_celestial_nbody_tracks{true};
     };
 
+    // Owns Kepler prediction state, caching, update, and draw dispatch.
     class KeplerPredictionSystem
     {
     public:
@@ -44,6 +46,7 @@ namespace Game
         void draw(const KeplerPredictionDrawContext &context) const;
 
     private:
+        // Reusable celestial n-body ephemeris cache.
         struct CelestialNBodyEphemerisCache
         {
             bool valid{false};
@@ -67,6 +70,7 @@ namespace Game
             orbitsim::AdaptiveEphemerisDiagnostics diagnostics{};
         };
 
+        // Reuses or rebuilds the celestial ephemeris cache.
         const CelestialNBodyEphemerisCache &resolve_celestial_nbody_cache(
                 const KeplerPredictionUpdateContext &context,
                 const KeplerWorldFrame &world_frame,

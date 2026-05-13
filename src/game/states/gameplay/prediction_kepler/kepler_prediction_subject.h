@@ -1,5 +1,8 @@
 #pragma once
 
+// Kepler prediction subject adapter.
+// Gameplay/world state -> inertial Kepler inputs.
+
 #include "core/world.h"
 #include "game/entity.h"
 #include "game/orbit/kepler/kepler_types.h"
@@ -21,6 +24,7 @@ namespace Game
     class OrbitalRuntimeSystem;
     struct ScenarioConfig;
 
+    // Input bundle for subject resolution.
     struct KeplerPredictionSubjectContext
     {
         const OrbitalRuntimeSystem *orbit{nullptr};
@@ -30,6 +34,7 @@ namespace Game
         const ScenarioConfig *scenario_config{nullptr};
     };
 
+    // Resolved prediction target.
     struct KeplerPredictionSubject
     {
         bool valid{false};
@@ -44,17 +49,21 @@ namespace Game
         orbitsim::State state_inertial{};
     };
 
+    // Spacecraft/entity targets.
     std::vector<KeplerPredictionSubject> resolve_kepler_prediction_orbiter_subjects(
             const KeplerPredictionSubjectContext &context,
             const KeplerWorldFrame &world_frame);
 
+    // Celestial body targets.
     std::vector<KeplerPredictionSubject> resolve_kepler_prediction_celestial_subjects(
             const KeplerPredictionSubjectContext &context);
 
+    // World <-> inertial frame bridge.
     bool resolve_kepler_prediction_world_frame(
             const KeplerPredictionSubjectContext &context,
             KeplerWorldFrame &out_frame);
 
+    // Current-state fallback body provider.
     KeplerBodyStateProvider make_current_kepler_body_state_provider(
             const OrbitalRuntimeSystem &orbit);
 } // namespace Game

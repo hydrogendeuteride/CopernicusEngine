@@ -16,11 +16,32 @@ namespace Game
 {
     namespace
     {
-        constexpr uint64_t kKeplerPickSummaryLogInterval = 300u;
-        constexpr uint64_t kKeplerPickLargeLogInterval = 60u;
-        constexpr std::size_t kKeplerPickMaxSegmentsPerLineSet = 4'096u;
-        constexpr std::size_t kKeplerPickLargeSegmentCount = 8'192u;
-        constexpr std::size_t kKeplerPickWarnSegmentCount = 32'768u;
+        // Local draw-path tuning knobs, grouped by the subsystem that consumes them.
+        struct PickLogConfig
+        {
+            static constexpr uint64_t summary_interval = 300u;
+            static constexpr uint64_t large_interval = 60u;
+            static constexpr std::size_t large_segment_count = 8'192u;
+            static constexpr std::size_t warn_segment_count = 32'768u;
+        };
+
+        struct PickSegmentConfig
+        {
+            static constexpr std::size_t max_segments_per_line_set = 4'096u;
+        };
+
+        struct DashShaderConfig
+        {
+            static constexpr double on_px = 14.0;
+            static constexpr double off_px = 9.0;
+            static constexpr double period_px = on_px + off_px;
+        };
+
+        struct ClipConfig
+        {
+            static constexpr double plane_epsilon = 1.0e-4;
+            static constexpr double direction_epsilon = 1.0e-12;
+        };
 
         bool finite_world(const WorldVec3 &p)
         {
@@ -41,6 +62,9 @@ namespace Game
             return owner;
         }
 
+        // Per-frame diagnostics for the line-picking path. These counters are
+        // intentionally local to drawing so invalid visualization data is visible
+        // without coupling it back into the prediction builder.
         struct KeplerPickFrameStats
         {
             uint64_t draw_call_id{0u};
@@ -124,15 +148,15 @@ namespace Game
 
             const bool group_ids_accumulated = static_cast<std::size_t>(stats.max_group_id) + 1u > stats.groups;
             const bool suspicious =
-                    stats.registered_segments >= kKeplerPickWarnSegmentCount ||
+                    stats.registered_segments >= PickLogConfig::warn_segment_count ||
                     stats.skipped_nonfinite_position_segments > 0u ||
                     stats.invalid_time_segments > 0u ||
                     stats.nonfinite_length_segments > 0u ||
                     group_ids_accumulated;
-            const bool periodic_log = (stats.draw_call_id % kKeplerPickSummaryLogInterval) == 1u;
+            const bool periodic_log = (stats.draw_call_id % PickLogConfig::summary_interval) == 1u;
             const bool large_log =
-                    stats.registered_segments >= kKeplerPickLargeSegmentCount &&
-                    (stats.draw_call_id % kKeplerPickLargeLogInterval) == 1u;
+                    stats.registered_segments >= PickLogConfig::large_segment_count &&
+                    (stats.draw_call_id % PickLogConfig::large_interval) == 1u;
             if (!suspicious && !periodic_log && !large_log)
             {
                 return;
@@ -189,10 +213,12 @@ namespace Game
                                        const KeplerArcLineSet &line_set,
                                        std::vector<Picking::LinePickSegmentData> *scratch)
         {
+            // Picking is capped independently of render vertices so dense orbit
+            // lines stay drawable without flooding the picking system.
             const std::size_t requested_segments =
                     (line_set.vertices.size() > 1u) ? line_set.vertices.size() - 1u : 0u;
             const std::size_t target_segments =
-                    std::min(requested_segments, kKeplerPickMaxSegmentsPerLineSet);
+                    std::min(requested_segments, PickSegmentConfig::max_segments_per_line_set);
             if (target_segments == 0u)
             {
                 return 0u;
@@ -280,24 +306,19 @@ namespace Game
             {
                 return 0u;
             }
-            return std::min(line_set.vertices.size() - 1u, kKeplerPickMaxSegmentsPerLineSet);
+            return std::min(line_set.vertices.size() - 1u, PickSegmentConfig::max_segments_per_line_set);
         }
 
         double dash_period_scale(const KeplerPredictionDrawContext &context)
         {
             double scale = 1.0;
             const double source_period_px = context.dashed_segment_on_px + context.dashed_segment_off_px;
-            constexpr double kShaderDashPeriodPx = 14.0 + 9.0;
             if (std::isfinite(source_period_px) && source_period_px > 1.0e-6)
             {
-                scale = kShaderDashPeriodPx / source_period_px;
+                scale = DashShaderConfig::period_px / source_period_px;
             }
             return scale;
         }
-
-        constexpr double kShaderDashOnPx = 14.0;
-        constexpr double kShaderDashOffPx = 9.0;
-        constexpr double kShaderDashPeriodPx = kShaderDashOnPx + kShaderDashOffPx;
 
         double clip_plane_distance(const glm::dvec4 &clip, const int plane_index)
         {
@@ -317,8 +338,6 @@ namespace Game
                                     double &out_t0,
                                     double &out_t1)
         {
-            constexpr double kClipPlaneEpsilon = 1.0e-4;
-            constexpr double kDirectionEpsilon = 1.0e-12;
             if (!std::isfinite(clip_a.x) || !std::isfinite(clip_a.y) ||
                 !std::isfinite(clip_a.z) || !std::isfinite(clip_a.w) ||
                 !std::isfinite(clip_b.x) || !std::isfinite(clip_b.y) ||
@@ -333,8 +352,8 @@ namespace Game
             {
                 const double d0 = clip_plane_distance(clip_a, plane_index);
                 const double d1 = clip_plane_distance(clip_b, plane_index);
-                const bool a_inside = d0 >= kClipPlaneEpsilon;
-                const bool b_inside = d1 >= kClipPlaneEpsilon;
+                const bool a_inside = d0 >= ClipConfig::plane_epsilon;
+                const bool b_inside = d1 >= ClipConfig::plane_epsilon;
                 if (a_inside && b_inside)
                 {
                     continue;
@@ -345,12 +364,12 @@ namespace Game
                 }
 
                 const double denom = d1 - d0;
-                if (!(std::abs(denom) > kDirectionEpsilon) || !std::isfinite(denom))
+                if (!(std::abs(denom) > ClipConfig::direction_epsilon) || !std::isfinite(denom))
                 {
                     return false;
                 }
 
-                const double t = std::clamp((kClipPlaneEpsilon - d0) / denom, 0.0, 1.0);
+                const double t = std::clamp((ClipConfig::plane_epsilon - d0) / denom, 0.0, 1.0);
                 if (!a_inside)
                 {
                     t0 = std::max(t0, t);
@@ -381,6 +400,8 @@ namespace Game
                                         WorldVec3 &a_world,
                                         WorldVec3 &b_world)
         {
+            // Orbit vertices can span huge distances. Clip before submitting so
+            // downstream line rendering and dash measurement operate on visible spans.
             const glm::dvec4 clip_a = project_world_to_clip(context, a_world);
             const glm::dvec4 clip_b = project_world_to_clip(context, b_world);
             double t0 = 0.0;
@@ -457,10 +478,10 @@ namespace Game
                 return;
             }
 
-            cursor_px = std::fmod(cursor_px + segment_px, kShaderDashPeriodPx);
+            cursor_px = std::fmod(cursor_px + segment_px, DashShaderConfig::period_px);
             if (cursor_px < 0.0)
             {
-                cursor_px += kShaderDashPeriodPx;
+                cursor_px += DashShaderConfig::period_px;
             }
         }
 
@@ -469,13 +490,15 @@ namespace Game
                                      float &out_a_px,
                                      float &out_b_px)
         {
-            const double start_px = std::fmod(dash_cursor_px, kShaderDashPeriodPx);
-            const double safe_start_px = start_px < 0.0 ? start_px + kShaderDashPeriodPx : start_px;
+            const double start_px = std::fmod(dash_cursor_px, DashShaderConfig::period_px);
+            const double safe_start_px = start_px < 0.0 ? start_px + DashShaderConfig::period_px : start_px;
             out_a_px = static_cast<float>(safe_start_px);
             out_b_px = static_cast<float>(safe_start_px + std::max(0.0, segment_px));
             advance_dash_cursor(dash_cursor_px, segment_px);
         }
 
+        // Converts one built Kepler line set into renderer line commands, optional
+        // overlay commands, and optional picking segments for maneuver interactions.
         void emit_line_set(OrbitPlotSystem &orbit_plot,
                            PickingSystem *picking,
                            const bool emit_pick,
@@ -645,6 +668,8 @@ namespace Game
         glm::vec4 track_base_color(const KeplerPredictionState::Track &track,
                                    const KeplerPredictionDrawContext &context)
         {
+            // Celestial tracks are reference context, so keep them less dominant
+            // than spacecraft prediction lines.
             const float alpha =
                     track.celestial_nbody ? 0.42f : (track.celestial ? 0.58f : context.base_color.a);
             return glm::vec4(track.orbit_rgb, alpha);
@@ -696,14 +721,6 @@ namespace Game
                     }
                 }
             }
-            else
-            {
-                target_segments += target_pick_segment_count(state.base_lines);
-                if (context.draw_planned)
-                {
-                    target_segments += target_pick_segment_count(state.planned_lines);
-                }
-            }
 
             context.pick_segment_scratch->reserve(target_segments);
         }
@@ -715,6 +732,7 @@ namespace Game
         static uint64_t s_draw_call_id = 0u;
         ++s_draw_call_id;
 
+        // The Kepler draw path owns orbit-plot and line-pick output for this frame.
         if (context.picking)
         {
             context.picking->clear_line_picks();
@@ -755,6 +773,8 @@ namespace Game
                     continue;
                 }
 
+                // Only active spacecraft tracks are pickable; celestial tracks are
+                // visual context and should not create maneuver handles.
                 const std::string base_owner =
                         kepler_orbit_pick_owner(KeplerManeuverOrbitPickRole::Base, track.label);
                 emit_line_set(*context.orbit_plot,
@@ -795,40 +815,6 @@ namespace Game
             }
             log_pick_frame_stats(pick_stats);
             return;
-        }
-
-        emit_line_set(*context.orbit_plot,
-                      context.picking,
-                      context.emit_pick,
-                      "KeplerOrbit/Base",
-                      "base",
-                      state.base_lines,
-                      context.base_color,
-                      context.depth,
-                      OrbitPlotLineStyle::Solid,
-                      context,
-                      context.line_overlay_boost,
-                      context.pick_segment_scratch,
-                      pick_stats);
-
-        if (context.draw_planned)
-        {
-            const float planned_overlay_boost =
-                    std::max(context.line_overlay_boost, context.planned_line_overlay_boost);
-            emit_line_set(*context.orbit_plot,
-                          context.picking,
-                          context.emit_pick,
-                          "KeplerOrbit/Planned",
-                          "planned",
-                          state.planned_lines,
-                          context.planned_color,
-                          context.depth,
-                          context.draw_planned_as_dashed ? OrbitPlotLineStyle::Dashed
-                                                         : OrbitPlotLineStyle::Solid,
-                          context,
-                          planned_overlay_boost,
-                          context.pick_segment_scratch,
-                          pick_stats);
         }
 
         log_pick_frame_stats(pick_stats);

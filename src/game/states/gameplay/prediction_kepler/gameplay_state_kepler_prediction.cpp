@@ -9,6 +9,7 @@
 
 namespace Game
 {
+    // Marks cached Kepler tracks dirty.
     void GameplayState::mark_kepler_prediction_dirty()
     {
         if (_kepler_prediction)
@@ -17,6 +18,7 @@ namespace Game
         }
     }
 
+    // Clears prediction and maneuver display runtime.
     void GameplayState::clear_kepler_prediction_runtime()
     {
         if (_kepler_prediction)
@@ -26,6 +28,7 @@ namespace Game
         _kepler_maneuver.clear_node_display_states();
     }
 
+    // Updates Kepler prediction from current gameplay state.
     void GameplayState::update_kepler_prediction(GameStateContext &ctx)
     {
         (void) ctx;
@@ -40,6 +43,7 @@ namespace Game
         }
 
         const double sim_time_s = current_sim_time_s();
+        // Drop maneuver nodes already behind the sim clock.
         (void) apply_kepler_maneuver_command(
                 KeplerManeuverCommand::prune_past_nodes(sim_time_s));
 
@@ -62,6 +66,7 @@ namespace Game
         const int render_segment_budget = _prediction->budget().render_max_segments_cpu;
         if (render_segment_budget > 1)
         {
+            // Clamp Kepler tessellation to the shared render budget.
             constexpr std::size_t kKeplerCurveSourceVertexCap = 16384u;
             kepler_context.line_options.max_vertices_total =
                     std::min(kepler_context.line_options.max_vertices_total,
@@ -76,6 +81,7 @@ namespace Game
         _kepler_maneuver.resolve_node_display_states(_kepler_prediction->state());
     }
 
+    // Queues Kepler orbit lines and picking data.
     void GameplayState::draw_kepler_prediction(GameStateContext &ctx)
     {
         if (!_kepler_prediction || !spacecraft_orbit_prediction_uses_kepler())
@@ -116,6 +122,7 @@ namespace Game
         _kepler_prediction->draw(kepler_draw);
     }
 
+    // Applies maneuver edits and propagates prediction dirtiness.
     KeplerManeuverCommandResult GameplayState::apply_kepler_maneuver_command(
             const KeplerManeuverCommand &command)
     {

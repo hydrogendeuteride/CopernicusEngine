@@ -7,6 +7,9 @@
 
 #include <utility>
 
+// Kepler prediction subject adapter.
+// Gameplay/world state -> inertial Kepler inputs.
+
 namespace Game
 {
     namespace
@@ -19,6 +22,7 @@ namespace Game
         };
         constexpr glm::vec3 kDefaultCelestialColor{0.80f, 0.82f, 0.86f};
 
+        // Orbiter color: config override -> palette.
         glm::vec3 orbiter_color(const ScenarioConfig &config,
                                 const OrbiterInfo &orbiter,
                                 const std::size_t index)
@@ -33,6 +37,7 @@ namespace Game
             return kOrbiterPalette[index % (sizeof(kOrbiterPalette) / sizeof(kOrbiterPalette[0]))];
         }
 
+        // Celestial color: config override -> default gray.
         glm::vec3 celestial_color(const ScenarioConfig &config,
                                   const CelestialBodyInfo &body)
         {
@@ -51,6 +56,7 @@ namespace Game
             const KeplerPredictionSubjectContext &context,
             KeplerWorldFrame &out_frame)
     {
+        // FRAME: game world -> simulation inertial.
         out_frame = {};
         if (!context.orbit || !context.world || !context.scenario_config)
         {
@@ -70,6 +76,7 @@ namespace Game
             return false;
         }
 
+        // Reference body world position: render entity -> system center fallback.
         out_frame.world_reference_body_world = context.scenario_config->system_center;
         if (world_ref_info->render_entity.is_valid())
         {
@@ -88,6 +95,7 @@ namespace Game
             const KeplerPredictionSubjectContext &context,
             const KeplerWorldFrame &world_frame)
     {
+        // ORBITERS: entity/world state -> inertial subject.
         std::vector<KeplerPredictionSubject> out;
         if (!context.orbit || !context.world || !context.scenario_config)
         {
@@ -131,6 +139,7 @@ namespace Game
                 continue;
             }
 
+            // World-relative -> inertial.
             const glm::dvec3 position_rel_ref_m =
                     glm::dvec3(position_world - world_frame.world_reference_body_world);
             const glm::dvec3 position_inertial_m =
@@ -144,6 +153,7 @@ namespace Game
             }
 
             KeplerPredictionSubject subject{};
+            // Active player gets maneuvers/picking downstream.
             subject.valid = true;
             subject.entity = orbiter.entity;
             subject.label = orbiter.name;
@@ -161,6 +171,7 @@ namespace Game
     std::vector<KeplerPredictionSubject> resolve_kepler_prediction_celestial_subjects(
             const KeplerPredictionSubjectContext &context)
     {
+        // CELESTIALS: simulation bodies -> inertial subjects.
         std::vector<KeplerPredictionSubject> out;
         if (!context.orbit || !context.scenario_config)
         {
@@ -177,6 +188,7 @@ namespace Game
         out.reserve(scenario->bodies.size());
         for (const CelestialBodyInfo &body_info : scenario->bodies)
         {
+            // Skip frame origin.
             if (body_info.sim_id == world_ref_info->sim_id)
             {
                 continue;
@@ -205,6 +217,7 @@ namespace Game
 
     KeplerBodyStateProvider make_current_kepler_body_state_provider(const OrbitalRuntimeSystem &orbit)
     {
+        // FALLBACK: current body state, ignores t_s.
         KeplerBodyStateProvider provider{};
         const OrbitalScenario *scenario = orbit.scenario();
         provider.state_at = [scenario](const orbitsim::BodyId body_id,

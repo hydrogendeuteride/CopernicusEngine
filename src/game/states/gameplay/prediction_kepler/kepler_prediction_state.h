@@ -12,8 +12,10 @@
 
 namespace Game
 {
+    // Runtime state for the gameplay Kepler prediction system.
     struct KeplerPredictionState
     {
+        // One drawable/pickable predicted orbit track.
         struct Track
         {
             bool valid{false};
@@ -39,6 +41,7 @@ namespace Game
             KeplerArcMetrics metrics{};
         };
 
+        // Debug snapshot for the shared celestial n-body ephemeris cache.
         struct CelestialNBodyEphemerisDebug
         {
             bool valid{false};
@@ -76,12 +79,6 @@ namespace Game
         orbitsim::BodyId primary_body_id{orbitsim::kInvalidBodyId};
         orbitsim::BodyId world_reference_body_id{orbitsim::kInvalidBodyId};
 
-        KeplerArcBuildResult orbit{};
-        std::vector<KeplerOrbitArc> base_arcs{};
-        std::vector<KeplerOrbitArc> planned_arcs{};
-        KeplerArcLineSet base_lines{};
-        KeplerArcLineSet planned_lines{};
-        KeplerArcMetrics metrics{};
         std::vector<Track> tracks{};
         CelestialNBodyEphemerisDebug celestial_nbody_ephemeris{};
 
@@ -93,12 +90,6 @@ namespace Game
             horizon_s = 0.0;
             primary_body_id = orbitsim::kInvalidBodyId;
             world_reference_body_id = orbitsim::kInvalidBodyId;
-            orbit = {};
-            base_arcs.clear();
-            planned_arcs.clear();
-            base_lines = {};
-            planned_lines = {};
-            metrics = {};
             tracks.clear();
             celestial_nbody_ephemeris = {};
         }

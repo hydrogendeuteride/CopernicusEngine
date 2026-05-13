@@ -14,6 +14,7 @@ namespace Game
 {
     namespace
     {
+        // Publishes an active-player or first-valid representative track.
         void publish_representative_track(KeplerPredictionState &state)
         {
             const KeplerPredictionState::Track *representative = nullptr;
@@ -48,19 +49,15 @@ namespace Game
             state.status = representative->status;
             state.horizon_s = representative->horizon_s;
             state.primary_body_id = representative->primary_body_id;
-            state.orbit = representative->orbit;
-            state.base_arcs = representative->base_arcs;
-            state.planned_arcs = representative->planned_arcs;
-            state.base_lines = representative->base_lines;
-            state.planned_lines = representative->planned_lines;
-            state.metrics = representative->metrics;
         }
 
+        // Guards Kepler math against invalid vectors.
         bool finite_vec3(const orbitsim::Vec3 &v)
         {
             return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
         }
 
+        // Keeps subject identity even when prediction fails.
         KeplerPredictionState::Track make_invalid_track(const KeplerPredictionSubject &subject,
                                                         const KeplerOrbitStatus status)
         {
@@ -108,6 +105,7 @@ namespace Game
             return out;
         }
 
+        // Chooses the strongest nearby primary for a celestial track.
         orbitsim::BodyId select_celestial_kepler_primary_body_id(
                 const orbitsim::GameSimulation &simulation,
                 const KeplerPredictionSubject &subject,
@@ -167,6 +165,7 @@ namespace Game
                            : orbitsim::kInvalidBodyId;
         }
 
+        // Builds one analytic Kepler track.
         KeplerPredictionState::Track build_kepler_track(
                 const KeplerPredictionSubject &subject,
                 const KeplerPredictionUpdateContext &context,
@@ -230,6 +229,7 @@ namespace Game
             return track;
         }
 
+        // Builds celestial ground-truth lines from n-body ephemeris.
         KeplerPredictionState::Track build_celestial_nbody_track(
                 const KeplerPredictionSubject &subject,
                 const KeplerPredictionUpdateContext &context,
@@ -280,6 +280,7 @@ namespace Game
             return (std::isfinite(value) && value > 0.0) ? value : fallback;
         }
 
+        // Fallback when no subject can estimate the horizon.
         double fallback_prediction_horizon_s(const KeplerPredictionUpdateContext &context)
         {
             if (std::isfinite(context.requested_horizon_s) && context.requested_horizon_s > 0.0)
@@ -298,6 +299,7 @@ namespace Game
             bool capped{false};
         };
 
+        // Estimates one subject's required display horizon.
         double estimate_track_horizon_s(const KeplerPredictionSubject &subject,
                                         const KeplerPredictionUpdateContext &context,
                                         const KeplerWorldFrame &world_frame,
@@ -329,6 +331,7 @@ namespace Game
                            : 0.0;
         }
 
+        // Resolves the shared celestial ephemeris horizon.
         ResolvedCelestialNBodyHorizon resolve_required_celestial_nbody_horizon(
                 const std::span<const KeplerPredictionSubject> subjects,
                 const KeplerPredictionUpdateContext &context,
@@ -383,6 +386,7 @@ namespace Game
             return std::clamp(required_horizon_s * 0.25, kMinReuseS, kMaxReuseS);
         }
 
+        // Throttles rebuilds, especially during maneuver previews.
         double prediction_rebuild_interval_s(const KeplerPredictionUpdateContext &context)
         {
             if (!context.maneuver_nodes.empty())
@@ -403,6 +407,7 @@ namespace Game
             return std::clamp(source_dt_s * 0.005, 1.0 / 60.0, 0.05);
         }
 
+        // Checks whether the current prediction can be reused.
         bool can_reuse_prediction(const KeplerPredictionState &state,
                                   const KeplerPredictionUpdateContext &context,
                                   const KeplerWorldFrame &world_frame)
@@ -443,6 +448,7 @@ namespace Game
         }
     } // namespace
 
+    // Reuses or rebuilds the shared celestial ephemeris.
     const KeplerPredictionSystem::CelestialNBodyEphemerisCache &
     KeplerPredictionSystem::resolve_celestial_nbody_cache(
             const KeplerPredictionUpdateContext &context,
@@ -575,6 +581,7 @@ namespace Game
         _state.dirty = true;
     }
 
+    // Main update pipeline for all Kepler prediction tracks.
     void KeplerPredictionSystem::update(const KeplerPredictionUpdateContext &context)
     {
         _state.enabled = context.enabled;
@@ -610,6 +617,7 @@ namespace Game
 
         if (can_reuse_prediction(_state, context, world_frame))
         {
+            // Existing tracks still cover this frame.
             _state.enabled = context.enabled;
             return;
         }
@@ -657,6 +665,7 @@ namespace Game
 
         const bool needs_celestial_nbody_cache =
                 context.build_celestial_nbody_tracks || context.build_celestial_kepler_tracks;
+        // Share one celestial ephemeris across all tracks.
         const ResolvedCelestialNBodyHorizon required_celestial_nbody_horizon =
                 needs_celestial_nbody_cache
                         ? resolve_required_celestial_nbody_horizon(
@@ -715,6 +724,7 @@ namespace Game
                         ? celestial_nbody.body_state_provider
                         : make_current_kepler_body_state_provider(*context.orbit);
 
+        // Analytic Kepler tracks.
         for (const KeplerPredictionSubject &subject : subjects)
         {
             _state.tracks.push_back(build_kepler_track(subject,
@@ -727,6 +737,7 @@ namespace Game
 
         if (context.build_celestial_nbody_tracks)
         {
+            // Sampled n-body celestial tracks.
             for (const KeplerPredictionSubject &subject : celestial_subjects)
             {
                 _state.tracks.push_back(build_celestial_nbody_track(subject,

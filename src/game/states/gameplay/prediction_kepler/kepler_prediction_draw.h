@@ -12,6 +12,9 @@ class PickingSystem;
 
 namespace Game
 {
+    // Runtime inputs for drawing already-built Kepler prediction line sets.
+    // The prediction system owns geometry; this context supplies render targets,
+    // picking hooks, visibility toggles, and view data needed by the draw pass.
     struct KeplerPredictionDrawContext
     {
         OrbitPlotSystem *orbit_plot{nullptr};
@@ -36,6 +39,8 @@ namespace Game
         double viewport_height_px{720.0};
     };
 
+    // Emits visible Kepler tracks into OrbitPlotSystem and registers line picking
+    // for maneuver creation on the active spacecraft track.
     void draw_kepler_prediction(const KeplerPredictionState &state,
                                 const KeplerPredictionDrawContext &context);
 } // namespace Game
