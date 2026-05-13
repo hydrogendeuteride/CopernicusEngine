@@ -1,6 +1,7 @@
 #include "orbit_plot.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace
 {
@@ -8,14 +9,26 @@ namespace
                           uint32_t &vertex_index,
                           const glm::vec3 &a,
                           const glm::vec3 &b,
-                          const glm::vec4 &color)
+                          const glm::vec4 &color,
+                          const OrbitPlotLineStyle style,
+                          const float dash_coord_a_px,
+                          const float dash_coord_b_px)
     {
+        const bool dashed =
+                style == OrbitPlotLineStyle::Dashed &&
+                std::isfinite(dash_coord_a_px) &&
+                std::isfinite(dash_coord_b_px) &&
+                dash_coord_a_px >= 0.0f &&
+                dash_coord_b_px >= 0.0f;
+
         OrbitPlotVertex v0{};
         v0.position = a;
+        v0.dash_coord_px = dashed ? dash_coord_a_px : -1.0f;
         v0.color = color;
 
         OrbitPlotVertex v1{};
         v1.position = b;
+        v1.dash_coord_px = dashed ? dash_coord_b_px : -1.0f;
         v1.color = color;
 
         dst[vertex_index++] = v0;
@@ -63,13 +76,15 @@ void OrbitPlotSystem::begin_frame()
 void OrbitPlotSystem::add_line(const WorldVec3 &a_world,
                                const WorldVec3 &b_world,
                                const glm::vec4 &color,
-                               OrbitPlotDepth depth)
+                               OrbitPlotDepth depth,
+                               OrbitPlotLineStyle style)
 {
     LineCommand cmd{};
     cmd.a_world = a_world;
     cmd.b_world = b_world;
     cmd.color = color;
     cmd.depth = depth;
+    cmd.style = style;
     _pending_lines.push_back(cmd);
     _stats.pending_line_count = static_cast<uint32_t>(_pending_lines.size());
 }
@@ -164,7 +179,14 @@ void OrbitPlotSystem::write_line_vertices(const WorldVec3 &origin_world,
 
         const glm::vec3 a = world_to_local(cmd.a_world, origin_world);
         const glm::vec3 b = world_to_local(cmd.b_world, origin_world);
-        push_line(bucket_dst, *bucket_write_index, a, b, cmd.color);
+        push_line(bucket_dst,
+                  *bucket_write_index,
+                  a,
+                  b,
+                  cmd.color,
+                  cmd.style,
+                  cmd.dash_coord_a_px,
+                  cmd.dash_coord_b_px);
     }
 }
 

@@ -1,6 +1,9 @@
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_builder.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <limits>
 
 namespace Game
 {
@@ -15,6 +18,67 @@ namespace Game
             line_request.body_state_provider = request.body_state_provider;
             line_request.world_frame = request.world_frame;
             return build_kepler_arc_lines(line_request);
+        }
+
+        double latest_finite_maneuver_node_time_s(const std::span<const KeplerManeuverNode> nodes)
+        {
+            double latest_t_s = -std::numeric_limits<double>::infinity();
+            for (const KeplerManeuverNode &node : nodes)
+            {
+                if (std::isfinite(node.t_s))
+                {
+                    latest_t_s = std::max(latest_t_s, node.t_s);
+                }
+            }
+            return latest_t_s;
+        }
+
+        double earliest_finite_maneuver_node_time_s(const std::span<const KeplerManeuverNode> nodes)
+        {
+            double earliest_t_s = std::numeric_limits<double>::infinity();
+            for (const KeplerManeuverNode &node : nodes)
+            {
+                if (std::isfinite(node.t_s))
+                {
+                    earliest_t_s = std::min(earliest_t_s, node.t_s);
+                }
+            }
+            return earliest_t_s;
+        }
+
+        KeplerOrbitArc extend_base_arc_to_cover_maneuver_nodes(
+                KeplerOrbitArc base_arc,
+                const std::span<const KeplerManeuverNode> nodes)
+        {
+            const double latest_t_s = latest_finite_maneuver_node_time_s(nodes);
+            if (std::isfinite(latest_t_s) && latest_t_s >= base_arc.arc.t1_s)
+            {
+                constexpr double kPostLastNodePadS = 1.0;
+                base_arc.arc.t1_s = latest_t_s + kPostLastNodePadS;
+            }
+            return base_arc;
+        }
+
+        std::vector<KeplerOrbitArc> planned_arcs_for_line_build(
+                const std::vector<KeplerOrbitArc> &arcs,
+                const std::span<const KeplerManeuverNode> nodes)
+        {
+            if (arcs.empty())
+            {
+                return {};
+            }
+
+            std::size_t first_visible_arc_index = 0u;
+            const double first_node_time_s = earliest_finite_maneuver_node_time_s(nodes);
+            if (arcs.size() > 1u &&
+                std::isfinite(first_node_time_s) &&
+                kepler_same_sample_time(arcs.front().arc.t1_s, first_node_time_s) &&
+                !kepler_same_sample_time(arcs.front().arc.t0_s, first_node_time_s))
+            {
+                first_visible_arc_index = 1u;
+            }
+            return std::vector<KeplerOrbitArc>(arcs.begin() + static_cast<std::ptrdiff_t>(first_visible_arc_index),
+                                               arcs.end());
         }
 
         void extend_last_planned_arc_to_preview_orbit(std::vector<KeplerOrbitArc> &arcs,
@@ -83,15 +147,20 @@ namespace Game
 
         if (!request.maneuver_nodes.empty())
         {
+            const KeplerOrbitArc maneuver_base_arc =
+                    extend_base_arc_to_cover_maneuver_nodes(out.orbit.base_arc,
+                                                            request.maneuver_nodes);
             const KeplerManeuverArcBuildResult planned =
-                    build_kepler_maneuver_arc_chain(out.orbit.base_arc,
+                    build_kepler_maneuver_arc_chain(maneuver_base_arc,
                                                     request.maneuver_nodes,
                                                     request.options.propagation);
             if (planned.valid)
             {
                 out.planned_arcs = planned.arcs;
                 extend_last_planned_arc_to_preview_orbit(out.planned_arcs, request.options);
-                out.planned_lines = build_lines_for_arcs(out.planned_arcs, request);
+                const std::vector<KeplerOrbitArc> line_arcs =
+                        planned_arcs_for_line_build(out.planned_arcs, request.maneuver_nodes);
+                out.planned_lines = build_lines_for_arcs(line_arcs, request);
                 if (!out.planned_lines.valid)
                 {
                     out.planned_arcs.clear();

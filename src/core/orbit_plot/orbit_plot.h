@@ -15,10 +15,16 @@ enum class OrbitPlotDepth : uint8_t
     AlwaysOnTop = 1,
 };
 
+enum class OrbitPlotLineStyle : uint8_t
+{
+    Solid = 0,
+    Dashed = 1,
+};
+
 struct OrbitPlotVertex
 {
     glm::vec3 position{0.0f};
-    float _pad0{0.0f};
+    float dash_coord_px{-1.0f};
     glm::vec4 color{1.0f};
 };
 static_assert(sizeof(OrbitPlotVertex) == 32);
@@ -72,6 +78,9 @@ public:
         WorldVec3 b_world{0.0, 0.0, 0.0};
         glm::vec4 color{1.0f};
         OrbitPlotDepth depth{OrbitPlotDepth::DepthTested};
+        OrbitPlotLineStyle style{OrbitPlotLineStyle::Solid};
+        float dash_coord_a_px{-1.0f};
+        float dash_coord_b_px{-1.0f};
     };
 
     Settings &settings() { return _settings; }
@@ -85,7 +94,8 @@ public:
     void add_line(const WorldVec3 &a_world,
                   const WorldVec3 &b_world,
                   const glm::vec4 &color,
-                  OrbitPlotDepth depth = OrbitPlotDepth::DepthTested);
+                  OrbitPlotDepth depth = OrbitPlotDepth::DepthTested,
+                  OrbitPlotLineStyle style = OrbitPlotLineStyle::Solid);
     void add_lines(std::span<const LineCommand> lines);
     void add_lines_translated(std::span<const LineCommand> lines, const WorldVec3 &delta_world);
 

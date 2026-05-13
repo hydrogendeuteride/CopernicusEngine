@@ -283,6 +283,199 @@ namespace Game
             return std::min(line_set.vertices.size() - 1u, kKeplerPickMaxSegmentsPerLineSet);
         }
 
+        double dash_period_scale(const KeplerPredictionDrawContext &context)
+        {
+            double scale = 1.0;
+            const double source_period_px = context.dashed_segment_on_px + context.dashed_segment_off_px;
+            constexpr double kShaderDashPeriodPx = 14.0 + 9.0;
+            if (std::isfinite(source_period_px) && source_period_px > 1.0e-6)
+            {
+                scale = kShaderDashPeriodPx / source_period_px;
+            }
+            return scale;
+        }
+
+        constexpr double kShaderDashOnPx = 14.0;
+        constexpr double kShaderDashOffPx = 9.0;
+        constexpr double kShaderDashPeriodPx = kShaderDashOnPx + kShaderDashOffPx;
+
+        double clip_plane_distance(const glm::dvec4 &clip, const int plane_index)
+        {
+            switch (plane_index)
+            {
+                case 0: return clip.x + clip.w;
+                case 1: return -clip.x + clip.w;
+                case 2: return clip.y + clip.w;
+                case 3: return -clip.y + clip.w;
+                case 4: return clip.w - clip.z;
+                default: return 0.0;
+            }
+        }
+
+        bool clip_segment_to_view_t(const glm::dvec4 &clip_a,
+                                    const glm::dvec4 &clip_b,
+                                    double &out_t0,
+                                    double &out_t1)
+        {
+            constexpr double kClipPlaneEpsilon = 1.0e-4;
+            constexpr double kDirectionEpsilon = 1.0e-12;
+            if (!std::isfinite(clip_a.x) || !std::isfinite(clip_a.y) ||
+                !std::isfinite(clip_a.z) || !std::isfinite(clip_a.w) ||
+                !std::isfinite(clip_b.x) || !std::isfinite(clip_b.y) ||
+                !std::isfinite(clip_b.z) || !std::isfinite(clip_b.w))
+            {
+                return false;
+            }
+
+            double t0 = 0.0;
+            double t1 = 1.0;
+            for (int plane_index = 0; plane_index < 5; ++plane_index)
+            {
+                const double d0 = clip_plane_distance(clip_a, plane_index);
+                const double d1 = clip_plane_distance(clip_b, plane_index);
+                const bool a_inside = d0 >= kClipPlaneEpsilon;
+                const bool b_inside = d1 >= kClipPlaneEpsilon;
+                if (a_inside && b_inside)
+                {
+                    continue;
+                }
+                if (!a_inside && !b_inside)
+                {
+                    return false;
+                }
+
+                const double denom = d1 - d0;
+                if (!(std::abs(denom) > kDirectionEpsilon) || !std::isfinite(denom))
+                {
+                    return false;
+                }
+
+                const double t = std::clamp((kClipPlaneEpsilon - d0) / denom, 0.0, 1.0);
+                if (!a_inside)
+                {
+                    t0 = std::max(t0, t);
+                }
+                else
+                {
+                    t1 = std::min(t1, t);
+                }
+                if (t0 > t1)
+                {
+                    return false;
+                }
+            }
+
+            out_t0 = t0;
+            out_t1 = t1;
+            return true;
+        }
+
+        glm::dvec4 project_world_to_clip(const KeplerPredictionDrawContext &context,
+                                         const WorldVec3 &world)
+        {
+            const glm::dvec3 local = world_to_local_d(world, context.world_origin);
+            return glm::dmat4(context.viewproj) * glm::dvec4(local, 1.0);
+        }
+
+        bool clip_world_segment_to_view(const KeplerPredictionDrawContext &context,
+                                        WorldVec3 &a_world,
+                                        WorldVec3 &b_world)
+        {
+            const glm::dvec4 clip_a = project_world_to_clip(context, a_world);
+            const glm::dvec4 clip_b = project_world_to_clip(context, b_world);
+            double t0 = 0.0;
+            double t1 = 1.0;
+            if (!clip_segment_to_view_t(clip_a, clip_b, t0, t1))
+            {
+                return false;
+            }
+
+            const WorldVec3 original_a = a_world;
+            const WorldVec3 original_b = b_world;
+            a_world = glm::mix(original_a, original_b, t0);
+            b_world = glm::mix(original_a, original_b, t1);
+            return finite_world(a_world) && finite_world(b_world);
+        }
+
+        double projected_segment_px(const KeplerPredictionDrawContext &context,
+                                    const WorldVec3 &a_world,
+                                    const WorldVec3 &b_world)
+        {
+            if (!(context.viewport_width_px > 0.0) ||
+                !(context.viewport_height_px > 0.0) ||
+                !std::isfinite(context.viewport_width_px) ||
+                !std::isfinite(context.viewport_height_px))
+            {
+                return 0.0;
+            }
+
+            const glm::dvec4 clip_a = project_world_to_clip(context, a_world);
+            const glm::dvec4 clip_b = project_world_to_clip(context, b_world);
+            double t0 = 0.0;
+            double t1 = 1.0;
+            if (!clip_segment_to_view_t(clip_a, clip_b, t0, t1))
+            {
+                return 0.0;
+            }
+
+            const glm::dvec4 clipped_a = glm::mix(clip_a, clip_b, t0);
+            const glm::dvec4 clipped_b = glm::mix(clip_a, clip_b, t1);
+            if (!(std::abs(clipped_a.w) > 1.0e-9) ||
+                !(std::abs(clipped_b.w) > 1.0e-9) ||
+                !std::isfinite(clipped_a.w) ||
+                !std::isfinite(clipped_b.w))
+            {
+                return 0.0;
+            }
+
+            const glm::dvec2 ndc_a = glm::dvec2(clipped_a) / clipped_a.w;
+            const glm::dvec2 ndc_b = glm::dvec2(clipped_b) / clipped_b.w;
+            if (!std::isfinite(ndc_a.x) ||
+                !std::isfinite(ndc_a.y) ||
+                !std::isfinite(ndc_b.x) ||
+                !std::isfinite(ndc_b.y))
+            {
+                return 0.0;
+            }
+
+            const glm::dvec2 pixel_delta =
+                    (ndc_b - ndc_a) *
+                    glm::dvec2(0.5 * context.viewport_width_px,
+                               0.5 * context.viewport_height_px);
+            const double length_px = glm::length(pixel_delta);
+            if (!std::isfinite(length_px) || !(length_px > 0.0))
+            {
+                return 0.0;
+            }
+            return length_px * dash_period_scale(context);
+        }
+
+        void advance_dash_cursor(double &cursor_px, const double segment_px)
+        {
+            if (!std::isfinite(segment_px) || !(segment_px > 0.0))
+            {
+                return;
+            }
+
+            cursor_px = std::fmod(cursor_px + segment_px, kShaderDashPeriodPx);
+            if (cursor_px < 0.0)
+            {
+                cursor_px += kShaderDashPeriodPx;
+            }
+        }
+
+        void dash_coords_for_segment(double &dash_cursor_px,
+                                     const double segment_px,
+                                     float &out_a_px,
+                                     float &out_b_px)
+        {
+            const double start_px = std::fmod(dash_cursor_px, kShaderDashPeriodPx);
+            const double safe_start_px = start_px < 0.0 ? start_px + kShaderDashPeriodPx : start_px;
+            out_a_px = static_cast<float>(safe_start_px);
+            out_b_px = static_cast<float>(safe_start_px + std::max(0.0, segment_px));
+            advance_dash_cursor(dash_cursor_px, segment_px);
+        }
+
         void emit_line_set(OrbitPlotSystem &orbit_plot,
                            PickingSystem *picking,
                            const bool emit_pick,
@@ -291,6 +484,8 @@ namespace Game
                            const KeplerArcLineSet &line_set,
                            const glm::vec4 &color,
                            const OrbitPlotDepth depth,
+                           const OrbitPlotLineStyle style,
+                           const KeplerPredictionDrawContext &draw_context,
                            const float line_overlay_boost,
                            std::vector<Picking::LinePickSegmentData> *pick_segment_scratch,
                            KeplerPickFrameStats &pick_stats)
@@ -311,6 +506,7 @@ namespace Game
             const std::size_t segment_count = line_set.vertices.size() - 1u;
             const bool overlay_enabled = line_overlay_boost > 0.0f && color.a > 0.0f;
             lines.reserve(segment_count * (overlay_enabled ? 2u : 1u));
+            double dash_cursor_px = 0.0;
             std::size_t skipped_nonfinite_position_segments = 0u;
             std::size_t invalid_time_segments = 0u;
             std::size_t nonfinite_length_segments = 0u;
@@ -341,6 +537,13 @@ namespace Game
                 if (!finite_world(a.position_world) || !finite_world(b.position_world))
                 {
                     ++skipped_nonfinite_position_segments;
+                    continue;
+                }
+
+                WorldVec3 draw_a_world = a.position_world;
+                WorldVec3 draw_b_world = b.position_world;
+                if (!clip_world_segment_to_view(draw_context, draw_a_world, draw_b_world))
+                {
                     continue;
                 }
 
@@ -375,11 +578,25 @@ namespace Game
                     }
                 }
 
+                float dash_coord_a_px = -1.0f;
+                float dash_coord_b_px = -1.0f;
+                if (style == OrbitPlotLineStyle::Dashed)
+                {
+                    const double segment_px = projected_segment_px(draw_context, draw_a_world, draw_b_world);
+                    dash_coords_for_segment(dash_cursor_px,
+                                            std::isfinite(segment_px) ? segment_px : 0.0,
+                                            dash_coord_a_px,
+                                            dash_coord_b_px);
+                }
+
                 lines.push_back(OrbitPlotSystem::LineCommand{
-                        .a_world = a.position_world,
-                        .b_world = b.position_world,
+                        .a_world = draw_a_world,
+                        .b_world = draw_b_world,
                         .color = color,
                         .depth = depth,
+                        .style = style,
+                        .dash_coord_a_px = dash_coord_a_px,
+                        .dash_coord_b_px = dash_coord_b_px,
                 });
                 if (line_overlay_boost > 0.0f)
                 {
@@ -388,10 +605,13 @@ namespace Game
                     if (overlay_color.a > 0.0f)
                     {
                         lines.push_back(OrbitPlotSystem::LineCommand{
-                                .a_world = a.position_world,
-                                .b_world = b.position_world,
+                                .a_world = draw_a_world,
+                                .b_world = draw_b_world,
                                 .color = overlay_color,
                                 .depth = OrbitPlotDepth::AlwaysOnTop,
+                                .style = style,
+                                .dash_coord_a_px = dash_coord_a_px,
+                                .dash_coord_b_px = dash_coord_b_px,
                         });
                     }
                 }
@@ -545,6 +765,8 @@ namespace Game
                               track.base_lines,
                               track_base_color(track, context),
                               context.depth,
+                              OrbitPlotLineStyle::Solid,
+                              context,
                               context.line_overlay_boost,
                               context.pick_segment_scratch,
                               pick_stats);
@@ -563,6 +785,9 @@ namespace Game
                                   track.planned_lines,
                                   context.planned_color,
                                   context.depth,
+                                  context.draw_planned_as_dashed ? OrbitPlotLineStyle::Dashed
+                                                                 : OrbitPlotLineStyle::Solid,
+                                  context,
                                   planned_overlay_boost,
                                   context.pick_segment_scratch,
                                   pick_stats);
@@ -580,6 +805,8 @@ namespace Game
                       state.base_lines,
                       context.base_color,
                       context.depth,
+                      OrbitPlotLineStyle::Solid,
+                      context,
                       context.line_overlay_boost,
                       context.pick_segment_scratch,
                       pick_stats);
@@ -596,6 +823,9 @@ namespace Game
                           state.planned_lines,
                           context.planned_color,
                           context.depth,
+                          context.draw_planned_as_dashed ? OrbitPlotLineStyle::Dashed
+                                                         : OrbitPlotLineStyle::Solid,
+                          context,
                           planned_overlay_boost,
                           context.pick_segment_scratch,
                           pick_stats);

@@ -3,13 +3,14 @@
 #extension GL_EXT_buffer_reference : require
 
 layout(location = 0) out vec4 outColor;
-layout(location = 1) out float outSide;
+layout(location = 1) noperspective out float outSide;
 layout(location = 2) flat out float outEdgeSoftness;
+layout(location = 3) noperspective out float outDashCoordPx;
 
 struct DebugVertex
 {
     vec3 position;
-    float _pad0;
+    float dashCoordPx;
     vec4 color;
 };
 
@@ -32,41 +33,71 @@ const float kSideSign[6] = float[6](-1.0, 1.0, -1.0, -1.0, 1.0, 1.0);
 const float kClipPlaneEpsilon = 1.0e-4;
 const float kDirectionEpsilon = 1.0e-6;
 
-float near_plane_margin(vec4 clipPos)
+float clip_plane_distance(vec4 clipPos, int planeIndex)
 {
+    if (planeIndex == 0)
+    {
+        return clipPos.x + clipPos.w;
+    }
+    if (planeIndex == 1)
+    {
+        return -clipPos.x + clipPos.w;
+    }
+    if (planeIndex == 2)
+    {
+        return clipPos.y + clipPos.w;
+    }
+    if (planeIndex == 3)
+    {
+        return -clipPos.y + clipPos.w;
+    }
     return clipPos.w - clipPos.z;
 }
 
-bool clip_segment_to_near_plane(inout vec4 clipA, inout vec4 clipB)
+bool clip_segment_to_view(inout vec4 clipA, inout vec4 clipB)
 {
-    const float marginA = near_plane_margin(clipA);
-    const float marginB = near_plane_margin(clipB);
-    const bool aVisible = marginA > kClipPlaneEpsilon;
-    const bool bVisible = marginB > kClipPlaneEpsilon;
-    if (!aVisible && !bVisible)
+    float t0 = 0.0;
+    float t1 = 1.0;
+    for (int planeIndex = 0; planeIndex < 5; ++planeIndex)
     {
-        return false;
-    }
-    if (aVisible && bVisible)
-    {
-        return true;
+        const float d0 = clip_plane_distance(clipA, planeIndex);
+        const float d1 = clip_plane_distance(clipB, planeIndex);
+        const bool aInside = d0 >= kClipPlaneEpsilon;
+        const bool bInside = d1 >= kClipPlaneEpsilon;
+        if (aInside && bInside)
+        {
+            continue;
+        }
+        if (!aInside && !bInside)
+        {
+            return false;
+        }
+
+        const float denom = d1 - d0;
+        if (abs(denom) <= kDirectionEpsilon)
+        {
+            return false;
+        }
+
+        const float t = clamp((kClipPlaneEpsilon - d0) / denom, 0.0, 1.0);
+        if (!aInside)
+        {
+            t0 = max(t0, t);
+        }
+        else
+        {
+            t1 = min(t1, t);
+        }
+        if (t0 > t1)
+        {
+            return false;
+        }
     }
 
-    const float denom = marginB - marginA;
-    const float t = abs(denom) > kDirectionEpsilon
-                            ? clamp((kClipPlaneEpsilon - marginA) / denom, 0.0, 1.0)
-                            : (aVisible ? 0.0 : 1.0);
-    vec4 clipped = mix(clipA, clipB, t);
-    clipped.z = min(clipped.z, clipped.w - kClipPlaneEpsilon);
-
-    if (aVisible)
-    {
-        clipB = clipped;
-    }
-    else
-    {
-        clipA = clipped;
-    }
+    const vec4 originalA = clipA;
+    const vec4 originalB = clipB;
+    clipA = mix(originalA, originalB, t0);
+    clipB = mix(originalA, originalB, t1);
     return true;
 }
 
@@ -104,12 +135,13 @@ void main()
 
     vec4 clipA = pc.viewproj * vec4(a.position, 1.0);
     vec4 clipB = pc.viewproj * vec4(b.position, 1.0);
-    if (!clip_segment_to_near_plane(clipA, clipB))
+    if (!clip_segment_to_view(clipA, clipB))
     {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         outColor = vec4(0.0);
         outSide = 0.0;
         outEdgeSoftness = 1.0;
+        outDashCoordPx = -1.0;
         return;
     }
 
@@ -130,4 +162,5 @@ void main()
     outColor = src.color;
     outSide = side;
     outEdgeSoftness = clamp(1.0 - (max(pc.aaPx, 0.0) / halfWidthPx), 0.0, 1.0);
+    outDashCoordPx = src.dashCoordPx;
 }

@@ -548,7 +548,7 @@ namespace Game::KeplerManeuverGizmo
         }
 
         const float font_size = std::max(10.0f, ImGui::GetFontSize());
-        const float overlay_size_px = std::max(12.0f, font_size * 1.05f);
+        const float overlay_size_px = std::max(24.0f, font_size * 2.10f);
         const float hub_hit_px = std::max(10.0f, overlay_size_px * 0.58f);
         const float axis_hit_px = std::max(9.0f, overlay_size_px * 0.50f);
         const float delete_hit_px = std::max(6.0f, overlay_size_px * 0.36f);

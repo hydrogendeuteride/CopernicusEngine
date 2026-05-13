@@ -80,6 +80,20 @@ namespace
         return arc;
     }
 
+    Game::KeplerOrbitArc make_hyperbolic_arc(const double t0_s = 0.0, const double t1_s = 10'000.0)
+    {
+        constexpr double r_m = 7'000'000.0;
+
+        Game::KeplerOrbitArc arc{};
+        arc.arc.mu_m3_s2 = kEarthMu;
+        arc.arc.primary_body_id = kEarthId;
+        arc.arc.t0_s = t0_s;
+        arc.arc.t1_s = t1_s;
+        arc.arc.state0_relative = orbitsim::make_state({r_m, 0.0, 0.0}, {0.0, 12'000.0, 0.0});
+        arc.primary_state_inertial_at_t0 = orbitsim::make_state({0.0, 0.0, 0.0}, {0.0, 0.0, 0.0});
+        return arc;
+    }
+
     double point_segment_distance_m(const WorldVec3 &p,
                                     const WorldVec3 &a,
                                     const WorldVec3 &b)
@@ -429,6 +443,28 @@ TEST(KeplerOrbit, ArcLineBuilderRefinesHighEccentricityByChordError)
         const double error_m = point_segment_distance_m(mid_world, a.position_world, b.position_world);
         EXPECT_LE(error_m, adaptive_request.options.max_chord_error_m * 1.05);
     }
+}
+
+TEST(KeplerOrbit, ArcLineBuilderContinuesOpenOrbitWhenUniversalSolverRangeIsExceeded)
+{
+    const Game::KeplerOrbitArc arc = make_hyperbolic_arc();
+
+    Game::KeplerArcLineBuildRequest request{};
+    request.arcs = std::span<const Game::KeplerOrbitArc>(&arc, 1u);
+    request.options.max_time_step_s = 60.0;
+    request.options.max_chord_error_m = 0.0;
+    request.options.max_vertices_per_arc = 64;
+    request.options.max_vertices_total = 64;
+    request.options.propagation.max_hyperbolic_stumpff_arg = 0.2;
+
+    const Game::KeplerArcLineSet lines = Game::build_kepler_arc_lines(request);
+
+    ASSERT_TRUE(lines.valid) << Game::kepler_orbit_status_name(lines.diagnostics.status);
+    ASSERT_GE(lines.vertices.size(), 2u);
+    EXPECT_EQ(lines.diagnostics.status, Game::KeplerOrbitStatus::Ok);
+    EXPECT_EQ(lines.diagnostics.first_kepler_failure, orbitsim::KeplerStatus::Ok);
+    EXPECT_TRUE(near_abs(lines.vertices.front().t_s, arc.arc.t0_s, 1.0e-12));
+    EXPECT_TRUE(near_abs(lines.vertices.back().t_s, arc.arc.t1_s, 1.0e-12));
 }
 
 TEST(KeplerOrbit, ArcLineBuilderAppliesMovingPrimaryProvider)

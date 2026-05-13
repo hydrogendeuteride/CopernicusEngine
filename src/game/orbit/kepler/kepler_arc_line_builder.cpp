@@ -137,6 +137,121 @@ namespace Game
                                 std::vector<AdaptiveInterval>,
                                 AdaptiveIntervalPriority>;
 
+    bool finite_state(const orbitsim::State &state)
+    {
+        return kepler_finite_vec3(state.position_m) && kepler_finite_vec3(state.velocity_mps);
+    }
+
+    bool solve_hyperbolic_anomaly(const double eccentricity,
+                                  const double mean_anomaly_rad,
+                                  double &out_hyperbolic_anomaly_rad)
+    {
+        if (!(eccentricity > 1.0) || !std::isfinite(eccentricity) || !std::isfinite(mean_anomaly_rad))
+        {
+            return false;
+        }
+
+        double h = std::asinh(mean_anomaly_rad / eccentricity);
+        if (!std::isfinite(h))
+        {
+            return false;
+        }
+
+        constexpr int kMaxIterations = 32;
+        constexpr double kTolerance = 1.0e-12;
+        for (int i = 0; i < kMaxIterations; ++i)
+        {
+            const double sinh_h = std::sinh(h);
+            const double cosh_h = std::cosh(h);
+            const double f = eccentricity * sinh_h - h - mean_anomaly_rad;
+            const double df = eccentricity * cosh_h - 1.0;
+            if (!std::isfinite(f) || !(std::abs(df) > 0.0) || !std::isfinite(df))
+            {
+                return false;
+            }
+
+            const double step = f / df;
+            h -= step;
+            if (!std::isfinite(h))
+            {
+                return false;
+            }
+            if (std::abs(step) <= kTolerance * std::max(1.0, std::abs(h)))
+            {
+                out_hyperbolic_anomaly_rad = h;
+                return true;
+            }
+        }
+
+        out_hyperbolic_anomaly_rad = h;
+        return std::isfinite(h);
+    }
+
+    bool sample_hyperbolic_arc_state_from_elements(const orbitsim::KeplerArc &arc,
+                                                   const double t_s,
+                                                   orbitsim::State &out_state)
+    {
+        if (!orbitsim::kepler_arc_valid(arc) || !std::isfinite(t_s))
+        {
+            return false;
+        }
+
+        const orbitsim::OrbitalElements elements =
+                orbitsim::orbital_elements_from_relative_state(arc.mu_m3_s2,
+                                                               arc.state0_relative.position_m,
+                                                               arc.state0_relative.velocity_mps);
+        if (!(elements.eccentricity > 1.0) ||
+            !(elements.semi_major_axis_m < 0.0) ||
+            !std::isfinite(elements.semi_major_axis_m) ||
+            !std::isfinite(elements.mean_anomaly_rad))
+        {
+            return false;
+        }
+
+        const double abs_a = -elements.semi_major_axis_m;
+        const double mean_motion_radps = std::sqrt(arc.mu_m3_s2 / (abs_a * abs_a * abs_a));
+        if (!(mean_motion_radps > 0.0) || !std::isfinite(mean_motion_radps))
+        {
+            return false;
+        }
+
+        const double mean_anomaly_rad =
+                elements.mean_anomaly_rad + mean_motion_radps * (t_s - arc.t0_s);
+        double hyperbolic_anomaly_rad = 0.0;
+        if (!solve_hyperbolic_anomaly(elements.eccentricity,
+                                      mean_anomaly_rad,
+                                      hyperbolic_anomaly_rad))
+        {
+            return false;
+        }
+
+        const double tanh_half_h = std::tanh(0.5 * hyperbolic_anomaly_rad);
+        const double true_anomaly_rad =
+                2.0 * std::atan(std::sqrt((elements.eccentricity + 1.0) /
+                                          (elements.eccentricity - 1.0)) *
+                                 tanh_half_h);
+        if (!std::isfinite(true_anomaly_rad))
+        {
+            return false;
+        }
+
+        orbitsim::OrbitalElements propagated = elements;
+        propagated.true_anomaly_rad = true_anomaly_rad;
+        out_state = orbitsim::relative_state_from_orbital_elements(arc.mu_m3_s2, propagated);
+        out_state.spin = arc.state0_relative.spin;
+        return finite_state(out_state);
+    }
+
+    void record_propagation_failure(AdaptiveArcLineBuild &build,
+                                    const orbitsim::KeplerStatus status)
+    {
+        build.status = KeplerOrbitStatus::PropagationFailed;
+        if (build.first_kepler_failure == orbitsim::KeplerStatus::Ok)
+        {
+            build.first_kepler_failure = status;
+        }
+    }
+
     // Propagate one time sample and convert it into world space.
     LineSampleEvaluation evaluate_line_sample(const KeplerArcLineBuildRequest &request,
                                               const KeplerOrbitArc &game_arc,
@@ -150,7 +265,9 @@ namespace Game
                 orbitsim::sample_kepler_arc_state(game_arc.arc,
                                                   t_s,
                                                   request.options.propagation);
-        if (!sample.ok())
+        orbitsim::State sample_state = sample.state_relative;
+        if (!sample.ok() &&
+            !sample_hyperbolic_arc_state_from_elements(game_arc.arc, t_s, sample_state))
         {
             out.kepler_status = sample.diagnostics.status;
             return out;
@@ -186,7 +303,7 @@ namespace Game
         }
 
         const orbitsim::Vec3 inertial_position_m =
-                primary_state.position_m + sample.state_relative.position_m;
+                primary_state.position_m + sample_state.position_m;
         const WorldVec3 world_position =
                 request.world_frame.world_reference_body_world +
                 WorldVec3(inertial_position_m - reference_state.position_m);
@@ -200,6 +317,56 @@ namespace Game
         };
         ++build.accepted_samples;
         return out;
+    }
+
+    // Keep open-orbit lines drawable when an extreme far endpoint exceeds the solver range.
+    bool append_last_valid_sample_before_failed_end(const KeplerArcLineBuildRequest &request,
+                                                    const KeplerOrbitArc &game_arc,
+                                                    const AdaptiveLineConfig &config,
+                                                    const KeplerArcLineVertex &known_good,
+                                                    const double failed_t_s,
+                                                    AdaptiveArcLineBuild &out,
+                                                    std::vector<KeplerArcLineVertex> &samples)
+    {
+        constexpr int kMaxClipIterations = 48;
+        double good_t_s = known_good.t_s;
+        double bad_t_s = failed_t_s;
+        LineSampleEvaluation best_eval{};
+        best_eval.ok = true;
+        best_eval.vertex = known_good;
+
+        for (int i = 0; i < kMaxClipIterations; ++i)
+        {
+            const double mid_t_s = 0.5 * (good_t_s + bad_t_s);
+            if (!std::isfinite(mid_t_s) ||
+                kepler_same_sample_time(mid_t_s, good_t_s) ||
+                kepler_same_sample_time(mid_t_s, bad_t_s))
+            {
+                break;
+            }
+
+            const LineSampleEvaluation mid_eval =
+                    evaluate_line_sample(request, game_arc, mid_t_s, out);
+            if (mid_eval.ok)
+            {
+                best_eval = mid_eval;
+                good_t_s = mid_t_s;
+            }
+            else
+            {
+                record_propagation_failure(out, mid_eval.kepler_status);
+                bad_t_s = mid_t_s;
+            }
+        }
+
+        if (kepler_same_sample_time(best_eval.vertex.t_s, known_good.t_s) ||
+            std::abs(best_eval.vertex.t_s - known_good.t_s) <= config.min_interval_s)
+        {
+            return false;
+        }
+
+        samples.push_back(best_eval.vertex);
+        return true;
     }
 
     // Seed endpoints before adaptive midpoint insertion.
@@ -225,8 +392,7 @@ namespace Game
                     evaluate_line_sample(request, game_arc, game_arc.arc.t0_s - cross_dt_s, out);
             if (!eval.ok)
             {
-                out.status = KeplerOrbitStatus::PropagationFailed;
-                out.first_kepler_failure = eval.kepler_status;
+                record_propagation_failure(out, eval.kepler_status);
                 return false;
             }
             samples.push_back(eval.vertex);
@@ -234,8 +400,7 @@ namespace Game
             eval = evaluate_line_sample(request, game_arc, game_arc.arc.t0_s + cross_dt_s, out);
             if (!eval.ok)
             {
-                out.status = KeplerOrbitStatus::PropagationFailed;
-                out.first_kepler_failure = eval.kepler_status;
+                record_propagation_failure(out, eval.kepler_status);
                 return false;
             }
             samples.push_back(eval.vertex);
@@ -247,8 +412,7 @@ namespace Game
                     evaluate_line_sample(request, game_arc, game_arc.arc.t0_s, out);
             if (!eval.ok)
             {
-                out.status = KeplerOrbitStatus::PropagationFailed;
-                out.first_kepler_failure = eval.kepler_status;
+                record_propagation_failure(out, eval.kepler_status);
                 return false;
             }
             samples.push_back(eval.vertex);
@@ -268,9 +432,14 @@ namespace Game
                 evaluate_line_sample(request, game_arc, end_t_s, out);
         if (!end_eval.ok)
         {
-            out.status = KeplerOrbitStatus::PropagationFailed;
-            out.first_kepler_failure = end_eval.kepler_status;
-            return false;
+            record_propagation_failure(out, end_eval.kepler_status);
+            return append_last_valid_sample_before_failed_end(request,
+                                                              game_arc,
+                                                              config,
+                                                              samples.back(),
+                                                              end_t_s,
+                                                              out,
+                                                              samples);
         }
         samples.push_back(end_eval.vertex);
         return true;
@@ -313,9 +482,8 @@ namespace Game
                 evaluate_line_sample(request, game_arc, mid_t_s, out);
         if (!mid_eval.ok)
         {
-            out.status = KeplerOrbitStatus::PropagationFailed;
-            out.first_kepler_failure = mid_eval.kepler_status;
-            return false;
+            record_propagation_failure(out, mid_eval.kepler_status);
+            return true;
         }
 
         double priority = split_for_time ? dt_s / config.max_interval_s : 0.0;
@@ -515,7 +683,10 @@ namespace Game
 
         emit_arc_line_vertices(request, game_arc, arc_index, arc_count, samples, out);
         out.ok = true;
-        out.status = KeplerOrbitStatus::Ok;
+        if (out.status == KeplerOrbitStatus::InvalidInput)
+        {
+            out.status = KeplerOrbitStatus::Ok;
+        }
         return out;
     }
 
@@ -565,6 +736,16 @@ namespace Game
             out.diagnostics.requested_samples += arc_lines.requested_samples;
             out.diagnostics.accepted_samples += arc_lines.accepted_samples;
             out.diagnostics.budget_hit = out.diagnostics.budget_hit || arc_lines.budget_hit;
+            if (arc_lines.status != KeplerOrbitStatus::Ok &&
+                out.diagnostics.status == KeplerOrbitStatus::Ok)
+            {
+                out.diagnostics.status = arc_lines.status;
+                out.diagnostics.failed_arc_index = arc_index;
+                if (arc_lines.first_kepler_failure != orbitsim::KeplerStatus::Ok)
+                {
+                    out.diagnostics.first_kepler_failure = arc_lines.first_kepler_failure;
+                }
+            }
             if (!arc_lines.ok)
             {
                 out.diagnostics.status = arc_lines.status;

@@ -90,9 +90,29 @@ namespace Game
         kepler_draw.draw_orbiter_tracks = _kepler_draw_orbiter_tracks;
         kepler_draw.draw_celestial_kepler_tracks = _kepler_draw_celestial_kepler_tracks;
         kepler_draw.draw_celestial_nbody_tracks = _kepler_draw_celestial_nbody_tracks;
+        if (_prediction)
+        {
+            kepler_draw.planned_color = _prediction->state().draw_config.palette.orbit_planned;
+            kepler_draw.draw_planned_as_dashed = _prediction->state().draw_config.draw_planned_as_dashed;
+            kepler_draw.dashed_segment_on_px = _prediction->state().draw_config.dashed_segment_on_px;
+            kepler_draw.dashed_segment_off_px = _prediction->state().draw_config.dashed_segment_off_px;
+        }
+        if (ctx.renderer && ctx.renderer->_sceneManager)
+        {
+            kepler_draw.viewproj = ctx.renderer->_sceneManager->getSceneData().viewproj;
+            kepler_draw.world_origin = ctx.renderer->_sceneManager->get_world_origin();
+            if (ctx.renderer->_logicalRenderExtent.width > 0)
+            {
+                kepler_draw.viewport_width_px = static_cast<double>(ctx.renderer->_logicalRenderExtent.width);
+            }
+            if (ctx.renderer->_logicalRenderExtent.height > 0)
+            {
+                kepler_draw.viewport_height_px = static_cast<double>(ctx.renderer->_logicalRenderExtent.height);
+            }
+        }
         kepler_draw.depth = OrbitPlotDepth::DepthTested;
         kepler_draw.line_overlay_boost = 0.0f;
-        kepler_draw.planned_line_overlay_boost = _kepler_maneuver.prediction_nodes().empty() ? 0.0f : 0.65f;
+        kepler_draw.planned_line_overlay_boost = 0.0f;
         _kepler_prediction->draw(kepler_draw);
     }
 

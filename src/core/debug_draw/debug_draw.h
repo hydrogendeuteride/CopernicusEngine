@@ -28,7 +28,7 @@ enum class DebugDrawLayer : uint32_t
 struct DebugDrawVertex
 {
     glm::vec3 position{0.0f};
-    float _pad0{0.0f};
+    float dash_coord_px{-1.0f};
     glm::vec4 color{1.0f};
 };
 static_assert(sizeof(DebugDrawVertex) == 32);

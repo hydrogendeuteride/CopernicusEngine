@@ -23,10 +23,17 @@ namespace Game
         bool draw_celestial_kepler_tracks{false};
         bool draw_celestial_nbody_tracks{true};
         glm::vec4 base_color{0.18f, 0.82f, 1.00f, 0.78f};
-        glm::vec4 planned_color{1.00f, 0.52f, 0.08f, 0.95f};
+        glm::vec4 planned_color{1.00f, 0.62f, 0.10f, 0.90f};
         OrbitPlotDepth depth{OrbitPlotDepth::DepthTested};
         float line_overlay_boost{0.35f};
-        float planned_line_overlay_boost{0.55f};
+        float planned_line_overlay_boost{0.0f};
+        bool draw_planned_as_dashed{true};
+        double dashed_segment_on_px{14.0};
+        double dashed_segment_off_px{9.0};
+        glm::mat4 viewproj{1.0f};
+        WorldVec3 world_origin{0.0, 0.0, 0.0};
+        double viewport_width_px{1280.0};
+        double viewport_height_px{720.0};
     };
 
     void draw_kepler_prediction(const KeplerPredictionState &state,
