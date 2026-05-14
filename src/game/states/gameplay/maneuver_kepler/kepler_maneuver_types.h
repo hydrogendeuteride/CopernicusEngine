@@ -30,6 +30,7 @@ namespace Game
         PrimaryUnavailable,
     };
 
+    // Resolved world-space data used to draw and interact with one maneuver node.
     struct KeplerManeuverNodeDisplayState
     {
         int node_id{-1};
@@ -47,6 +48,7 @@ namespace Game
         double total_dv_mps{0.0};
     };
 
+    // User-authored maneuver node stored by the editor before prediction normalization.
     struct KeplerManeuverEditorNode
     {
         int id{-1};
@@ -55,21 +57,23 @@ namespace Game
         bool primary_body_auto{true};
         orbitsim::Vec3 dv_rtn_mps{0.0, 0.0, 0.0};
 
-        [[nodiscard]] KeplerManeuverNode to_prediction_node() const;
+        KeplerManeuverNode to_prediction_node() const;
     };
 
+    // Mutable maneuver plan owned by the Kepler maneuver system.
     struct KeplerManeuverPlanState
     {
         std::vector<KeplerManeuverEditorNode> nodes{};
         int selected_node_id{-1};
         int next_node_id{0};
 
-        [[nodiscard]] KeplerManeuverEditorNode *find_node(int id);
-        [[nodiscard]] const KeplerManeuverEditorNode *find_node(int id) const;
+        KeplerManeuverEditorNode *find_node(int id);
+        const KeplerManeuverEditorNode *find_node(int id) const;
         bool sort_by_time();
-        [[nodiscard]] std::vector<KeplerManeuverNode> to_prediction_nodes() const;
+        std::vector<KeplerManeuverNode> to_prediction_nodes() const;
     };
 
+    // Screen handle selected by the maneuver gizmo.
     enum class KeplerManeuverHandleAxis : uint8_t
     {
         None = 0,
@@ -82,6 +86,7 @@ namespace Game
         NormalNeg,
     };
 
+    // Stable display data captured at drag start to avoid gizmo jumps while prediction updates.
     struct KeplerManeuverNodeDisplaySnapshot
     {
         int node_id{-1};
@@ -91,6 +96,7 @@ namespace Game
         orbitsim::Vec3 basis_n_world{0.0, 0.0, 1.0};
     };
 
+    // Transient hover and drag state for the Kepler maneuver gizmo.
     struct KeplerManeuverInteraction
     {
         enum class State

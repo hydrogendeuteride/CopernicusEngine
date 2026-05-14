@@ -8,6 +8,7 @@
 
 namespace Game
 {
+    // Summarizes whether maneuver node display resolution had usable prediction input.
     struct KeplerManeuverNodeResolveResult
     {
         std::size_t node_count{0};
@@ -16,14 +17,17 @@ namespace Game
         bool active_track_valid{false};
     };
 
+    // Finds the prediction track currently owned by the active player.
     [[nodiscard]] const KeplerPredictionState::Track *find_active_player_kepler_track(
             const KeplerPredictionState &prediction);
 
+    // Resolves authored maneuver nodes into world-space display data.
     [[nodiscard]] KeplerManeuverNodeResolveResult resolve_kepler_maneuver_node_display_states(
             const KeplerManeuverPlanState &plan,
             const KeplerPredictionState &prediction,
             std::vector<KeplerManeuverNodeDisplayState> &out_states);
 
+    // Resolves authored maneuver nodes against a caller-selected prediction track.
     [[nodiscard]] KeplerManeuverNodeResolveResult resolve_kepler_maneuver_node_display_states(
             const KeplerManeuverPlanState &plan,
             const KeplerPredictionState::Track *active_track,

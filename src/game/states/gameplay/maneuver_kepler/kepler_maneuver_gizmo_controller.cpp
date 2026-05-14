@@ -1,5 +1,7 @@
 #include "game/states/gameplay/maneuver_kepler/kepler_maneuver_gizmo_controller.h"
 
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_math.h"
+
 #include <algorithm>
 #include <cmath>
 
@@ -7,30 +9,6 @@ namespace Game
 {
     namespace
     {
-        double safe_length(const glm::dvec3 &v)
-        {
-            const double len2 = glm::dot(v, v);
-            if (!(len2 > 0.0) || !std::isfinite(len2))
-            {
-                return 0.0;
-            }
-            return std::sqrt(len2);
-        }
-
-        orbitsim::Vec3 normalized_or(const orbitsim::Vec3 &v, const orbitsim::Vec3 &fallback)
-        {
-            const double len = safe_length(v);
-            if (!(len > 0.0) || !std::isfinite(len))
-            {
-                return fallback;
-            }
-            return v / len;
-        }
-
-        bool finite_vec3(const orbitsim::Vec3 &v)
-        {
-            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-        }
     } // namespace
 
     bool KeplerManeuverGizmoController::closest_param_ray_line(const glm::dvec3 &ray_origin_local,
@@ -40,6 +18,7 @@ namespace Game
     {
         out_line_t = 0.0;
 
+        // Normal-equation terms for the closest point between the mouse ray and maneuver axis line.
         const double uu = glm::dot(ray_dir_local, ray_dir_local);
         const double vv = glm::dot(line_dir_local, line_dir_local);
         if (!(uu > 0.0) || !(vv > 0.0) || !std::isfinite(uu) || !std::isfinite(vv))
@@ -54,6 +33,7 @@ namespace Game
         const double denom = uu * vv - uv * uv;
 
         double t = 0.0;
+        // Solve the 2x2 normal equations unless the ray and line are nearly parallel.
         if (std::abs(denom) > 1.0e-9 && std::isfinite(denom))
         {
             const double s = (uw * vv - vw * uv) / denom;
@@ -64,11 +44,13 @@ namespace Game
             }
             if (s < 0.0)
             {
+                // If the closest ray point is behind the camera, project from the ray origin instead.
                 t = -vw / vv;
             }
         }
         else
         {
+            // Parallel fallback: project the ray origin onto the axis line.
             t = -vw / vv;
             if (!std::isfinite(t))
             {
@@ -90,6 +72,7 @@ namespace Game
             return false;
         }
 
+        // The drag is only meaningful when both the editable node and its rendered state exist.
         const KeplerManeuverEditorNode *node = plan.find_node(node_id);
         const KeplerManeuverNodeDisplayState *display =
             KeplerManeuverGizmo::find_display_state(display_states, node_id);
@@ -115,6 +98,7 @@ namespace Game
             return false;
         }
 
+        // Freeze drag-time state so later orbit recomputation does not move the user's reference axis.
         interaction = {};
         interaction.state = KeplerManeuverInteraction::State::DragAxis;
         interaction.node_id = node_id;
@@ -161,6 +145,7 @@ namespace Game
         }
 
         const glm::vec2 drag_from_start = mouse_pos_window - interaction.drag_start_mouse_window_pos;
+        // Keep clicks from becoming tiny accidental burns until ImGui's drag threshold is crossed.
         if (!interaction.drag_threshold_passed)
         {
             if (glm::dot(drag_from_start, drag_from_start) < (drag_threshold_px * drag_threshold_px))
@@ -188,6 +173,7 @@ namespace Game
             return result;
         }
 
+        // Use the drag-start snapshot as the stable axis origin while the edited orbit updates.
         WorldVec3 axis_origin_world = display.position_world;
         if (const KeplerManeuverNodeDisplaySnapshot *drag_snapshot =
                 KeplerManeuverGizmo::find_display_snapshot(interaction.drag_display_snapshots, node.id))
@@ -203,6 +189,7 @@ namespace Game
             return result;
         }
 
+        // Ctrl accelerates coarse edits, Shift slows down precision edits.
         double scale = std::max(0.00001, drag_sensitivity_mps_per_m);
         if (ctrl_down && !shift_down)
         {
@@ -213,6 +200,7 @@ namespace Game
             scale *= 0.1;
         }
 
+        // Apply the signed axis displacement to exactly one RTN component.
         const double delta_mps = (current_t - interaction.start_axis_t_m) * scale * sign;
         orbitsim::Vec3 next_dv = interaction.start_dv_rtn_mps;
         if (component == 0)
@@ -229,7 +217,8 @@ namespace Game
         }
 
         result.sampled = true;
-        if (finite_vec3(next_dv) && safe_length(next_dv - node.dv_rtn_mps) > 1.0e-7)
+        if (kepler_finite_vec3(next_dv) &&
+            KeplerManeuverMath::safe_length(next_dv - node.dv_rtn_mps) > 1.0e-7)
         {
             result.changed = true;
             result.dv_rtn_mps = next_dv;
@@ -247,6 +236,7 @@ namespace Game
         out_axes.clear();
         out_deletes.clear();
 
+        // Every visible node gets a hub marker, but only the selected node gets edit handles.
         out_hubs.reserve(display_states.size());
         for (const KeplerManeuverNodeDisplayState &display : display_states)
         {
@@ -286,7 +276,9 @@ namespace Game
             return;
         }
 
-        double dist_m = safe_length(glm::dvec3(selected_display->position_world) - view.camera_world);
+        // Convert a desired screen-space handle length into world meters at the selected node depth.
+        double dist_m =
+                KeplerManeuverMath::safe_length(glm::dvec3(selected_display->position_world) - view.camera_world);
         if (!std::isfinite(dist_m) || dist_m <= 1.0)
         {
             dist_m = std::max(1.0, hub_depth_m);
@@ -314,7 +306,9 @@ namespace Game
         out_axes.reserve(6);
         for (const AxisDesc &desc : axis_descs)
         {
-            const orbitsim::Vec3 dir = normalized_or(desc.dir_world, orbitsim::Vec3{0.0, 1.0, 0.0});
+            // Active drag handles are nudged outward to make the current axis visually clear.
+            const orbitsim::Vec3 dir =
+                    KeplerManeuverMath::normalized_or(desc.dir_world, orbitsim::Vec3{0.0, 1.0, 0.0});
             const bool active = interaction.state == KeplerManeuverInteraction::State::DragAxis &&
                                 interaction.node_id == selected_node_id && interaction.axis == desc.axis;
             const double active_axis_offset_m = axis_offset_m * (active ? 1.14 : 1.0);
@@ -337,6 +331,7 @@ namespace Game
             out_axes.push_back(marker);
         }
 
+        // Delete marker stays in screen space near the selected hub.
         KeplerManeuverDeleteMarker delete_marker{};
         delete_marker.node_id = selected_node_id;
         delete_marker.screen = hub_screen + glm::vec2(overlay_size_px * 1.45f, -overlay_size_px * 1.45f);

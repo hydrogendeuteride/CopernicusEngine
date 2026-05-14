@@ -1,5 +1,7 @@
 #include "game/states/gameplay/maneuver_kepler/kepler_maneuver_node_resolver.h"
 
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_math.h"
+
 #include "orbitsim/coordinate_frames.hpp"
 
 #include <algorithm>
@@ -11,25 +13,17 @@ namespace Game
     {
         constexpr double kTimeEpsilonS = 1.0e-9;
 
-        bool finite_vec3(const orbitsim::Vec3 &v)
-        {
-            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-        }
-
+        // Validates all numeric fields needed from an inertial body state.
         bool finite_state(const orbitsim::State &state)
         {
-            return finite_vec3(state.position_m) &&
-                   finite_vec3(state.velocity_mps) &&
-                   finite_vec3(state.spin.axis) &&
+            return kepler_finite_vec3(state.position_m) &&
+                   kepler_finite_vec3(state.velocity_mps) &&
+                   kepler_finite_vec3(state.spin.axis) &&
                    std::isfinite(state.spin.angle_rad) &&
                    std::isfinite(state.spin.rate_rad_per_s);
         }
 
-        bool times_equal(const double a, const double b)
-        {
-            return std::isfinite(a) && std::isfinite(b) && std::abs(a - b) <= kTimeEpsilonS;
-        }
-
+        // Checks whether a time belongs to a valid Kepler arc, including endpoints.
         bool time_in_arc_inclusive(const double t_s, const orbitsim::KeplerArc &arc)
         {
             if (!std::isfinite(t_s) || !orbitsim::kepler_arc_valid(arc))
@@ -42,22 +36,7 @@ namespace Game
             return t_s + kTimeEpsilonS >= t0_s && t_s - kTimeEpsilonS <= t1_s;
         }
 
-        double safe_length(const orbitsim::Vec3 &v)
-        {
-            const double len = glm::length(v);
-            return std::isfinite(len) ? len : 0.0;
-        }
-
-        orbitsim::Vec3 normalized_or(const orbitsim::Vec3 &v, const orbitsim::Vec3 &fallback)
-        {
-            const double len = safe_length(v);
-            if (len > 1.0e-12)
-            {
-                return v / len;
-            }
-            return fallback;
-        }
-
+        // Finds the planned arc immediately before the node impulse time.
         const KeplerOrbitArc *find_planned_pre_impulse_arc(
                 const std::vector<KeplerOrbitArc> &arcs,
                 const double node_time_s)
@@ -65,7 +44,8 @@ namespace Game
             const KeplerOrbitArc *match = nullptr;
             for (const KeplerOrbitArc &arc : arcs)
             {
-                if (orbitsim::kepler_arc_valid(arc.arc) && times_equal(arc.arc.t1_s, node_time_s))
+                if (orbitsim::kepler_arc_valid(arc.arc) &&
+                    kepler_same_sample_time(arc.arc.t1_s, node_time_s))
                 {
                     match = &arc;
                 }
@@ -73,6 +53,7 @@ namespace Game
             return match;
         }
 
+        // Finds the first arc whose time span contains the maneuver node.
         const KeplerOrbitArc *find_arc_containing_time(
                 const std::vector<KeplerOrbitArc> &arcs,
                 const double node_time_s)
@@ -87,6 +68,7 @@ namespace Game
             return nullptr;
         }
 
+        // Selects the unplanned/base arc used when no planned pre-impulse arc applies.
         const KeplerOrbitArc *select_base_arc(const KeplerPredictionState::Track &track,
                                               const double node_time_s)
         {
@@ -101,12 +83,14 @@ namespace Game
             return nullptr;
         }
 
+        // Couples the selected source arc with the display provenance shown to callers.
         struct SelectedArc
         {
             const KeplerOrbitArc *arc{nullptr};
             KeplerManeuverNodeDisplaySource source{KeplerManeuverNodeDisplaySource::None};
         };
 
+        // Chooses the arc that defines a node's position and RTN frame.
         SelectedArc select_node_arc(const KeplerPredictionState::Track &track,
                                     const double node_time_s)
         {
@@ -133,6 +117,7 @@ namespace Game
             return {};
         }
 
+        // Queries body ephemeris at time, falling back to cached state when unavailable.
         bool resolve_body_state(const KeplerPredictionState::Track &track,
                                 const orbitsim::BodyId body_id,
                                 const double t_s,
@@ -151,12 +136,15 @@ namespace Game
             return finite_state(out_state);
         }
 
+        // Builds a display state that preserves identity/selection while marking failure.
         KeplerManeuverNodeDisplayState make_unresolved_state(
                 const KeplerManeuverPlanState &plan,
                 const KeplerManeuverEditorNode &node,
                 const KeplerManeuverNodeDisplayStatus status)
         {
-            const double dv_mps = finite_vec3(node.dv_rtn_mps) ? safe_length(node.dv_rtn_mps) : 0.0;
+            const double dv_mps = kepler_finite_vec3(node.dv_rtn_mps)
+                                          ? KeplerManeuverMath::safe_length(node.dv_rtn_mps)
+                                          : 0.0;
             return KeplerManeuverNodeDisplayState{
                     .node_id = node.id,
                     .valid = false,
@@ -169,12 +157,13 @@ namespace Game
             };
         }
 
+        // Converts one authored maneuver node into world-space marker and gizmo data.
         KeplerManeuverNodeDisplayState resolve_node_display_state(
                 const KeplerManeuverPlanState &plan,
                 const KeplerPredictionState::Track &track,
                 const KeplerManeuverEditorNode &node)
         {
-            if (!std::isfinite(node.time_s) || !finite_vec3(node.dv_rtn_mps))
+            if (!std::isfinite(node.time_s) || !kepler_finite_vec3(node.dv_rtn_mps))
             {
                 return make_unresolved_state(plan,
                                              node,
@@ -226,9 +215,12 @@ namespace Game
             const orbitsim::RtnFrame basis =
                     orbitsim::compute_rtn_frame(sample.state_relative.position_m,
                                                 sample.state_relative.velocity_mps);
-            const orbitsim::Vec3 basis_r = normalized_or(basis.R, {1.0, 0.0, 0.0});
-            const orbitsim::Vec3 basis_t = normalized_or(basis.T, {0.0, 1.0, 0.0});
-            const orbitsim::Vec3 basis_n = normalized_or(basis.N, {0.0, 0.0, 1.0});
+            const orbitsim::Vec3 basis_r =
+                    KeplerManeuverMath::normalized_or(basis.R, {1.0, 0.0, 0.0}, 1.0e-12);
+            const orbitsim::Vec3 basis_t =
+                    KeplerManeuverMath::normalized_or(basis.T, {0.0, 1.0, 0.0}, 1.0e-12);
+            const orbitsim::Vec3 basis_n =
+                    KeplerManeuverMath::normalized_or(basis.N, {0.0, 0.0, 1.0}, 1.0e-12);
             const orbitsim::Vec3 dv_world =
                     node.dv_rtn_mps.x * basis_r +
                     node.dv_rtn_mps.y * basis_t +
@@ -252,12 +244,14 @@ namespace Game
                     .basis_r_world = basis_r,
                     .basis_t_world = basis_t,
                     .basis_n_world = basis_n,
-                    .burn_direction_world = normalized_or(dv_world, basis_t),
-                    .total_dv_mps = safe_length(node.dv_rtn_mps),
+                    .burn_direction_world =
+                            KeplerManeuverMath::normalized_or(dv_world, basis_t, 1.0e-12),
+                    .total_dv_mps = KeplerManeuverMath::safe_length(node.dv_rtn_mps),
             };
         }
     } // namespace
 
+    // Finds the prediction track currently owned by the active player.
     const KeplerPredictionState::Track *find_active_player_kepler_track(
             const KeplerPredictionState &prediction)
     {
@@ -271,6 +265,7 @@ namespace Game
         return nullptr;
     }
 
+    // Resolves authored maneuver nodes using the active player prediction track.
     KeplerManeuverNodeResolveResult resolve_kepler_maneuver_node_display_states(
             const KeplerManeuverPlanState &plan,
             const KeplerPredictionState &prediction,
@@ -281,6 +276,7 @@ namespace Game
                                                            out_states);
     }
 
+    // Resolves all authored maneuver nodes against a caller-provided track.
     KeplerManeuverNodeResolveResult resolve_kepler_maneuver_node_display_states(
             const KeplerManeuverPlanState &plan,
             const KeplerPredictionState::Track *active_track,

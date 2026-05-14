@@ -7,11 +7,6 @@ namespace Game
 {
     namespace
     {
-        bool finite_vec3(const orbitsim::Vec3 &v)
-        {
-            return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-        }
-
         bool same_vec3(const orbitsim::Vec3 &a, const orbitsim::Vec3 &b)
         {
             return a.x == b.x && a.y == b.y && a.z == b.z;
@@ -244,7 +239,7 @@ namespace Game
     bool KeplerManeuverPlanModel::set_node_dv(const int node_id, const orbitsim::Vec3 &dv_rtn_mps)
     {
         KeplerManeuverEditorNode *node = _state.find_node(node_id);
-        if (!node || !finite_vec3(dv_rtn_mps) || same_vec3(node->dv_rtn_mps, dv_rtn_mps))
+        if (!node || !kepler_finite_vec3(dv_rtn_mps) || same_vec3(node->dv_rtn_mps, dv_rtn_mps))
         {
             return false;
         }

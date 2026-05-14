@@ -5,6 +5,7 @@
 #include "core/render_viewport.h"
 #include "game/state/game_state.h"
 #include "game/states/gameplay/maneuver_kepler/kepler_maneuver_gizmo_controller.h"
+#include "game/states/gameplay/maneuver_kepler/kepler_maneuver_math.h"
 #include "game/states/gameplay/maneuver_kepler/kepler_maneuver_system.h"
 
 #include "imgui.h"
@@ -24,21 +25,12 @@ namespace Game::KeplerManeuverGizmo
             return (a << 24u) | (b << 16u) | (g << 8u) | r;
         }
 
-        double safe_length(const glm::dvec3 &v)
-        {
-            const double len2 = glm::dot(v, v);
-            if (!(len2 > 0.0) || !std::isfinite(len2))
-            {
-                return 0.0;
-            }
-            return std::sqrt(len2);
-        }
-
         ImVec2 to_imvec2(const glm::vec2 &p)
         {
             return ImVec2(p.x, p.y);
         }
 
+        // Clears hover/drag state while preserving orbit-pick suppression.
         void clear_transient_interaction(KeplerManeuverInteraction &interaction)
         {
             const bool suppress_orbit_pick = interaction.suppress_orbit_pick_until_left_release;
@@ -46,6 +38,7 @@ namespace Game::KeplerManeuverGizmo
             interaction.suppress_orbit_pick_until_left_release = suppress_orbit_pick;
         }
 
+        // Unprojects a window-space mouse position into a world-space camera ray.
         bool compute_camera_ray(const GameStateContext &ctx,
                                 const glm::vec2 &window_pos,
                                 KeplerManeuverGizmoController::CameraRay &out_ray)
@@ -103,6 +96,7 @@ namespace Game::KeplerManeuverGizmo
             return true;
         }
 
+        // Draws visible hub, axis, and delete handles with hover/drag styling.
         void draw_markers(const KeplerManeuverSystem &maneuver,
                           ImDrawList *draw_list,
                           const std::vector<KeplerManeuverHubMarker> &hubs,
@@ -187,6 +181,7 @@ namespace Game::KeplerManeuverGizmo
             }
         }
 
+        // Shows the tooltip for the currently hovered maneuver marker.
         void draw_hover_tooltip(const KeplerManeuverSystem &maneuver,
                                 const KeplerManeuverGizmoHover &hover)
         {
@@ -225,6 +220,7 @@ namespace Game::KeplerManeuverGizmo
             ImGui::EndTooltip();
         }
 
+        // Routes gizmo requests through the draw context command callback.
         KeplerManeuverCommandResult apply_command(KeplerManeuverGizmoDrawContext &context,
                                                   const KeplerManeuverCommand &command)
         {
@@ -322,7 +318,7 @@ namespace Game::KeplerManeuverGizmo
                 return false;
         }
 
-        const double len = safe_length(out_axis_dir_world);
+        const double len = KeplerManeuverMath::safe_length(out_axis_dir_world);
         if (!(len > 0.0) || !std::isfinite(len))
         {
             return false;
@@ -347,7 +343,7 @@ namespace Game::KeplerManeuverGizmo
         }
 
         const glm::dvec3 cam_to_point = glm::dvec3(point_world) - view.camera_world;
-        const double point_dist = safe_length(cam_to_point);
+        const double point_dist = KeplerManeuverMath::safe_length(cam_to_point);
         if (!std::isfinite(point_dist) || point_dist <= 1.0e-3)
         {
             return false;

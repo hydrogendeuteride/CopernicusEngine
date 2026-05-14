@@ -86,9 +86,13 @@ namespace Game
 
     namespace KeplerManeuverGizmo
     {
+        // Returns the compact label shown on an RTN axis handle.
         const char *axis_label(KeplerManeuverHandleAxis axis);
+        // Returns the overlay color associated with an RTN axis handle.
         uint32_t axis_color(KeplerManeuverHandleAxis axis);
+        // Checks whether the handle type represents a draggable RTN axis.
         bool is_axis(KeplerManeuverHandleAxis axis);
+        // Resolves a handle into its world-space axis, RTN component, and signed direction.
         bool resolve_axis(KeplerManeuverHandleAxis axis,
                           const orbitsim::Vec3 &basis_r_world,
                           const orbitsim::Vec3 &basis_t_world,
@@ -96,17 +100,22 @@ namespace Game
                           orbitsim::Vec3 &out_axis_dir_world,
                           int &out_component,
                           double &out_sign);
+        // Tests whether a world point is hidden behind the active depth occluder.
         bool is_occluded(const KeplerManeuverGizmoViewContext &view, const WorldVec3 &point_world);
+        // Projects a world-space point into ImGui window coordinates for overlay markers.
         bool project_point(const KeplerManeuverGizmoViewContext &view,
                            const WorldVec3 &point_world,
                            glm::vec2 &out_screen,
                            double &out_depth_m);
+        // Finds the current display state for a maneuver node id.
         const KeplerManeuverNodeDisplayState *find_display_state(
                 std::span<const KeplerManeuverNodeDisplayState> display_states,
                 int node_id);
+        // Finds the drag-time display snapshot for a maneuver node id.
         const KeplerManeuverNodeDisplaySnapshot *find_display_snapshot(
                 std::span<const KeplerManeuverNodeDisplaySnapshot> snapshots,
                 int node_id);
+        // Chooses the nearest hovered marker with axis, delete, then hub priority.
         KeplerManeuverGizmoHover find_hover(std::span<const KeplerManeuverHubMarker> hubs,
                                             std::span<const KeplerManeuverAxisMarker> axes,
                                             std::span<const KeplerManeuverDeleteMarker> deletes,
@@ -114,6 +123,7 @@ namespace Game
                                             float hub_hit_px2,
                                             float axis_hit_px2,
                                             float delete_hit_px2);
+        // Handles per-frame input and rendering for the Kepler maneuver overlay.
         void draw(KeplerManeuverGizmoDrawContext &context);
     } // namespace KeplerManeuverGizmo
 } // namespace Game

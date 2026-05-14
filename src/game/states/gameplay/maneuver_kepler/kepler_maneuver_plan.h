@@ -20,18 +20,18 @@ namespace Game
     public:
         explicit KeplerManeuverPlanModel(KeplerManeuverPlanState &state);
 
-        [[nodiscard]] KeplerManeuverPlanState &state();
-        [[nodiscard]] const KeplerManeuverPlanState &state() const;
-        [[nodiscard]] std::vector<KeplerManeuverEditorNode> &nodes();
-        [[nodiscard]] const std::vector<KeplerManeuverEditorNode> &nodes() const;
-        [[nodiscard]] int selected_node_id() const;
-        [[nodiscard]] int next_node_id() const;
-        [[nodiscard]] bool empty() const;
-        [[nodiscard]] std::size_t size() const;
+        KeplerManeuverPlanState &state();
+        const KeplerManeuverPlanState &state() const;
+        std::vector<KeplerManeuverEditorNode> &nodes();
+        const std::vector<KeplerManeuverEditorNode> &nodes() const;
+        int selected_node_id() const;
+        int next_node_id() const;
+        bool empty() const;
+        std::size_t size() const;
 
-        [[nodiscard]] KeplerManeuverEditorNode *find_node(int node_id);
-        [[nodiscard]] const KeplerManeuverEditorNode *find_node(int node_id) const;
-        [[nodiscard]] int find_node_index(int node_id) const;
+        KeplerManeuverEditorNode *find_node(int node_id);
+        const KeplerManeuverEditorNode *find_node(int node_id) const;
+        int find_node_index(int node_id) const;
 
         int add_node(KeplerManeuverEditorNode node, bool select_added);
         bool clear();

@@ -12,6 +12,7 @@ namespace Game
             return std::find(ids.begin(), ids.end(), node_id) != ids.end();
         }
 
+        // Marks a command as plan-changing and prediction-dirty unless explicitly deferred.
         void mark_plan_changed(KeplerManeuverCommandResult &result,
                                const KeplerManeuverCommand &command)
         {
@@ -19,6 +20,7 @@ namespace Game
             result.prediction_dirty = !command.defer_prediction_dirty;
         }
 
+        // Keeps current drag display data stable while live dv edits are being applied.
         bool should_preserve_drag_display(const KeplerManeuverCommand &command,
                                           const KeplerManeuverInteraction &interaction)
         {
@@ -144,6 +146,7 @@ namespace Game
         return _last_node_resolve_result;
     }
 
+    // Routes editor and gizmo mutations through one path so cache and dirty flags stay coherent.
     KeplerManeuverCommandResult KeplerManeuverSystem::apply_command(const KeplerManeuverCommand &command)
     {
         KeplerManeuverPlanModel model(_plan);
@@ -151,6 +154,7 @@ namespace Game
         result.previous_selected_node_id = model.selected_node_id();
         result.selected_node_id = model.selected_node_id();
 
+        // First mutate the authored plan and collect what downstream systems must refresh.
         switch (command.kind)
         {
             case KeplerManeuverCommandKind::None:
@@ -191,6 +195,7 @@ namespace Game
                 result.selection_changed = result.applied;
                 break;
 
+            // Removing nodes may also invalidate hover/drag state tied to the old node id.
             case KeplerManeuverCommandKind::RemoveNode:
             {
                 KeplerManeuverNodeRemovalResult removal =
@@ -207,6 +212,7 @@ namespace Game
                 break;
             }
 
+            // Pruning is driven by simulation time and behaves like removing authored nodes.
             case KeplerManeuverCommandKind::PrunePastNodes:
             {
                 KeplerManeuverNodeRemovalResult removal =
@@ -263,6 +269,7 @@ namespace Game
                 break;
         }
 
+        // Selection can change as a side effect of add, remove, prune, or sort operations.
         result.selected_node_id = model.selected_node_id();
         if (result.selected_node_id != result.previous_selected_node_id)
         {
@@ -275,10 +282,12 @@ namespace Game
         }
         if (result.plan_changed)
         {
+            // Prediction-facing nodes and revision only change when the authored plan changes.
             const bool preserve_drag_display = should_preserve_drag_display(command, _interaction);
             sync_prediction_nodes();
             if (preserve_drag_display)
             {
+                // During live dv dragging, keep the old display basis until the dirty flush.
                 _interaction.applied_delta = true;
             }
             else
@@ -289,6 +298,7 @@ namespace Game
         }
         else if (result.selection_changed)
         {
+            // Selection-only commands only need display selection bits refreshed.
             sync_display_selection();
         }
         return result;
