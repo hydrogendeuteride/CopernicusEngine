@@ -4,6 +4,7 @@
 #include "game/orbit/kepler/kepler_arc_info.h"
 #include "game/orbit/kepler/kepler_arc_line_builder.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <span>
 #include <vector>
@@ -39,10 +40,21 @@ namespace Game
         std::vector<KeplerOrbitArc> planned_arcs{};
         KeplerArcLineSet base_lines{};
         KeplerArcLineSet planned_lines{};
+        bool planned_requested{false};
+        bool planned_valid{false};
+        KeplerOrbitStatus planned_status{KeplerOrbitStatus::Ok};
+        orbitsim::KeplerManeuverDiagnostics planned_diagnostics{};
+        KeplerArcLineDiagnostics planned_line_diagnostics{};
         KeplerArcMetrics metrics{};
     };
 
     // Builds analytic arcs and their renderable line vertices.
     KeplerPredictionBuildOutput build_kepler_prediction(
             const KeplerPredictionBuildRequest &request);
+
+    // Returns the future horizon needed to cover authored maneuver nodes.
+    double required_kepler_maneuver_node_horizon_s(
+            double t0_s,
+            const KeplerManeuverNode *nodes,
+            std::size_t node_count);
 } // namespace Game

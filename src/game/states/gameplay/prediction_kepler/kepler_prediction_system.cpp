@@ -226,6 +226,11 @@ namespace Game
             track.planned_arcs = std::move(built.planned_arcs);
             track.base_lines = std::move(built.base_lines);
             track.planned_lines = std::move(built.planned_lines);
+            track.planned_requested = built.planned_requested;
+            track.planned_valid = built.planned_valid;
+            track.planned_status = built.planned_status;
+            track.planned_diagnostics = built.planned_diagnostics;
+            track.planned_line_diagnostics = built.planned_line_diagnostics;
             track.metrics = built.metrics;
             return track;
         }
@@ -350,6 +355,12 @@ namespace Game
                 uncapped_horizon_s = std::max(uncapped_horizon_s,
                                               track_horizon_s);
             }
+            const double maneuver_node_horizon_s =
+                    required_kepler_maneuver_node_horizon_s(context.current_sim_time_s,
+                                                            context.maneuver_nodes.data(),
+                                                            context.maneuver_nodes.size());
+            uncapped_horizon_s = std::max(uncapped_horizon_s,
+                                          maneuver_node_horizon_s);
 
             if (!(uncapped_horizon_s > 0.0) || !std::isfinite(uncapped_horizon_s))
             {
@@ -411,7 +422,8 @@ namespace Game
         // Checks whether the current prediction can be reused.
         bool can_reuse_prediction(const KeplerPredictionState &state,
                                   const KeplerPredictionUpdateContext &context,
-                                  const KeplerWorldFrame &world_frame)
+                                  const KeplerWorldFrame &world_frame,
+                                  const KeplerPredictionInputFingerprint &input_fingerprint)
         {
             if (state.dirty || !state.valid)
             {
@@ -419,6 +431,10 @@ namespace Game
             }
             if (state.maneuver_revision != context.maneuver_revision ||
                 state.world_reference_body_id != world_frame.world_reference_body_id)
+            {
+                return false;
+            }
+            if (!(state.input_fingerprint == input_fingerprint))
             {
                 return false;
             }
@@ -616,7 +632,9 @@ namespace Game
             return;
         }
 
-        if (can_reuse_prediction(_state, context, world_frame))
+        const KeplerPredictionInputFingerprint input_fingerprint =
+                make_kepler_prediction_input_fingerprint(context, world_frame);
+        if (can_reuse_prediction(_state, context, world_frame, input_fingerprint))
         {
             // Existing tracks still cover this frame.
             _state.enabled = context.enabled;
@@ -658,6 +676,7 @@ namespace Game
         _state.build_time_s = context.current_sim_time_s;
         _state.build_wall_time_s = context.current_wall_time_s;
         _state.maneuver_revision = context.maneuver_revision;
+        _state.input_fingerprint = input_fingerprint;
         _state.world_reference_body_id = world_frame.world_reference_body_id;
         _state.dirty = false;
         _state.tracks.clear();

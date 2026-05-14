@@ -3,10 +3,12 @@
 #include "game/orbit/kepler/kepler_celestial_nbody.h"
 #include "game/orbit/kepler/kepler_arc_info.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_builder.h"
+#include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 
 #include <glm/geometric.hpp>
 
 #include <cmath>
+#include <limits>
 #include <vector>
 
 namespace
@@ -144,6 +146,9 @@ TEST(KeplerPrediction, BuilderProducesPlannedLinesWhenNodesAreProvided)
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_EQ(result.maneuver_revision, 3u);
+    EXPECT_TRUE(result.planned_requested);
+    EXPECT_TRUE(result.planned_valid);
+    EXPECT_EQ(result.planned_status, Game::KeplerOrbitStatus::Ok);
     ASSERT_EQ(result.planned_arcs.size(), 2u);
     ASSERT_TRUE(result.planned_lines.valid);
     ASSERT_GE(result.planned_lines.vertices.size(), 3u);
@@ -176,6 +181,8 @@ TEST(KeplerPrediction, BuilderKeepsLaterPlannedNodesBeyondBaseHorizon)
     const Game::KeplerPredictionBuildOutput result = Game::build_kepler_prediction(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
+    EXPECT_TRUE(result.planned_requested);
+    EXPECT_TRUE(result.planned_valid);
     ASSERT_EQ(result.planned_arcs.size(), 3u);
     EXPECT_TRUE(near_abs(result.planned_arcs[0].arc.t1_s, 60.0, 1.0e-12));
     EXPECT_TRUE(near_abs(result.planned_arcs[1].arc.t0_s, 60.0, 1.0e-12));
@@ -184,6 +191,107 @@ TEST(KeplerPrediction, BuilderKeepsLaterPlannedNodesBeyondBaseHorizon)
     ASSERT_TRUE(result.planned_lines.valid);
     EXPECT_GT(result.planned_lines.vertices.front().t_s, 59.0);
     EXPECT_LT(result.planned_lines.vertices.front().t_s, 61.0);
+}
+
+TEST(KeplerPrediction, BuilderKeepsBaseValidWhenPlannedArcFails)
+{
+    orbitsim::GameSimulation sim = make_single_body_sim();
+    Game::KeplerPredictionBuildRequest request = make_request(sim);
+    const std::vector<Game::KeplerManeuverNode> nodes{
+            Game::KeplerManeuverNode{
+                    .node_id = 7,
+                    .t_s = 60.0,
+                    .primary_body_id = kMoonId,
+                    .dv_rtn_mps = {0.0, 10.0, 0.0},
+            },
+    };
+    request.maneuver_nodes = std::span<const Game::KeplerManeuverNode>(nodes.data(), nodes.size());
+
+    const Game::KeplerPredictionBuildOutput result = Game::build_kepler_prediction(request);
+
+    ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
+    EXPECT_EQ(result.status, Game::KeplerOrbitStatus::Ok);
+    EXPECT_TRUE(result.base_lines.valid);
+    EXPECT_TRUE(result.planned_requested);
+    EXPECT_FALSE(result.planned_valid);
+    EXPECT_EQ(result.planned_status, Game::KeplerOrbitStatus::PrimaryMismatch);
+    EXPECT_TRUE(result.planned_arcs.empty());
+    EXPECT_FALSE(result.planned_lines.valid);
+}
+
+TEST(KeplerPrediction, ManeuverNodeHorizonCoversLatestFutureNode)
+{
+    const std::vector<Game::KeplerManeuverNode> nodes{
+            Game::KeplerManeuverNode{
+                    .node_id = 1,
+                    .t_s = 60.0,
+                    .primary_body_id = kEarthId,
+                    .dv_rtn_mps = {0.0, 10.0, 0.0},
+            },
+            Game::KeplerManeuverNode{
+                    .node_id = 2,
+                    .t_s = 300.0,
+                    .primary_body_id = kEarthId,
+                    .dv_rtn_mps = {0.0, -5.0, 0.0},
+            },
+            Game::KeplerManeuverNode{
+                    .node_id = 3,
+                    .t_s = std::numeric_limits<double>::quiet_NaN(),
+                    .primary_body_id = kEarthId,
+                    .dv_rtn_mps = {0.0, 1.0, 0.0},
+            },
+    };
+
+    const double horizon_s =
+            Game::required_kepler_maneuver_node_horizon_s(10.0,
+                                                          nodes.data(),
+                                                          nodes.size());
+    EXPECT_TRUE(near_abs(horizon_s, 291.0, 1.0e-12));
+    EXPECT_EQ(Game::required_kepler_maneuver_node_horizon_s(400.0,
+                                                            nodes.data(),
+                                                            nodes.size()),
+              0.0);
+    EXPECT_EQ(Game::required_kepler_maneuver_node_horizon_s(
+                      std::numeric_limits<double>::quiet_NaN(),
+                      nodes.data(),
+                      nodes.size()),
+              0.0);
+    EXPECT_EQ(Game::required_kepler_maneuver_node_horizon_s(10.0, nullptr, 0u), 0.0);
+}
+
+TEST(KeplerPrediction, InputFingerprintTracksCacheRelevantSettings)
+{
+    Game::KeplerPredictionUpdateContext context{};
+    context.requested_horizon_s = 120.0;
+    context.fixed_primary_body_id = kEarthId;
+    context.maneuver_revision = 4u;
+    context.build_celestial_kepler_tracks = true;
+    context.build_celestial_nbody_tracks = false;
+    context.options.open_orbit_window_s = 3'600.0;
+    context.options.propagation.max_iterations = 48;
+    context.line_options.max_time_step_s = 30.0;
+    context.line_options.max_vertices_total = 512u;
+
+    Game::KeplerWorldFrame world_frame{};
+    world_frame.world_reference_body_id = kEarthId;
+
+    const Game::KeplerPredictionInputFingerprint baseline =
+            Game::make_kepler_prediction_input_fingerprint(context, world_frame);
+    Game::KeplerPredictionUpdateContext changed = context;
+    changed.line_options.max_vertices_total += 1u;
+    EXPECT_FALSE(baseline == Game::make_kepler_prediction_input_fingerprint(changed, world_frame));
+
+    changed = context;
+    changed.options.propagation.max_iterations += 1;
+    EXPECT_FALSE(baseline == Game::make_kepler_prediction_input_fingerprint(changed, world_frame));
+
+    changed = context;
+    changed.build_celestial_nbody_tracks = true;
+    EXPECT_FALSE(baseline == Game::make_kepler_prediction_input_fingerprint(changed, world_frame));
+
+    Game::KeplerWorldFrame changed_frame = world_frame;
+    changed_frame.world_reference_body_id = kMoonId;
+    EXPECT_FALSE(baseline == Game::make_kepler_prediction_input_fingerprint(context, changed_frame));
 }
 
 TEST(KeplerPrediction, BuilderKeepsFullPlannedOpenOrbitLineWhenUniversalSolverRangeIsExceeded)

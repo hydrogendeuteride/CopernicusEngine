@@ -9,6 +9,8 @@ namespace Game
 {
     namespace
     {
+        constexpr double kPostLastManeuverNodePadS = 1.0;
+
         // Converts arcs into renderable world-space lines.
         KeplerArcLineSet build_lines_for_arcs(const std::vector<KeplerOrbitArc> &arcs,
                                               const KeplerPredictionBuildRequest &request)
@@ -56,8 +58,7 @@ namespace Game
             const double latest_t_s = latest_finite_maneuver_node_time_s(nodes);
             if (std::isfinite(latest_t_s) && latest_t_s >= base_arc.arc.t1_s)
             {
-                constexpr double kPostLastNodePadS = 1.0;
-                base_arc.arc.t1_s = latest_t_s + kPostLastNodePadS;
+                base_arc.arc.t1_s = latest_t_s + kPostLastManeuverNodePadS;
             }
             return base_arc;
         }
@@ -109,6 +110,30 @@ namespace Game
         }
     } // namespace
 
+    double required_kepler_maneuver_node_horizon_s(const double t0_s,
+                                                  const KeplerManeuverNode *nodes,
+                                                  const std::size_t node_count)
+    {
+        if (!std::isfinite(t0_s) || !nodes || node_count == 0u)
+        {
+            return 0.0;
+        }
+
+        double latest_future_node_t_s = -std::numeric_limits<double>::infinity();
+        for (std::size_t i = 0; i < node_count; ++i)
+        {
+            const double node_t_s = nodes[i].t_s;
+            if (std::isfinite(node_t_s) && node_t_s >= t0_s)
+            {
+                latest_future_node_t_s = std::max(latest_future_node_t_s, node_t_s);
+            }
+        }
+
+        return std::isfinite(latest_future_node_t_s)
+                       ? (latest_future_node_t_s - t0_s) + kPostLastManeuverNodePadS
+                       : 0.0;
+    }
+
     // Builds one subject's base and optional maneuver prediction.
     KeplerPredictionBuildOutput build_kepler_prediction(const KeplerPredictionBuildRequest &request)
     {
@@ -154,6 +179,7 @@ namespace Game
 
         if (!request.maneuver_nodes.empty())
         {
+            out.planned_requested = true;
             // Turn normalized maneuver nodes into planned arcs.
             const KeplerOrbitArc maneuver_base_arc =
                     extend_base_arc_to_cover_maneuver_nodes(out.orbit.base_arc,
@@ -162,6 +188,8 @@ namespace Game
                     build_kepler_maneuver_arc_chain(maneuver_base_arc,
                                                     request.maneuver_nodes,
                                                     request.options.propagation);
+            out.planned_status = planned.status;
+            out.planned_diagnostics = planned.diagnostics;
             if (planned.valid)
             {
                 out.planned_arcs = planned.arcs;
@@ -169,10 +197,17 @@ namespace Game
                 const std::vector<KeplerOrbitArc> line_arcs =
                         planned_arcs_for_line_build(out.planned_arcs, request.maneuver_nodes);
                 out.planned_lines = build_lines_for_arcs(line_arcs, request);
+                out.planned_line_diagnostics = out.planned_lines.diagnostics;
                 if (!out.planned_lines.valid)
                 {
+                    out.planned_status = out.planned_lines.diagnostics.status;
                     out.planned_arcs.clear();
                     out.planned_lines = {};
+                }
+                else
+                {
+                    out.planned_valid = true;
+                    out.planned_status = KeplerOrbitStatus::Ok;
                 }
             }
         }

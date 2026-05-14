@@ -68,8 +68,21 @@ void SwapchainManager::resize_render_targets(VkExtent2D renderExtent)
         return;
     }
 
-    // Render-target resizing is called from the engine frame loop after render-fence wait.
-    // Avoid a full-device stall here to keep render-scale changes responsive.
+    // These render targets are shared across frame slots. Waiting only for the
+    // current frame fence is not enough because the previous frame can still be
+    // using them when the runtime render resolution changes.
+    const bool has_existing_targets =
+        _drawImage.image != VK_NULL_HANDLE ||
+        _depthImage.image != VK_NULL_HANDLE ||
+        _gBufferPosition.image != VK_NULL_HANDLE ||
+        _gBufferNormal.image != VK_NULL_HANDLE ||
+        _gBufferAlbedo.image != VK_NULL_HANDLE ||
+        _gBufferExtra.image != VK_NULL_HANDLE ||
+        _idBuffer.image != VK_NULL_HANDLE;
+    if (has_existing_targets)
+    {
+        VK_CHECK(vkQueueWaitIdle(_deviceManager->graphicsQueue()));
+    }
 
     // Destroy previous targets (if any), then recreate at the new extent.
     _deletionQueue.flush();

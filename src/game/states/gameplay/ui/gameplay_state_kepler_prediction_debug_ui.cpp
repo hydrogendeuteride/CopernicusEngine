@@ -228,10 +228,16 @@ namespace Game
             if (active_track)
             {
                 draw_kepler_arc_info_table_value("Active track planned", "%zu arcs / %zu samples",
-                                                 active_track->planned_arcs.size(),
-                                                 active_track->planned_lines.vertices.size());
+                                                  active_track->planned_arcs.size(),
+                                                  active_track->planned_lines.vertices.size());
+                draw_kepler_arc_info_table_value(
+                        "Active planned status", "%s%s",
+                        active_track->planned_requested
+                                ? kepler_orbit_status_name(active_track->planned_status)
+                                : "not requested",
+                        active_track->planned_valid ? " / valid" : "");
                 draw_kepler_arc_info_table_value("Active track base end", "%.3f s",
-                                                 active_track->orbit.base_arc.arc.t1_s);
+                                                  active_track->orbit.base_arc.arc.t1_s);
             }
             else
             {
@@ -320,8 +326,23 @@ namespace Game
                                               summary_track->base_arcs.size(),
                                               summary_track->base_lines.vertices.size());
                 draw_kepler_arc_info_table_value("Planned arcs / samples", "%zu / %zu",
-                                              summary_track->planned_arcs.size(),
-                                              summary_track->planned_lines.vertices.size());
+                                               summary_track->planned_arcs.size(),
+                                               summary_track->planned_lines.vertices.size());
+                draw_kepler_arc_info_table_value(
+                        "Planned status", "%s%s",
+                        summary_track->planned_requested
+                                ? kepler_orbit_status_name(summary_track->planned_status)
+                                : "not requested",
+                        summary_track->planned_valid ? " / valid" : "");
+                if (summary_track->planned_requested &&
+                    !summary_track->planned_valid &&
+                    summary_track->planned_line_diagnostics.requested_arcs > 0u)
+                {
+                    draw_kepler_arc_info_table_value(
+                            "Planned line samples", "%zu / %zu",
+                            summary_track->planned_line_diagnostics.accepted_samples,
+                            summary_track->planned_line_diagnostics.requested_samples);
+                }
             }
             else
             {
