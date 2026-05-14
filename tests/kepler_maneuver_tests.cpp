@@ -44,6 +44,21 @@ namespace
         return arc;
     }
 
+    Game::KeplerOrbitArc make_hyperbolic_arc(const double t0_s = 0.0,
+                                             const double t1_s = 10'000.0)
+    {
+        Game::KeplerOrbitArc arc{};
+        arc.arc.mu_m3_s2 = kEarthMu;
+        arc.arc.primary_body_id = kEarthId;
+        arc.arc.t0_s = t0_s;
+        arc.arc.t1_s = t1_s;
+        arc.arc.state0_relative =
+                orbitsim::make_state({kOrbitRadiusM, 0.0, 0.0},
+                                      {0.0, 12'000.0, 0.0});
+        arc.primary_state_inertial_at_t0 = orbitsim::make_state({}, {});
+        return arc;
+    }
+
     Game::KeplerPredictionState make_prediction_with_active_track(
             const Game::KeplerOrbitArc &base_arc,
             std::string label = {})
@@ -121,6 +136,38 @@ TEST(KeplerManeuverSystem, AddSortSelectAndExposePredictionNodes)
     EXPECT_DOUBLE_EQ(nodes[0].dv_rtn_mps.x, 1.0);
     EXPECT_EQ(nodes[1].node_id, 4);
     EXPECT_DOUBLE_EQ(nodes[1].t_s, 120.0);
+}
+
+TEST(KeplerManeuverSystem, RejectsInvalidAddedNodes)
+{
+    Game::KeplerManeuverSystem system{};
+
+    Game::KeplerManeuverEditorNode invalid_time = make_node(-1,
+                                                            std::numeric_limits<double>::quiet_NaN());
+    Game::KeplerManeuverEditorNode invalid_dv = make_node(-1, 30.0);
+    invalid_dv.dv_rtn_mps.y = std::numeric_limits<double>::infinity();
+    Game::KeplerManeuverEditorNode invalid_primary = make_node(-1, 40.0);
+    invalid_primary.primary_body_auto = false;
+    invalid_primary.primary_body_id = orbitsim::kInvalidBodyId;
+
+    const Game::KeplerManeuverCommandResult time_result =
+            system.apply_command(Game::KeplerManeuverCommand::add_node(invalid_time));
+    const Game::KeplerManeuverCommandResult dv_result =
+            system.apply_command(Game::KeplerManeuverCommand::add_node(invalid_dv));
+    const Game::KeplerManeuverCommandResult primary_result =
+            system.apply_command(Game::KeplerManeuverCommand::add_node(invalid_primary));
+
+    EXPECT_FALSE(time_result.applied);
+    EXPECT_FALSE(time_result.plan_changed);
+    EXPECT_FALSE(time_result.prediction_dirty);
+    EXPECT_EQ(time_result.added_node_id, -1);
+    EXPECT_FALSE(dv_result.applied);
+    EXPECT_FALSE(primary_result.applied);
+    EXPECT_TRUE(system.plan().nodes.empty());
+    EXPECT_EQ(system.plan().selected_node_id, -1);
+    EXPECT_EQ(system.plan().next_node_id, 0);
+    EXPECT_TRUE(system.prediction_nodes().empty());
+    EXPECT_EQ(system.revision(), 0u);
 }
 
 TEST(KeplerManeuverSystem, SelectOnlyDoesNotChangeRevision)
@@ -240,6 +287,8 @@ TEST(KeplerManeuverSystem, DeferredDvDragWaitsForExplicitDirty)
     ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(
             make_node(1, 10.0))).applied);
     const uint64_t after_add_revision = system.revision();
+    ASSERT_EQ(system.prediction_nodes().size(), 1u);
+    const orbitsim::Vec3 before_drag_dv = system.prediction_nodes().front().dv_rtn_mps;
 
     system.interaction().state = Game::KeplerManeuverInteraction::State::DragAxis;
     system.interaction().node_id = 1;
@@ -253,7 +302,11 @@ TEST(KeplerManeuverSystem, DeferredDvDragWaitsForExplicitDirty)
     EXPECT_TRUE(drag_result.applied);
     EXPECT_TRUE(drag_result.plan_changed);
     EXPECT_FALSE(drag_result.prediction_dirty);
-    EXPECT_EQ(system.revision(), after_add_revision + 1u);
+    EXPECT_EQ(system.revision(), after_add_revision);
+    ASSERT_EQ(system.prediction_nodes().size(), 1u);
+    EXPECT_EQ(system.prediction_nodes().front().dv_rtn_mps.x, before_drag_dv.x);
+    EXPECT_EQ(system.prediction_nodes().front().dv_rtn_mps.y, before_drag_dv.y);
+    EXPECT_EQ(system.prediction_nodes().front().dv_rtn_mps.z, before_drag_dv.z);
     EXPECT_TRUE(system.interaction().applied_delta);
 
     const Game::KeplerManeuverCommandResult dirty_result =
@@ -262,7 +315,9 @@ TEST(KeplerManeuverSystem, DeferredDvDragWaitsForExplicitDirty)
     EXPECT_TRUE(dirty_result.applied);
     EXPECT_TRUE(dirty_result.plan_changed);
     EXPECT_TRUE(dirty_result.prediction_dirty);
-    EXPECT_EQ(system.revision(), after_add_revision + 2u);
+    EXPECT_EQ(system.revision(), after_add_revision + 1u);
+    ASSERT_EQ(system.prediction_nodes().size(), 1u);
+    EXPECT_EQ(system.prediction_nodes().front().dv_rtn_mps.y, 5.0);
 }
 
 TEST(KeplerManeuverSystem, DirtyDvDragPreservesDragDisplay)
@@ -329,6 +384,38 @@ TEST(KeplerManeuverSystem, ResolvesNodeDisplayStateFromActiveKeplerTrack)
     EXPECT_NEAR(display.basis_n_world.z, 1.0, 1.0e-12);
     EXPECT_NEAR(display.total_dv_mps, 10.0, 1.0e-12);
     EXPECT_NEAR(display.burn_direction_world.y, 1.0, 1.0e-12);
+}
+
+TEST(KeplerManeuverSystem, ResolvesHyperbolicNodeWithLibrarySamplingFallback)
+{
+    Game::KeplerManeuverSystem system{};
+    const Game::KeplerOrbitArc arc = make_hyperbolic_arc();
+    ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(
+            make_node(1, arc.arc.t1_s, {0.0, 5.0, 0.0}))).applied);
+
+    Game::KeplerPredictionState prediction = make_prediction_with_active_track(arc);
+    prediction.tracks.front().line_propagation.max_hyperbolic_stumpff_arg = 0.2;
+
+    const orbitsim::KeplerArcSample direct_sample =
+            orbitsim::sample_kepler_arc_state(arc.arc,
+                                              arc.arc.t1_s,
+                                              prediction.tracks.front().line_propagation);
+    ASSERT_TRUE(direct_sample.ok());
+    EXPECT_TRUE(direct_sample.diagnostics.used_fallback);
+
+    const Game::KeplerManeuverNodeResolveResult result =
+            system.resolve_node_display_states(prediction);
+
+    EXPECT_TRUE(result.active_track_valid);
+    EXPECT_EQ(result.valid_node_count, 1u);
+    ASSERT_EQ(system.node_display_states().size(), 1u);
+    const Game::KeplerManeuverNodeDisplayState &display =
+            system.node_display_states().front();
+    EXPECT_TRUE(display.valid);
+    EXPECT_EQ(display.status, Game::KeplerManeuverNodeDisplayStatus::Resolved);
+    EXPECT_TRUE(std::isfinite(display.position_world.x));
+    EXPECT_TRUE(std::isfinite(display.position_world.y));
+    EXPECT_TRUE(std::isfinite(display.position_world.z));
 }
 
 TEST(KeplerManeuverSystem, UsesPlannedPreImpulseArcWhenAvailable)

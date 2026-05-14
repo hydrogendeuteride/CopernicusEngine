@@ -11,6 +11,13 @@ namespace Game
         {
             return a.x == b.x && a.y == b.y && a.z == b.z;
         }
+
+        bool valid_editor_node(const KeplerManeuverEditorNode &node)
+        {
+            return std::isfinite(node.time_s) &&
+                   kepler_finite_vec3(node.dv_rtn_mps) &&
+                   (node.primary_body_auto || node.primary_body_id != orbitsim::kInvalidBodyId);
+        }
     } // namespace
 
     KeplerManeuverNode KeplerManeuverEditorNode::to_prediction_node() const
@@ -151,6 +158,11 @@ namespace Game
 
     int KeplerManeuverPlanModel::add_node(KeplerManeuverEditorNode node, const bool select_added)
     {
+        if (!valid_editor_node(node))
+        {
+            return -1;
+        }
+
         if (node.id < 0)
         {
             node.id = _state.next_node_id++;

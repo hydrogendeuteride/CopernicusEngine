@@ -221,6 +221,7 @@ namespace Game
             track.orbit = std::move(built.orbit);
             track.world_frame = world_frame;
             track.body_state_provider = body_state_provider;
+            track.line_propagation = request.line_options.propagation;
             track.base_arcs = std::move(built.base_arcs);
             track.planned_arcs = std::move(built.planned_arcs);
             track.base_lines = std::move(built.base_lines);

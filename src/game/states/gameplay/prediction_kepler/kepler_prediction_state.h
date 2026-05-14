@@ -34,6 +34,7 @@ namespace Game
             KeplerArcBuildResult orbit{};
             KeplerWorldFrame world_frame{};
             KeplerBodyStateProvider body_state_provider{};
+            orbitsim::KeplerPropagationOptions line_propagation{};
             std::vector<KeplerOrbitArc> base_arcs{};
             std::vector<KeplerOrbitArc> planned_arcs{};
             KeplerArcLineSet base_lines{};

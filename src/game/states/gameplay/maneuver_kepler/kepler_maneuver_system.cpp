@@ -162,8 +162,11 @@ namespace Game
 
             case KeplerManeuverCommandKind::AddNode:
                 result.added_node_id = model.add_node(command.node, command.select_added);
-                result.applied = true;
-                mark_plan_changed(result, command);
+                result.applied = result.added_node_id >= 0;
+                if (result.applied)
+                {
+                    mark_plan_changed(result, command);
+                }
                 break;
 
             case KeplerManeuverCommandKind::ClearPlan:
@@ -282,9 +285,14 @@ namespace Game
         }
         if (result.plan_changed)
         {
-            // Prediction-facing nodes and revision only change when the authored plan changes.
+            // Deferred edits update only the authored plan. Prediction-facing nodes
+            // and revision advance when the edit is flushed dirty.
             const bool preserve_drag_display = should_preserve_drag_display(command, _interaction);
-            sync_prediction_nodes();
+            if (result.prediction_dirty)
+            {
+                sync_prediction_nodes();
+                increment_revision();
+            }
             if (preserve_drag_display)
             {
                 // During live dv dragging, keep the old display basis until the dirty flush.
@@ -294,7 +302,6 @@ namespace Game
             {
                 clear_node_display_states();
             }
-            increment_revision();
         }
         else if (result.selection_changed)
         {

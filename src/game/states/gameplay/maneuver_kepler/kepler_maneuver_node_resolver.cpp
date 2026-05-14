@@ -180,7 +180,8 @@ namespace Game
 
             const orbitsim::KeplerArcSample sample =
                     orbitsim::sample_kepler_arc_state(selected.arc->arc,
-                                                      node.time_s);
+                                                      node.time_s,
+                                                      track.line_propagation);
             if (!sample.ok() || !finite_state(sample.state_relative))
             {
                 return make_unresolved_state(plan,

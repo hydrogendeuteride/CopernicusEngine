@@ -137,111 +137,6 @@ namespace Game
                                 std::vector<AdaptiveInterval>,
                                 AdaptiveIntervalPriority>;
 
-    bool finite_state(const orbitsim::State &state)
-    {
-        return kepler_finite_vec3(state.position_m) && kepler_finite_vec3(state.velocity_mps);
-    }
-
-    bool solve_hyperbolic_anomaly(const double eccentricity,
-                                  const double mean_anomaly_rad,
-                                  double &out_hyperbolic_anomaly_rad)
-    {
-        if (!(eccentricity > 1.0) || !std::isfinite(eccentricity) || !std::isfinite(mean_anomaly_rad))
-        {
-            return false;
-        }
-
-        double h = std::asinh(mean_anomaly_rad / eccentricity);
-        if (!std::isfinite(h))
-        {
-            return false;
-        }
-
-        constexpr int kMaxIterations = 32;
-        constexpr double kTolerance = 1.0e-12;
-        for (int i = 0; i < kMaxIterations; ++i)
-        {
-            const double sinh_h = std::sinh(h);
-            const double cosh_h = std::cosh(h);
-            const double f = eccentricity * sinh_h - h - mean_anomaly_rad;
-            const double df = eccentricity * cosh_h - 1.0;
-            if (!std::isfinite(f) || !(std::abs(df) > 0.0) || !std::isfinite(df))
-            {
-                return false;
-            }
-
-            const double step = f / df;
-            h -= step;
-            if (!std::isfinite(h))
-            {
-                return false;
-            }
-            if (std::abs(step) <= kTolerance * std::max(1.0, std::abs(h)))
-            {
-                out_hyperbolic_anomaly_rad = h;
-                return true;
-            }
-        }
-
-        out_hyperbolic_anomaly_rad = h;
-        return std::isfinite(h);
-    }
-
-    bool sample_hyperbolic_arc_state_from_elements(const orbitsim::KeplerArc &arc,
-                                                   const double t_s,
-                                                   orbitsim::State &out_state)
-    {
-        if (!orbitsim::kepler_arc_valid(arc) || !std::isfinite(t_s))
-        {
-            return false;
-        }
-
-        const orbitsim::OrbitalElements elements =
-                orbitsim::orbital_elements_from_relative_state(arc.mu_m3_s2,
-                                                               arc.state0_relative.position_m,
-                                                               arc.state0_relative.velocity_mps);
-        if (!(elements.eccentricity > 1.0) ||
-            !(elements.semi_major_axis_m < 0.0) ||
-            !std::isfinite(elements.semi_major_axis_m) ||
-            !std::isfinite(elements.mean_anomaly_rad))
-        {
-            return false;
-        }
-
-        const double abs_a = -elements.semi_major_axis_m;
-        const double mean_motion_radps = std::sqrt(arc.mu_m3_s2 / (abs_a * abs_a * abs_a));
-        if (!(mean_motion_radps > 0.0) || !std::isfinite(mean_motion_radps))
-        {
-            return false;
-        }
-
-        const double mean_anomaly_rad =
-                elements.mean_anomaly_rad + mean_motion_radps * (t_s - arc.t0_s);
-        double hyperbolic_anomaly_rad = 0.0;
-        if (!solve_hyperbolic_anomaly(elements.eccentricity,
-                                      mean_anomaly_rad,
-                                      hyperbolic_anomaly_rad))
-        {
-            return false;
-        }
-
-        const double tanh_half_h = std::tanh(0.5 * hyperbolic_anomaly_rad);
-        const double true_anomaly_rad =
-                2.0 * std::atan(std::sqrt((elements.eccentricity + 1.0) /
-                                          (elements.eccentricity - 1.0)) *
-                                 tanh_half_h);
-        if (!std::isfinite(true_anomaly_rad))
-        {
-            return false;
-        }
-
-        orbitsim::OrbitalElements propagated = elements;
-        propagated.true_anomaly_rad = true_anomaly_rad;
-        out_state = orbitsim::relative_state_from_orbital_elements(arc.mu_m3_s2, propagated);
-        out_state.spin = arc.state0_relative.spin;
-        return finite_state(out_state);
-    }
-
     void record_propagation_failure(AdaptiveArcLineBuild &build,
                                     const orbitsim::KeplerStatus status)
     {
@@ -265,9 +160,8 @@ namespace Game
                 orbitsim::sample_kepler_arc_state(game_arc.arc,
                                                   t_s,
                                                   request.options.propagation);
-        orbitsim::State sample_state = sample.state_relative;
-        if (!sample.ok() &&
-            !sample_hyperbolic_arc_state_from_elements(game_arc.arc, t_s, sample_state))
+        const orbitsim::State sample_state = sample.state_relative;
+        if (!sample.ok())
         {
             out.kepler_status = sample.diagnostics.status;
             return out;
