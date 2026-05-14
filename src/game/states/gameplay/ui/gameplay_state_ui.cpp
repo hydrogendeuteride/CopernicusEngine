@@ -124,6 +124,7 @@ namespace Game
                     .valid = pick.valid,
                     .line = pick.kind == PickingSystem::PickInfo::Kind::Line,
                     .owner_name = pick.ownerName,
+                    .payload = pick.line_payload,
                     .time_s = pick.time_s,
             };
             if (!ctx.input ||
@@ -240,6 +241,7 @@ namespace Game
                 .valid = pick.valid,
                 .line = pick.kind == PickingSystem::PickInfo::Kind::Line,
                 .owner_name = pick.ownerName,
+                .payload = pick.line_payload,
                 .time_s = pick.time_s,
         };
         if (!kepler_orbit_pick_matches_mouse_release(ctx,

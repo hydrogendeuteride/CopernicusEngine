@@ -49,10 +49,54 @@ namespace Game
             }
             return nullptr;
         }
+
+        bool payload_track_matches(const Picking::LinePickPayload &payload,
+                                   const KeplerPredictionState::Track &track)
+        {
+            return payload.type == KeplerManeuverPick::kOrbitLinePickPayloadType &&
+                   payload.primary_id != 0u &&
+                   track.entity.is_valid() &&
+                   payload.primary_id == static_cast<uint64_t>(track.entity.value);
+        }
     } // namespace
 
     namespace KeplerManeuverPick
     {
+        Picking::LinePickPayload make_payload(const KeplerManeuverOrbitPickRole role,
+                                              const EntityId track_entity)
+        {
+            if (role == KeplerManeuverOrbitPickRole::None || !track_entity.is_valid())
+            {
+                return {};
+            }
+
+            return Picking::LinePickPayload{
+                    .type = kOrbitLinePickPayloadType,
+                    .role = static_cast<uint32_t>(role),
+                    .primary_id = static_cast<uint64_t>(track_entity.value),
+                    .secondary_id = 0u,
+            };
+        }
+
+        KeplerManeuverOrbitPickRole payload_role(const Picking::LinePickPayload &payload)
+        {
+            if (payload.type != kOrbitLinePickPayloadType)
+            {
+                return KeplerManeuverOrbitPickRole::None;
+            }
+
+            const auto role = static_cast<KeplerManeuverOrbitPickRole>(payload.role);
+            switch (role)
+            {
+                case KeplerManeuverOrbitPickRole::Base:
+                case KeplerManeuverOrbitPickRole::Planned:
+                    return role;
+                case KeplerManeuverOrbitPickRole::None:
+                    break;
+            }
+            return KeplerManeuverOrbitPickRole::None;
+        }
+
         KeplerManeuverOrbitPickRole parse_owner(
                 const std::string_view owner_name,
                 std::string_view *out_track_label)
@@ -88,9 +132,20 @@ namespace Game
                 return false;
             }
 
+            const KeplerPredictionState::Track *active_track = find_active_player_track(prediction);
+            if (!active_track)
+            {
+                return false;
+            }
+
+            KeplerManeuverOrbitPickRole role = payload_role(pick.payload);
+            bool track_matches = payload_track_matches(pick.payload, *active_track);
             std::string_view pick_track_label{};
-            const KeplerManeuverOrbitPickRole role =
-                    parse_owner(pick.owner_name, &pick_track_label);
+            if (role == KeplerManeuverOrbitPickRole::None)
+            {
+                role = parse_owner(pick.owner_name, &pick_track_label);
+                track_matches = pick_track_label == active_track->label;
+            }
             if (role == KeplerManeuverOrbitPickRole::None)
             {
                 return false;
@@ -104,12 +159,7 @@ namespace Game
                 return false;
             }
 
-            const KeplerPredictionState::Track *active_track = find_active_player_track(prediction);
-            if (!active_track)
-            {
-                return false;
-            }
-            return pick_track_label == active_track->label;
+            return track_matches;
         }
 
         KeplerManeuverEditorNode make_node(

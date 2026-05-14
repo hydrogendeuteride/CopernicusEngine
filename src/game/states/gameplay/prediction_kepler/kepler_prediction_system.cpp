@@ -387,17 +387,6 @@ namespace Game
             };
         }
 
-        double cache_reuse_horizon_s(const double required_horizon_s)
-        {
-            constexpr double kMinReuseS = 10.0 * 60.0;
-            constexpr double kMaxReuseS = 7.0 * 24.0 * 60.0 * 60.0;
-            if (!(required_horizon_s > 0.0) || !std::isfinite(required_horizon_s))
-            {
-                return kMinReuseS;
-            }
-            return std::clamp(required_horizon_s * 0.25, kMinReuseS, kMaxReuseS);
-        }
-
         // Throttles rebuilds, especially during maneuver previews.
         double prediction_rebuild_interval_s(const KeplerPredictionUpdateContext &context)
         {
@@ -544,7 +533,8 @@ namespace Game
         }
 
         KeplerCelestialNBodyEphemerisRequest build_request = horizon_request;
-        const double build_horizon_s = required_horizon_s + cache_reuse_horizon_s(required_horizon_s);
+        const double build_horizon_s =
+                kepler_prediction_build_horizon_s(required_horizon_s, horizon_cap_s);
         build_request.requested_horizon_s = build_horizon_s;
 
         const KeplerCelestialNBodyEphemerisResult built =

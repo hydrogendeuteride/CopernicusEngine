@@ -378,10 +378,18 @@ TEST(KeplerOrbit, ArcLineBuilderMovesClosedOrbitEndpointAwayFromCurrentPosition)
 
     ASSERT_TRUE(lines.valid) << Game::kepler_orbit_status_name(lines.diagnostics.status);
     ASSERT_GE(lines.vertices.size(), 4u);
+    EXPECT_EQ(lines.diagnostics.closed_seam_shifted_arcs, 1u);
+    EXPECT_EQ(lines.diagnostics.closed_seam_shifted_samples, 3u);
+    EXPECT_TRUE(near_abs(lines.diagnostics.max_closed_seam_shift_s, 0.25, 1.0e-12));
     EXPECT_LT(lines.vertices.front().t_s, arc.arc.t0_s);
     EXPECT_LT(lines.vertices.back().t_s, arc.arc.t1_s);
 
     EXPECT_GT(lines.vertices[1].t_s, arc.arc.t0_s);
+    const uint32_t seam_sample_flag =
+            static_cast<uint32_t>(Game::KeplerArcLineVertexFlags::RenderSeamSample);
+    EXPECT_NE(lines.vertices.front().flags & seam_sample_flag, 0u);
+    EXPECT_NE(lines.vertices[1].flags & seam_sample_flag, 0u);
+    EXPECT_NE(lines.vertices.back().flags & seam_sample_flag, 0u);
 
     const auto current_it = std::find_if(lines.vertices.begin(),
                                          lines.vertices.end(),

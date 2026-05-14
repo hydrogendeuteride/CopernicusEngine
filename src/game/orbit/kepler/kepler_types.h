@@ -39,6 +39,7 @@ namespace Game
         OrbitEnd = 1u << 1u,
         ArcStart = 1u << 2u,
         ArcEnd = 1u << 3u,
+        RenderSeamSample = 1u << 4u,
     };
 
     // Selected primary body and its state.
@@ -121,6 +122,9 @@ namespace Game
         std::size_t accepted_samples{0};
         std::size_t failed_arc_index{0};
         orbitsim::KeplerStatus first_kepler_failure{orbitsim::KeplerStatus::Ok};
+        std::size_t closed_seam_shifted_arcs{0};
+        std::size_t closed_seam_shifted_samples{0};
+        double max_closed_seam_shift_s{0.0};
         bool budget_hit{false};
     };
 

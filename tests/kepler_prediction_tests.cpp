@@ -294,6 +294,22 @@ TEST(KeplerPrediction, InputFingerprintTracksCacheRelevantSettings)
     EXPECT_FALSE(baseline == Game::make_kepler_prediction_input_fingerprint(context, changed_frame));
 }
 
+TEST(KeplerPrediction, BuildHorizonKeepsReusePaddingInsideCap)
+{
+    EXPECT_TRUE(near_abs(Game::kepler_prediction_build_horizon_s(3'600.0, 7'200.0),
+                         4'500.0,
+                         1.0e-12));
+    EXPECT_TRUE(near_abs(Game::kepler_prediction_build_horizon_s(7'200.0, 7'200.0),
+                         7'200.0,
+                         1.0e-12));
+    EXPECT_TRUE(near_abs(Game::kepler_prediction_build_horizon_s(7'000.0, 7'200.0),
+                         7'200.0,
+                         1.0e-12));
+    EXPECT_TRUE(near_abs(Game::kepler_prediction_build_horizon_s(7'200.0, 0.0),
+                         9'000.0,
+                         1.0e-12));
+}
+
 TEST(KeplerPrediction, BuilderKeepsFullPlannedOpenOrbitLineWhenUniversalSolverRangeIsExceeded)
 {
     orbitsim::GameSimulation sim = make_single_body_sim();

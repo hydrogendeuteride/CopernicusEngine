@@ -118,6 +118,9 @@ namespace Game
         orbitsim::KeplerStatus first_kepler_failure{orbitsim::KeplerStatus::Ok};
         std::size_t requested_samples{0u};
         std::size_t accepted_samples{0u};
+        std::size_t closed_seam_shifted_arcs{0u};
+        std::size_t closed_seam_shifted_samples{0u};
+        double max_closed_seam_shift_s{0.0};
         bool budget_hit{false};
         std::vector<KeplerArcLineVertex> vertices{};
     };
@@ -213,6 +216,11 @@ namespace Game
         return out;
     }
 
+    void mark_render_seam_sample(LineSampleEvaluation &eval)
+    {
+        eval.vertex.flags |= static_cast<uint32_t>(KeplerArcLineVertexFlags::RenderSeamSample);
+    }
+
     // Keep open-orbit lines drawable when an extreme far endpoint exceeds the solver range.
     bool append_last_valid_sample_before_failed_end(const KeplerArcLineBuildRequest &request,
                                                     const KeplerOrbitArc &game_arc,
@@ -289,6 +297,8 @@ namespace Game
                 record_propagation_failure(out, eval.kepler_status);
                 return false;
             }
+            mark_render_seam_sample(eval);
+            ++out.closed_seam_shifted_samples;
             samples.push_back(eval.vertex);
 
             eval = evaluate_line_sample(request, game_arc, game_arc.arc.t0_s + cross_dt_s, out);
@@ -297,7 +307,11 @@ namespace Game
                 record_propagation_failure(out, eval.kepler_status);
                 return false;
             }
+            mark_render_seam_sample(eval);
+            ++out.closed_seam_shifted_samples;
             samples.push_back(eval.vertex);
+            ++out.closed_seam_shifted_arcs;
+            out.max_closed_seam_shift_s = std::max(out.max_closed_seam_shift_s, cross_dt_s);
             end_t_s = game_arc.arc.t1_s - cross_dt_s;
         }
         else
@@ -335,7 +349,13 @@ namespace Game
                                                               out,
                                                               samples);
         }
-        samples.push_back(end_eval.vertex);
+        LineSampleEvaluation accepted_end = end_eval;
+        if (!kepler_same_sample_time(end_t_s, game_arc.arc.t1_s))
+        {
+            mark_render_seam_sample(accepted_end);
+            ++out.closed_seam_shifted_samples;
+        }
+        samples.push_back(accepted_end.vertex);
         return true;
     }
 
@@ -536,7 +556,7 @@ namespace Game
         const std::size_t vertex_count = out.vertices.size();
         for (std::size_t i = 0; i < vertex_count; ++i)
         {
-            out.vertices[i].flags = arc_line_vertex_flags(i, vertex_count, arc_index, arc_count);
+            out.vertices[i].flags |= arc_line_vertex_flags(i, vertex_count, arc_index, arc_count);
         }
     }
 
@@ -629,6 +649,11 @@ namespace Game
                                              allowed_samples);
             out.diagnostics.requested_samples += arc_lines.requested_samples;
             out.diagnostics.accepted_samples += arc_lines.accepted_samples;
+            out.diagnostics.closed_seam_shifted_arcs += arc_lines.closed_seam_shifted_arcs;
+            out.diagnostics.closed_seam_shifted_samples += arc_lines.closed_seam_shifted_samples;
+            out.diagnostics.max_closed_seam_shift_s =
+                    std::max(out.diagnostics.max_closed_seam_shift_s,
+                             arc_lines.max_closed_seam_shift_s);
             out.diagnostics.budget_hit = out.diagnostics.budget_hit || arc_lines.budget_hit;
             if (arc_lines.status != KeplerOrbitStatus::Ok &&
                 out.diagnostics.status == KeplerOrbitStatus::Ok)

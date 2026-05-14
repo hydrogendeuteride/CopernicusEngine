@@ -327,9 +327,10 @@ namespace GameAPI
 
 void PickingSystem::clear_line_picks() {}
 
-uint32_t PickingSystem::add_line_pick_group(std::string owner_name)
+uint32_t PickingSystem::add_line_pick_group(std::string owner_name, const LinePickPayload payload)
 {
     (void) owner_name;
+    (void) payload;
     return 0;
 }
 

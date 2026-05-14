@@ -1592,6 +1592,7 @@ bool PickingSystem::pick_line_at_window_pos(const glm::vec2 &window_pos, PickInf
     out_pick.firstIndex = 0;
     out_pick.surfaceIndex = 0;
     out_pick.time_s = hit_time_s;
+    out_pick.line_payload = group.payload;
     out_pick.kind = PickInfo::Kind::Line;
     out_pick.selectionLevel = SelectionLevel::Object;
     out_pick.valid = true;
@@ -1629,6 +1630,7 @@ void PickingSystem::set_pick_from_hit(const RenderObject &hit_object, const Worl
     out_pick.indexCount = hit_object.indexCount;
     out_pick.surfaceIndex = hit_object.surfaceIndex;
     out_pick.time_s = std::numeric_limits<double>::quiet_NaN();
+    out_pick.line_payload = {};
     out_pick.kind = PickInfo::Kind::SceneObject;
     out_pick.selectionLevel = SelectionLevel::Primitive;
     out_pick.valid = true;
@@ -1699,6 +1701,7 @@ void PickingSystem::clear_pick(PickInfo &pick) const
     pick.firstIndex = 0;
     pick.surfaceIndex = 0;
     pick.time_s = std::numeric_limits<double>::quiet_NaN();
+    pick.line_payload = {};
     pick.kind = PickInfo::Kind::None;
     pick.selectionLevel = SelectionLevel::None;
     pick.valid = false;
@@ -1711,10 +1714,11 @@ void PickingSystem::clear_line_picks()
     _line_pick_batches.clear();
 }
 
-uint32_t PickingSystem::add_line_pick_group(std::string owner_name)
+uint32_t PickingSystem::add_line_pick_group(std::string owner_name, const LinePickPayload payload)
 {
     LinePickGroup g{};
     g.owner_name = std::move(owner_name);
+    g.payload = payload;
     const uint32_t id = static_cast<uint32_t>(_line_pick_groups.size());
     _line_pick_groups.push_back(std::move(g));
     return id;

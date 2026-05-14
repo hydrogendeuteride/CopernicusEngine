@@ -503,6 +503,7 @@ namespace Game
                            PickingSystem *picking,
                            const bool emit_pick,
                            const char *pick_owner_name,
+                           const Picking::LinePickPayload pick_payload,
                            const char *line_role,
                            const KeplerArcLineSet &line_set,
                            const glm::vec4 &color,
@@ -522,7 +523,7 @@ namespace Game
             const bool pick_enabled = emit_pick && picking != nullptr && pick_owner_name != nullptr;
             if (pick_enabled)
             {
-                pick_group = picking->add_line_pick_group(pick_owner_name);
+                pick_group = picking->add_line_pick_group(pick_owner_name, pick_payload);
             }
 
             std::vector<OrbitPlotSystem::LineCommand> lines{};
@@ -777,10 +778,14 @@ namespace Game
                 // visual context and should not create maneuver handles.
                 const std::string base_owner =
                         kepler_orbit_pick_owner(KeplerManeuverOrbitPickRole::Base, track.label);
+                const Picking::LinePickPayload base_payload =
+                        KeplerManeuverPick::make_payload(KeplerManeuverOrbitPickRole::Base,
+                                                         track.entity);
                 emit_line_set(*context.orbit_plot,
                               context.picking,
                               context.emit_pick && track.active_player && !track.celestial,
                               base_owner.c_str(),
+                              base_payload,
                               "base",
                               track.base_lines,
                               track_base_color(track, context),
@@ -795,12 +800,16 @@ namespace Game
                 {
                     const std::string planned_owner =
                             kepler_orbit_pick_owner(KeplerManeuverOrbitPickRole::Planned, track.label);
+                    const Picking::LinePickPayload planned_payload =
+                            KeplerManeuverPick::make_payload(KeplerManeuverOrbitPickRole::Planned,
+                                                             track.entity);
                     const float planned_overlay_boost =
                             std::max(context.line_overlay_boost, context.planned_line_overlay_boost);
                     emit_line_set(*context.orbit_plot,
                                   context.picking,
                                   context.emit_pick,
                                   planned_owner.c_str(),
+                                  planned_payload,
                                   "planned",
                                   track.planned_lines,
                                   context.planned_color,

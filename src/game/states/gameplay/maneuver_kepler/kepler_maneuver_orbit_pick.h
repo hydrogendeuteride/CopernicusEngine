@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/picking/line_pick_segment.h"
 #include "game/states/gameplay/maneuver_kepler/kepler_maneuver_types.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_state.h"
 
@@ -20,11 +21,21 @@ namespace Game
         bool valid{false};
         bool line{false};
         std::string_view owner_name{};
+        Picking::LinePickPayload payload{};
         double time_s{0.0};
     };
 
     namespace KeplerManeuverPick
     {
+        constexpr uint32_t kOrbitLinePickPayloadType = 0x4b4f5242u; // KORB
+
+        Picking::LinePickPayload make_payload(
+                KeplerManeuverOrbitPickRole role,
+                EntityId track_entity);
+
+        KeplerManeuverOrbitPickRole payload_role(
+                const Picking::LinePickPayload &payload);
+
         // Reads "KeplerOrbit/Base/<track>" or "KeplerOrbit/Planned/<track>".
         KeplerManeuverOrbitPickRole parse_owner(
                 std::string_view owner_name,

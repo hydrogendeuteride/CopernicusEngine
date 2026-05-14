@@ -84,6 +84,9 @@ public:
         float line_pick_radius_px = 15.0f;
     };
 
+    using LinePickPayload = Picking::LinePickPayload;
+    using LinePickSegmentData = Picking::LinePickSegmentData;
+
     struct PickInfo
     {
         enum class Kind : uint8_t
@@ -112,6 +115,7 @@ public:
         uint32_t surfaceIndex = 0;
         // For Kind::Line picks (e.g. orbit polyline), this is the interpolated time at the hit point if provided.
         double time_s = std::numeric_limits<double>::quiet_NaN();
+        LinePickPayload line_payload{};
         Kind kind = Kind::None;
         SelectionLevel selectionLevel = SelectionLevel::None;
         bool valid = false;
@@ -171,15 +175,13 @@ public:
     OwnerBindingView resolve_owner_binding(RenderObject::OwnerType owner_type,
                                            const std::string &owner_name) const;
 
-    using LinePickSegmentData = Picking::LinePickSegmentData;
-
     // --------------------------------------------------------------------
     // Custom line/polyline pick registration (CPU-only)
     // --------------------------------------------------------------------
     // These pickables are not part of SceneManager::DrawContext; call from gameplay/editor
     // code to make thin debug polylines interactable (e.g., orbit plots).
     void clear_line_picks();
-    uint32_t add_line_pick_group(std::string owner_name);
+    uint32_t add_line_pick_group(std::string owner_name, LinePickPayload payload = {});
     void add_line_pick_segment(uint32_t group_id,
                                const WorldVec3 &a_world,
                                const WorldVec3 &b_world,
@@ -241,6 +243,7 @@ private:
     struct LinePickGroup
     {
         std::string owner_name;
+        LinePickPayload payload{};
     };
 
     struct OwnerBinding

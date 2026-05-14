@@ -264,19 +264,27 @@ namespace Game
                                                         const bool primary_body_auto,
                                                         const orbitsim::BodyId primary_body_id)
     {
+        if (!primary_body_auto && primary_body_id == orbitsim::kInvalidBodyId)
+        {
+            return false;
+        }
+
         KeplerManeuverEditorNode *node = _state.find_node(node_id);
         if (!node)
         {
             return false;
         }
 
-        if (node->primary_body_auto == primary_body_auto && node->primary_body_id == primary_body_id)
+        const orbitsim::BodyId normalized_primary_body_id =
+                primary_body_auto ? orbitsim::kInvalidBodyId : primary_body_id;
+        if (node->primary_body_auto == primary_body_auto &&
+            node->primary_body_id == normalized_primary_body_id)
         {
             return false;
         }
 
         node->primary_body_auto = primary_body_auto;
-        node->primary_body_id = primary_body_id;
+        node->primary_body_id = normalized_primary_body_id;
         return true;
     }
 

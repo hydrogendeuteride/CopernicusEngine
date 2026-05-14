@@ -326,8 +326,18 @@ namespace Game
                                               summary_track->base_arcs.size(),
                                               summary_track->base_lines.vertices.size());
                 draw_kepler_arc_info_table_value("Planned arcs / samples", "%zu / %zu",
-                                               summary_track->planned_arcs.size(),
-                                               summary_track->planned_lines.vertices.size());
+                                                summary_track->planned_arcs.size(),
+                                                summary_track->planned_lines.vertices.size());
+                draw_kepler_arc_info_table_value(
+                        "Base seam shifts", "%zu arcs / %zu samples / %.6f s",
+                        summary_track->base_lines.diagnostics.closed_seam_shifted_arcs,
+                        summary_track->base_lines.diagnostics.closed_seam_shifted_samples,
+                        summary_track->base_lines.diagnostics.max_closed_seam_shift_s);
+                draw_kepler_arc_info_table_value(
+                        "Planned seam shifts", "%zu arcs / %zu samples / %.6f s",
+                        summary_track->planned_line_diagnostics.closed_seam_shifted_arcs,
+                        summary_track->planned_line_diagnostics.closed_seam_shifted_samples,
+                        summary_track->planned_line_diagnostics.max_closed_seam_shift_s);
                 draw_kepler_arc_info_table_value(
                         "Planned status", "%s%s",
                         summary_track->planned_requested

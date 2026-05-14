@@ -61,7 +61,8 @@ namespace
 
     Game::KeplerPredictionState make_prediction_with_active_track(
             const Game::KeplerOrbitArc &base_arc,
-            std::string label = {})
+            std::string label = {},
+            const Game::EntityId entity = Game::EntityId(7))
     {
         Game::KeplerPredictionState prediction{};
         prediction.valid = true;
@@ -69,6 +70,7 @@ namespace
         Game::KeplerPredictionState::Track track{};
         track.valid = true;
         track.active_player = true;
+        track.entity = entity;
         track.label = std::move(label);
         track.primary_body_id = kEarthId;
         track.orbit.valid = true;
@@ -95,14 +97,25 @@ namespace
     }
 
     Game::KeplerManeuverOrbitPickInfo make_orbit_pick(const std::string_view owner_name,
-                                                      const double time_s,
-                                                      const bool line = true)
+                                                       const double time_s,
+                                                       const bool line = true)
     {
         Game::KeplerManeuverOrbitPickInfo pick{};
         pick.valid = true;
         pick.line = line;
         pick.owner_name = owner_name;
         pick.time_s = time_s;
+        return pick;
+    }
+
+    Game::KeplerManeuverOrbitPickInfo make_payload_orbit_pick(
+            const Game::KeplerManeuverOrbitPickRole role,
+            const Game::EntityId entity,
+            const double time_s,
+            const std::string_view owner_name = "KeplerOrbit/Base/Debug")
+    {
+        Game::KeplerManeuverOrbitPickInfo pick = make_orbit_pick(owner_name, time_s);
+        pick.payload = Game::KeplerManeuverPick::make_payload(role, entity);
         return pick;
     }
 } // namespace
@@ -211,6 +224,31 @@ TEST(KeplerManeuverSystem, ConvertsExplicitAndAutoPrimaryBody)
     prediction_nodes = system.prediction_nodes();
     ASSERT_EQ(prediction_nodes.size(), 1u);
     EXPECT_EQ(prediction_nodes[0].primary_body_id, orbitsim::kInvalidBodyId);
+    ASSERT_EQ(system.plan().nodes.size(), 1u);
+    EXPECT_TRUE(system.plan().nodes.front().primary_body_auto);
+    EXPECT_EQ(system.plan().nodes.front().primary_body_id, orbitsim::kInvalidBodyId);
+}
+
+TEST(KeplerManeuverSystem, RejectsInvalidExplicitPrimaryBodySetter)
+{
+    Game::KeplerManeuverSystem system{};
+    ASSERT_TRUE(system.apply_command(Game::KeplerManeuverCommand::add_node(
+            make_node(1, 30.0, {0.0, 0.0, 2.0}))).applied);
+    const uint64_t revision = system.revision();
+
+    const Game::KeplerManeuverCommandResult result =
+            system.apply_command(Game::KeplerManeuverCommand::set_node_primary_body(
+                    1,
+                    false,
+                    orbitsim::kInvalidBodyId));
+
+    EXPECT_FALSE(result.applied);
+    EXPECT_FALSE(result.plan_changed);
+    EXPECT_FALSE(result.prediction_dirty);
+    EXPECT_EQ(system.revision(), revision);
+    ASSERT_EQ(system.plan().nodes.size(), 1u);
+    EXPECT_TRUE(system.plan().nodes.front().primary_body_auto);
+    EXPECT_EQ(system.plan().nodes.front().primary_body_id, orbitsim::kInvalidBodyId);
 }
 
 TEST(KeplerManeuverSystem, RemoveNodeClearsDependentInteraction)
@@ -482,6 +520,34 @@ TEST(KeplerManeuverOrbitPick, ParsesRoleQualifiedOwnerNames)
     EXPECT_EQ(Game::KeplerManeuverPick::parse_owner("OrbitPlot/Base", &label),
               Game::KeplerManeuverOrbitPickRole::None);
     EXPECT_TRUE(label.empty());
+}
+
+TEST(KeplerManeuverOrbitPick, UsesStructuredPayloadBeforeOwnerLabel)
+{
+    const Game::EntityId kPlayerEntity{77};
+    const orbitsim::State primary = orbitsim::make_state({}, {});
+    Game::KeplerPredictionState prediction =
+            make_prediction_with_active_track(make_circular_arc(0.0, 120.0, primary),
+                                              "Player",
+                                              kPlayerEntity);
+    Game::KeplerManeuverPlanState plan{};
+
+    EXPECT_TRUE(Game::KeplerManeuverPick::can_create_node(
+            make_payload_orbit_pick(Game::KeplerManeuverOrbitPickRole::Base,
+                                    kPlayerEntity,
+                                    30.0,
+                                    "KeplerOrbit/Base/Other"),
+            plan,
+            prediction,
+            10.0));
+    EXPECT_FALSE(Game::KeplerManeuverPick::can_create_node(
+            make_payload_orbit_pick(Game::KeplerManeuverOrbitPickRole::Base,
+                                    Game::EntityId(78),
+                                    30.0,
+                                    "KeplerOrbit/Base/Player"),
+            plan,
+            prediction,
+            10.0));
 }
 
 TEST(KeplerManeuverOrbitPick, AllowsBaseOnlyForEmptyPlanAndPlannedOnlyAfterNodesExist)

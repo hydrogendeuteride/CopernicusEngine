@@ -7,6 +7,8 @@
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_state.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_subject.h"
 
+#include <algorithm>
+#include <cmath>
 #include <span>
 #include <vector>
 
@@ -106,6 +108,34 @@ namespace Game
                 .line_include_end = context.line_options.include_end,
                 .line_propagation = make_kepler_propagation_fingerprint(context.line_options.propagation),
         };
+    }
+
+    inline double kepler_prediction_cache_reuse_horizon_s(const double required_horizon_s)
+    {
+        constexpr double kMinReuseS = 10.0 * 60.0;
+        constexpr double kMaxReuseS = 7.0 * 24.0 * 60.0 * 60.0;
+        if (!(required_horizon_s > 0.0) || !std::isfinite(required_horizon_s))
+        {
+            return kMinReuseS;
+        }
+        return std::clamp(required_horizon_s * 0.25, kMinReuseS, kMaxReuseS);
+    }
+
+    inline double kepler_prediction_build_horizon_s(const double required_horizon_s,
+                                                    const double horizon_cap_s)
+    {
+        if (!(required_horizon_s > 0.0) || !std::isfinite(required_horizon_s))
+        {
+            return required_horizon_s;
+        }
+
+        double build_horizon_s =
+                required_horizon_s + kepler_prediction_cache_reuse_horizon_s(required_horizon_s);
+        if (std::isfinite(horizon_cap_s) && horizon_cap_s > 0.0)
+        {
+            build_horizon_s = std::min(build_horizon_s, horizon_cap_s);
+        }
+        return build_horizon_s;
     }
 
     // Owns Kepler prediction state, caching, update, and draw dispatch.
