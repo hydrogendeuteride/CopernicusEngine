@@ -62,7 +62,7 @@ namespace Game
 
     // Returns the horizon needed for the post-burn preview segment.
     double required_kepler_planned_preview_horizon_s(
-            double t0_s,
+            const KeplerArcBuildResult &orbit,
             const KeplerManeuverNode *nodes,
             std::size_t node_count,
             const KeplerPredictionOptions &options);

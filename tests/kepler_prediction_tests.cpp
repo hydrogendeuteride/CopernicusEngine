@@ -393,6 +393,60 @@ TEST(KeplerPrediction, ManeuverNodeHorizonCoversLatestFutureNode)
     EXPECT_EQ(Game::required_kepler_maneuver_node_horizon_s(10.0, nullptr, 0u), 0.0);
 }
 
+TEST(KeplerPrediction, PlannedPreviewHorizonUsesPostBurnEllipticPeriod)
+{
+    orbitsim::GameSimulation sim = make_single_body_sim();
+    Game::KeplerPredictionBuildRequest request = make_request(sim);
+    request.requested_horizon_s = 120.0;
+    request.options.open_orbit_window_s = 600.0;
+
+    Game::KeplerArcBuildRequest orbit_request{};
+    orbit_request.simulation = request.simulation;
+    orbit_request.subject_state_inertial = request.subject_state_inertial;
+    orbit_request.t0_s = request.t0_s;
+    orbit_request.requested_horizon_s = request.requested_horizon_s;
+    orbit_request.fixed_primary_body_id = request.fixed_primary_body_id;
+    orbit_request.current_primary_body_id = request.current_primary_body_id;
+    orbit_request.options = request.options;
+    const Game::KeplerArcBuildResult orbit = Game::build_kepler_arc(orbit_request);
+    ASSERT_TRUE(orbit.valid) << Game::kepler_orbit_status_name(orbit.status);
+
+    const std::vector<Game::KeplerManeuverNode> nodes{
+            Game::KeplerManeuverNode{
+                    .node_id = 4,
+                    .t_s = request.t0_s + 60.0,
+                    .primary_body_id = kEarthId,
+                    .dv_rtn_mps = {0.0, 1'500.0, 0.0},
+            },
+    };
+
+    Game::KeplerOrbitArc maneuver_base = orbit.base_arc;
+    maneuver_base.arc.t1_s = nodes.front().t_s + 1.0;
+    const Game::KeplerManeuverArcBuildResult planned =
+            Game::build_kepler_maneuver_arc_chain(maneuver_base,
+                                                  std::span<const Game::KeplerManeuverNode>(
+                                                          nodes.data(),
+                                                          nodes.size()),
+                                                  request.options.propagation);
+    ASSERT_TRUE(planned.valid) << Game::kepler_orbit_status_name(planned.status);
+    ASSERT_FALSE(planned.arcs.empty());
+    const Game::KeplerArcMetrics metrics = Game::compute_kepler_arc_metrics(planned.arcs.back());
+    ASSERT_TRUE(metrics.valid);
+    EXPECT_GT(metrics.eccentricity, 0.35);
+
+    const double horizon_s =
+            Game::required_kepler_planned_preview_horizon_s(orbit,
+                                                            nodes.data(),
+                                                            nodes.size(),
+                                                            request.options);
+
+    EXPECT_GT(horizon_s,
+              (nodes.front().t_s - request.t0_s) + request.options.open_orbit_window_s);
+    EXPECT_TRUE(near_abs(horizon_s,
+                         (nodes.front().t_s - request.t0_s) + metrics.period_s,
+                         1.0e-6));
+}
+
 TEST(KeplerPrediction, InputFingerprintTracksCacheRelevantSettings)
 {
     Game::KeplerPredictionUpdateContext context{};

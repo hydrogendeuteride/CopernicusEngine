@@ -339,15 +339,23 @@ namespace Game
             bool capped{false};
         };
 
-        // Estimates one subject's required display horizon.
-        double estimate_track_horizon_s(const KeplerPredictionSubject &subject,
-                                        const KeplerPredictionUpdateContext &context,
-                                        const KeplerWorldFrame &world_frame,
-                                        const orbitsim::BodyId previous_primary_body_id)
+        struct EstimatedTrackHorizon
         {
+            double base_horizon_s{0.0};
+            double planned_preview_horizon_s{0.0};
+        };
+
+        // Estimates one subject's required display horizon.
+        EstimatedTrackHorizon estimate_track_horizon_s(
+                const KeplerPredictionSubject &subject,
+                const KeplerPredictionUpdateContext &context,
+                const KeplerWorldFrame &world_frame,
+                const orbitsim::BodyId previous_primary_body_id)
+        {
+            EstimatedTrackHorizon out{};
             if (!context.orbit || !context.orbit->scenario())
             {
-                return 0.0;
+                return out;
             }
 
             const orbitsim::GameSimulation &simulation = context.orbit->scenario()->sim;
@@ -366,9 +374,22 @@ namespace Game
             request.options = context.options;
 
             const KeplerArcBuildResult orbit = build_kepler_arc(request);
-            return (orbit.valid && std::isfinite(orbit.horizon_s) && orbit.horizon_s > 0.0)
-                           ? orbit.horizon_s
-                           : 0.0;
+            if (!orbit.valid || !std::isfinite(orbit.horizon_s) || !(orbit.horizon_s > 0.0))
+            {
+                return out;
+            }
+
+            out.base_horizon_s = orbit.horizon_s;
+            if (subject.active_player && !context.maneuver_nodes.empty())
+            {
+                out.planned_preview_horizon_s =
+                        required_kepler_planned_preview_horizon_s(
+                                orbit,
+                                context.maneuver_nodes.data(),
+                                context.maneuver_nodes.size(),
+                                context.options);
+            }
+            return out;
         }
 
         // Resolves the shared celestial ephemeris horizon.
@@ -382,37 +403,29 @@ namespace Game
             double patched_conics_horizon_floor_s = 0.0;
             for (const KeplerPredictionSubject &subject : subjects)
             {
-                const double track_horizon_s =
+                const EstimatedTrackHorizon track_horizon =
                         estimate_track_horizon_s(subject,
                                                  context,
                                                  world_frame,
                                                  previous_primary_body_id);
                 uncapped_horizon_s = std::max(uncapped_horizon_s,
-                                              track_horizon_s);
+                                              track_horizon.base_horizon_s);
+                uncapped_horizon_s = std::max(uncapped_horizon_s,
+                                              track_horizon.planned_preview_horizon_s);
                 if (context.options.patched_conics.enabled && !subject.celestial)
                 {
                     patched_conics_horizon_floor_s = std::max(patched_conics_horizon_floor_s,
-                                                              track_horizon_s);
+                                                              track_horizon.base_horizon_s);
+                    patched_conics_horizon_floor_s = std::max(patched_conics_horizon_floor_s,
+                                                              track_horizon.planned_preview_horizon_s);
                 }
             }
             const double maneuver_node_horizon_s =
                     required_kepler_maneuver_node_horizon_s(context.current_sim_time_s,
-                                                            context.maneuver_nodes.data(),
-                                                            context.maneuver_nodes.size());
+                                                             context.maneuver_nodes.data(),
+                                                             context.maneuver_nodes.size());
             uncapped_horizon_s = std::max(uncapped_horizon_s,
                                           maneuver_node_horizon_s);
-            const double planned_preview_horizon_s =
-                    required_kepler_planned_preview_horizon_s(context.current_sim_time_s,
-                                                              context.maneuver_nodes.data(),
-                                                              context.maneuver_nodes.size(),
-                                                              context.options);
-            uncapped_horizon_s = std::max(uncapped_horizon_s,
-                                          planned_preview_horizon_s);
-            if (context.options.patched_conics.enabled)
-            {
-                patched_conics_horizon_floor_s = std::max(patched_conics_horizon_floor_s,
-                                                          planned_preview_horizon_s);
-            }
 
             if (!(uncapped_horizon_s > 0.0) || !std::isfinite(uncapped_horizon_s))
             {
@@ -451,12 +464,12 @@ namespace Game
                             ? context.line_options.max_time_step_s
                             : 10.0;
 
-            if (context.options.patched_conics.enabled && context.maneuver_nodes.empty())
+            if (context.options.patched_conics.enabled)
             {
                 return 0.05;
             }
 
-            if (context.options.patched_conics.enabled || !context.maneuver_nodes.empty())
+            if (!context.maneuver_nodes.empty())
             {
                 return std::clamp(source_dt_s, 1.0, 60.0);
             }
@@ -501,6 +514,7 @@ namespace Game
             }
 
             const double elapsed_s = context.current_sim_time_s - state.build_time_s;
+            const double sim_interval_s = prediction_rebuild_interval_s(context);
             const double wall_interval_s = prediction_rebuild_wall_interval_s(context);
             if (wall_interval_s > 0.0 &&
                 std::isfinite(state.build_wall_time_s) &&
@@ -508,13 +522,14 @@ namespace Game
                 context.current_wall_time_s >= state.build_wall_time_s)
             {
                 const double wall_elapsed_s = context.current_wall_time_s - state.build_wall_time_s;
-                if (wall_elapsed_s < wall_interval_s)
+                if (wall_elapsed_s < wall_interval_s &&
+                    elapsed_s < sim_interval_s)
                 {
                     return true;
                 }
             }
 
-            if (elapsed_s < prediction_rebuild_interval_s(context))
+            if (elapsed_s < sim_interval_s)
             {
                 return true;
             }
@@ -526,7 +541,8 @@ namespace Game
             {
                 constexpr double kPlannedWallRebuildIntervalS = 0.20;
                 return (context.current_wall_time_s - state.build_wall_time_s) <
-                       kPlannedWallRebuildIntervalS;
+                               kPlannedWallRebuildIntervalS &&
+                       elapsed_s < sim_interval_s;
             }
 
             return false;

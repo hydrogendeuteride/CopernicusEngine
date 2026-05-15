@@ -165,16 +165,20 @@ namespace Game
                        : 0.0;
     }
 
-    double required_kepler_planned_preview_horizon_s(const double t0_s,
+    double required_kepler_planned_preview_horizon_s(const KeplerArcBuildResult &orbit,
                                                      const KeplerManeuverNode *nodes,
                                                      const std::size_t node_count,
                                                      const KeplerPredictionOptions &options)
     {
-        if (!std::isfinite(t0_s) || !nodes || node_count == 0u)
+        if (!orbit.valid ||
+            !std::isfinite(orbit.base_arc.arc.t0_s) ||
+            !nodes ||
+            node_count == 0u)
         {
             return 0.0;
         }
 
+        const double t0_s = orbit.base_arc.arc.t0_s;
         double latest_future_node_t_s = -std::numeric_limits<double>::infinity();
         for (std::size_t i = 0; i < node_count; ++i)
         {
@@ -189,10 +193,39 @@ namespace Game
             return 0.0;
         }
 
-        const double preview_horizon_s =
+        const double fallback_preview_horizon_s =
                 kepler_positive_or_default(options.open_orbit_window_s,
-                                           24.0 * 60.0 * 60.0);
-        return (latest_future_node_t_s - t0_s) + preview_horizon_s;
+                                            24.0 * 60.0 * 60.0);
+        const double fallback_horizon_s = (latest_future_node_t_s - t0_s) +
+                                          fallback_preview_horizon_s;
+
+        KeplerOrbitArc maneuver_base_arc = orbit.base_arc;
+        if (latest_future_node_t_s >= maneuver_base_arc.arc.t1_s)
+        {
+            maneuver_base_arc.arc.t1_s = latest_future_node_t_s + kPostLastManeuverNodePadS;
+        }
+
+        const KeplerManeuverArcBuildResult planned =
+                build_kepler_maneuver_arc_chain(maneuver_base_arc,
+                                                std::span<const KeplerManeuverNode>(nodes, node_count),
+                                                options.propagation);
+        if (!planned.valid || planned.arcs.empty())
+        {
+            return fallback_horizon_s;
+        }
+
+        const KeplerOrbitArc &last_arc = planned.arcs.back();
+        const double preview_horizon_s = select_kepler_arc_horizon_s(last_arc.arc, options);
+        const double preview_end_s = last_arc.arc.t0_s + preview_horizon_s;
+        if (!std::isfinite(preview_horizon_s) ||
+            !(preview_horizon_s > 0.0) ||
+            !std::isfinite(preview_end_s) ||
+            !(preview_end_s > t0_s))
+        {
+            return fallback_horizon_s;
+        }
+
+        return preview_end_s - t0_s;
     }
 
     // Builds one subject's base and optional maneuver prediction.
