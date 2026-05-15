@@ -100,6 +100,7 @@ set(GAME_ORBIT_KEPLER_SOURCES
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_celestial_nbody.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_primary_resolver.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_patched_conics_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_line_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_info.cpp"
 )
@@ -231,6 +232,7 @@ add_test(NAME kepler_orbit_tests COMMAND kepler_orbit_tests)
 
 add_executable(kepler_prediction_tests
   kepler_prediction_tests.cpp
+  kepler_prediction_patched_planned_tests.cpp
   ${GAME_ORBIT_KEPLER_SOURCES}
   "${PROJECT_SOURCE_DIR}/src/game/states/gameplay/prediction_kepler/kepler_prediction_builder.cpp"
 )

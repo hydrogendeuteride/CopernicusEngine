@@ -56,6 +56,9 @@ namespace Game
         kepler_context.enabled = _prediction->state().enabled;
         kepler_context.current_sim_time_s = sim_time_s;
         kepler_context.current_wall_time_s = static_cast<double>(_elapsed);
+        kepler_context.rails_warp_active =
+                _orbital_physics.rails_warp_active() &&
+                _time_warp.mode == TimeWarpState::Mode::RailsWarp;
         kepler_context.options = _kepler_prediction_options;
         kepler_context.line_options = _kepler_arc_line_options;
         kepler_context.maneuver_nodes = _kepler_maneuver.prediction_nodes();

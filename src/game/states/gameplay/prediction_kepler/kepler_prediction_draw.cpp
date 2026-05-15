@@ -780,7 +780,7 @@ namespace Game
                         kepler_orbit_pick_owner(KeplerManeuverOrbitPickRole::Base, track.label);
                 const Picking::LinePickPayload base_payload =
                         KeplerManeuverPick::make_payload(KeplerManeuverOrbitPickRole::Base,
-                                                         track.entity);
+                                                          track.entity);
                 emit_line_set(*context.orbit_plot,
                               context.picking,
                               context.emit_pick && track.active_player && !track.celestial,

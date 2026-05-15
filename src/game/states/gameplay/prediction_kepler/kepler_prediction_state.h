@@ -49,6 +49,17 @@ namespace Game
         bool operator==(const KeplerCelestialNBodyEphemerisFingerprint &) const = default;
     };
 
+    struct KeplerPatchedConicsFingerprint
+    {
+        bool enabled{false};
+        std::size_t max_patches{0};
+        double max_search_step_s{0.0};
+        double refine_tolerance_s{0.0};
+        double min_patch_duration_s{0.0};
+
+        bool operator==(const KeplerPatchedConicsFingerprint &) const = default;
+    };
+
     struct KeplerPredictionInputFingerprint
     {
         double requested_horizon_s{0.0};
@@ -67,6 +78,7 @@ namespace Game
         KeplerSoiSwitchOptionsFingerprint primary_switch{};
         KeplerPropagationOptionsFingerprint prediction_propagation{};
         KeplerCelestialNBodyEphemerisFingerprint celestial_nbody_ephemeris{};
+        KeplerPatchedConicsFingerprint patched_conics{};
 
         double line_max_time_step_s{0.0};
         double line_min_time_step_s{0.0};
@@ -105,6 +117,8 @@ namespace Game
             orbitsim::KeplerPropagationOptions line_propagation{};
             std::vector<KeplerOrbitArc> base_arcs{};
             std::vector<KeplerOrbitArc> planned_arcs{};
+            std::vector<KeplerPatchEvent> base_patch_events{};
+            std::vector<KeplerPatchEvent> planned_patch_events{};
             KeplerArcLineSet base_lines{};
             KeplerArcLineSet planned_lines{};
             bool planned_requested{false};

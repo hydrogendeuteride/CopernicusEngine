@@ -38,6 +38,8 @@ namespace Game
         KeplerArcBuildResult orbit{};
         std::vector<KeplerOrbitArc> base_arcs{};
         std::vector<KeplerOrbitArc> planned_arcs{};
+        std::vector<KeplerPatchEvent> base_patch_events{};
+        std::vector<KeplerPatchEvent> planned_patch_events{};
         KeplerArcLineSet base_lines{};
         KeplerArcLineSet planned_lines{};
         bool planned_requested{false};
@@ -57,4 +59,11 @@ namespace Game
             double t0_s,
             const KeplerManeuverNode *nodes,
             std::size_t node_count);
+
+    // Returns the horizon needed for the post-burn preview segment.
+    double required_kepler_planned_preview_horizon_s(
+            double t0_s,
+            const KeplerManeuverNode *nodes,
+            std::size_t node_count,
+            const KeplerPredictionOptions &options);
 } // namespace Game

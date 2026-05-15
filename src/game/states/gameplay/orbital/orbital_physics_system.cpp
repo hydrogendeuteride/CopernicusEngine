@@ -9,6 +9,7 @@
 #include "game/states/gameplay/orbital/orbiter_state_bridge.h"
 #include "game/states/gameplay/scenario/scenario_config.h"
 #include "game/state/game_state.h"
+#include "orbitsim/detail/simulation_stepping.hpp"
 #include "orbitsim/kepler_trajectory.hpp"
 #include "orbitsim/soi.hpp"
 #include "physics/physics_context.h"
@@ -30,6 +31,10 @@ namespace Game
 
     namespace
     {
+        constexpr double kRuntimePatchTimeEpsilonS = 1.0e-9;
+        constexpr double kRuntimePatchRefineToleranceS = 0.25;
+        constexpr std::size_t kRuntimeMaxPatchesPerStep = 8u;
+
         bool finite_state(const orbitsim::State &state)
         {
             return finite_vec3(state.position_m) &&
@@ -37,6 +42,319 @@ namespace Game
                    finite_vec3(state.spin.axis) &&
                    std::isfinite(state.spin.angle_rad) &&
                    std::isfinite(state.spin.rate_rad_per_s);
+        }
+
+        orbitsim::CelestialEphemeris make_runtime_step_ephemeris(
+                const std::vector<orbitsim::BodyId> &body_ids,
+                const std::vector<orbitsim::State> &start_states,
+                const std::vector<orbitsim::State> &end_states,
+                const double t0_s,
+                const double t1_s)
+        {
+            orbitsim::CelestialEphemeris ephemeris{};
+            if (body_ids.empty() ||
+                body_ids.size() != start_states.size() ||
+                body_ids.size() != end_states.size() ||
+                !std::isfinite(t0_s) ||
+                !std::isfinite(t1_s))
+            {
+                return ephemeris;
+            }
+
+            ephemeris.set_body_ids(body_ids);
+            orbitsim::CelestialEphemerisSegment segment{};
+            segment.t0_s = t0_s;
+            segment.dt_s = t1_s - t0_s;
+            segment.start = start_states;
+            segment.end = end_states;
+            ephemeris.segments.push_back(std::move(segment));
+            return ephemeris;
+        }
+
+        void capture_runtime_body_start_states(const orbitsim::GameSimulation &sim,
+                                               std::vector<orbitsim::BodyId> &body_ids,
+                                               std::vector<orbitsim::State> &body_states)
+        {
+            body_ids.clear();
+            body_states.clear();
+            body_ids.reserve(sim.massive_bodies().size());
+            body_states.reserve(sim.massive_bodies().size());
+
+            for (const orbitsim::MassiveBody &body : sim.massive_bodies())
+            {
+                if (finite_state(body.state))
+                {
+                    body_ids.push_back(body.id);
+                    body_states.push_back(body.state);
+                }
+            }
+        }
+
+        bool capture_runtime_body_end_states(const orbitsim::GameSimulation &sim,
+                                             const std::vector<orbitsim::BodyId> &body_ids,
+                                             std::vector<orbitsim::State> &body_states)
+        {
+            body_states.clear();
+            body_states.reserve(body_ids.size());
+
+            for (const orbitsim::BodyId body_id : body_ids)
+            {
+                const orbitsim::MassiveBody *body = sim.body_by_id(body_id);
+                if (!body || !finite_state(body->state))
+                {
+                    body_states.clear();
+                    return false;
+                }
+                body_states.push_back(body->state);
+            }
+            return body_states.size() == body_ids.size();
+        }
+
+        bool step_runtime_massive_bodies_only(orbitsim::GameSimulation &sim, const double dt_s)
+        {
+            if (!(dt_s != 0.0) || !std::isfinite(dt_s))
+            {
+                return true;
+            }
+
+            const double G = sim.config().gravitational_constant;
+            if (!(G > 0.0) || !std::isfinite(G))
+            {
+                return false;
+            }
+
+            std::vector<orbitsim::MassiveBody> bodies = sim.massive_bodies();
+            double t_s = sim.time_s();
+            orbitsim::detail::preview_step_massive_bodies(bodies,
+                                                          t_s,
+                                                          dt_s,
+                                                          G,
+                                                          sim.config().softening_length_m,
+                                                          nullptr);
+            for (const orbitsim::MassiveBody &body : bodies)
+            {
+                if (!sim.has_body(body.id) ||
+                    !finite_vec3(body.state.position_m) ||
+                    !finite_vec3(body.state.velocity_mps) ||
+                    !finite_vec3(body.state.spin.axis) ||
+                    !std::isfinite(body.state.spin.angle_rad) ||
+                    !std::isfinite(body.state.spin.rate_rad_per_s))
+                {
+                    return false;
+                }
+            }
+            for (const orbitsim::MassiveBody &body : bodies)
+            {
+                if (!sim.set_body_state(body.id, body.state))
+                {
+                    return false;
+                }
+            }
+            return sim.set_time_s(t_s);
+        }
+
+        bool body_state_at_runtime(const orbitsim::GameSimulation &sim,
+                                   const orbitsim::CelestialEphemeris &ephemeris,
+                                   const orbitsim::BodyId body_id,
+                                   const double t_s,
+                                   orbitsim::State &out_state)
+        {
+            const orbitsim::MassiveBody *body = sim.body_by_id(body_id);
+            if (!body)
+            {
+                return false;
+            }
+            out_state = !ephemeris.empty()
+                                ? ephemeris.body_state_at_by_id(body_id, t_s)
+                                : body->state;
+            return finite_state(out_state);
+        }
+
+        bool sample_runtime_arc_inertial_state(const orbitsim::GameSimulation &sim,
+                                               const orbitsim::CelestialEphemeris &ephemeris,
+                                               const orbitsim::KeplerArc &arc,
+                                               const double t_s,
+                                               const orbitsim::KeplerPropagationOptions &propagation,
+                                               orbitsim::State &out_state)
+        {
+            const orbitsim::KeplerArcSample sample =
+                    orbitsim::sample_kepler_arc_state(arc, t_s, propagation);
+            if (!sample.ok() || !finite_state(sample.state_relative))
+            {
+                return false;
+            }
+
+            orbitsim::State primary_state{};
+            if (!body_state_at_runtime(sim, ephemeris, arc.primary_body_id, t_s, primary_state))
+            {
+                return false;
+            }
+
+            out_state = sample.state_relative;
+            out_state.position_m += primary_state.position_m;
+            out_state.velocity_mps += primary_state.velocity_mps;
+            return finite_state(out_state);
+        }
+
+        bool propagate_spacecraft_patched_conics_step(
+                const orbitsim::GameSimulation &sim,
+                const orbitsim::CelestialEphemeris &ephemeris,
+                const orbitsim::State &spacecraft0,
+                const orbitsim::BodyId primary0_id,
+                const double t0_s,
+                const double t1_s,
+                const OrbitalPhysicsSystem::Context &context,
+                orbitsim::State &out_state,
+                orbitsim::BodyId &out_primary_id)
+        {
+            if (!finite_state(spacecraft0) ||
+                primary0_id == orbitsim::kInvalidBodyId ||
+                !std::isfinite(t0_s) ||
+                !std::isfinite(t1_s) ||
+                t1_s <= t0_s)
+            {
+                return false;
+            }
+
+            const double G = sim.config().gravitational_constant;
+            if (!(G > 0.0) || !std::isfinite(G))
+            {
+                return false;
+            }
+
+            double cursor_t_s = t0_s;
+            orbitsim::State cursor_state = spacecraft0;
+            orbitsim::BodyId current_primary_id = primary0_id;
+
+            for (std::size_t patch_index = 0u;
+                 patch_index < kRuntimeMaxPatchesPerStep &&
+                 cursor_t_s < t1_s - kRuntimePatchTimeEpsilonS;
+                 ++patch_index)
+            {
+                const orbitsim::MassiveBody *primary = sim.body_by_id(current_primary_id);
+                if (!primary || !(primary->mass_kg > 0.0) || !std::isfinite(primary->mass_kg))
+                {
+                    return false;
+                }
+
+                orbitsim::State primary_state{};
+                if (!body_state_at_runtime(sim, ephemeris, current_primary_id, cursor_t_s, primary_state))
+                {
+                    return false;
+                }
+
+                orbitsim::KeplerArc arc{
+                        .mu_m3_s2 = G * primary->mass_kg,
+                        .primary_body_id = current_primary_id,
+                        .t0_s = cursor_t_s,
+                        .t1_s = t1_s,
+                        .state0_relative = orbitsim::make_state(
+                                cursor_state.position_m - primary_state.position_m,
+                                cursor_state.velocity_mps - primary_state.velocity_mps,
+                                cursor_state.spin),
+                };
+                if (!orbitsim::kepler_arc_valid(arc))
+                {
+                    return false;
+                }
+
+                orbitsim::SoiTransitionSearchOptions transition_options{};
+                transition_options.max_step_s =
+                        (std::isfinite(context.soi_kepler_max_step_s) &&
+                         context.soi_kepler_max_step_s > 0.0)
+                                ? context.soi_kepler_max_step_s
+                                : 60.0;
+                transition_options.refine_tolerance_s = kRuntimePatchRefineToleranceS;
+                transition_options.switch_options = context.soi_switch_options;
+                transition_options.propagation = context.kepler_propagation;
+
+                const orbitsim::SoiTransitionSearchResult transition =
+                        orbitsim::find_next_soi_transition_on_kepler_arc(sim,
+                                                                         ephemeris,
+                                                                         arc,
+                                                                         current_primary_id,
+                                                                         t1_s,
+                                                                         transition_options);
+                if (transition.first_failure != orbitsim::KeplerStatus::Ok)
+                {
+                    return false;
+                }
+
+                double cut_t_s = t1_s;
+                orbitsim::BodyId next_primary_id = current_primary_id;
+                if (transition.found &&
+                    transition.to_primary_body_id != orbitsim::kInvalidBodyId &&
+                    transition.t_s > cursor_t_s + kRuntimePatchTimeEpsilonS &&
+                    transition.t_s < t1_s - kRuntimePatchTimeEpsilonS)
+                {
+                    cut_t_s = transition.t_s;
+                    next_primary_id = transition.to_primary_body_id;
+                }
+
+                orbitsim::State cut_state{};
+                if (!sample_runtime_arc_inertial_state(sim,
+                                                       ephemeris,
+                                                       arc,
+                                                       cut_t_s,
+                                                       context.kepler_propagation,
+                                                       cut_state))
+                {
+                    return false;
+                }
+
+                cursor_state = cut_state;
+                cursor_t_s = cut_t_s;
+                current_primary_id = next_primary_id;
+
+                if (cut_t_s >= t1_s - kRuntimePatchTimeEpsilonS)
+                {
+                    out_state = cursor_state;
+                    out_primary_id = current_primary_id;
+                    return true;
+                }
+            }
+
+            if (cursor_t_s >= t1_s - kRuntimePatchTimeEpsilonS)
+            {
+                out_state = cursor_state;
+                out_primary_id = current_primary_id;
+                return true;
+            }
+            return false;
+        }
+
+        const orbitsim::MassiveBody *cached_or_selected_soi_primary_body(
+                const OrbitalScenario &scenario,
+                const glm::dvec3 &spacecraft_position_m,
+                orbitsim::BodyId *cached_primary_body_id,
+                const orbitsim::SoiSwitchOptions &options)
+        {
+            if (cached_primary_body_id && *cached_primary_body_id != orbitsim::kInvalidBodyId)
+            {
+                const orbitsim::MassiveBody *cached = scenario.sim.body_by_id(*cached_primary_body_id);
+                if (cached &&
+                    cached->mass_kg > 0.0 &&
+                    std::isfinite(cached->mass_kg) &&
+                    finite_state(cached->state) &&
+                    cached->soi_radius_m > 0.0 &&
+                    std::isfinite(cached->soi_radius_m))
+                {
+                    const double exit_scale =
+                            std::isfinite(options.exit_scale) ? std::max(0.0, options.exit_scale) : 0.0;
+                    const double keep_radius_m = exit_scale * cached->soi_radius_m;
+                    const double distance_m =
+                            glm::length(spacecraft_position_m - glm::dvec3(cached->state.position_m));
+                    if (std::isfinite(distance_m) && distance_m <= keep_radius_m)
+                    {
+                        return cached;
+                    }
+                }
+            }
+
+            return select_soi_primary_body(scenario,
+                                           spacecraft_position_m,
+                                           cached_primary_body_id,
+                                           options);
         }
 
         glm::dvec3 spacecraft_gravity_accel_body_centered(const OrbitalPhysicsSystem::Context &context,
@@ -83,6 +401,7 @@ namespace Game
             {
                 orbitsim::SpacecraftId spacecraft_id{orbitsim::kInvalidSpacecraftId};
                 orbitsim::BodyId primary_id{orbitsim::kInvalidBodyId};
+                orbitsim::BodyId *primary_cache{nullptr};
                 orbitsim::State spacecraft0{};
                 orbitsim::State primary0{};
                 double mu{};
@@ -93,12 +412,24 @@ namespace Game
                     (std::isfinite(context.soi_kepler_max_step_s) && context.soi_kepler_max_step_s > 0.0)
                             ? context.soi_kepler_max_step_s
                             : 60.0;
+            std::vector<Patch> patches;
+            patches.reserve(context.orbit.orbiters().size());
+            std::vector<orbitsim::BodyId> body_ids;
+            std::vector<orbitsim::State> body_start_states;
+            std::vector<orbitsim::State> body_end_states;
+            orbitsim::CelestialEphemeris step_ephemeris{};
+
             double remaining_s = dt_s;
             while (std::isfinite(remaining_s) && remaining_s != 0.0)
             {
                 const double step_s = std::copysign(std::min(std::abs(remaining_s), max_step_s), remaining_s);
                 const double t0_s = scenario->sim.time_s();
-                std::vector<Patch> patches;
+                patches.clear();
+                body_ids.clear();
+                body_start_states.clear();
+                body_end_states.clear();
+                step_ephemeris = {};
+                bool step_ephemeris_ready = false;
 
                 if (std::isfinite(G) && G > 0.0)
                 {
@@ -114,10 +445,10 @@ namespace Game
                         }
 
                         const orbitsim::MassiveBody *primary =
-                                select_soi_primary_body(*scenario,
-                                                        spacecraft->state.position_m,
-                                                        &orbiter.soi_kepler_primary_body_id,
-                                                        context.soi_switch_options);
+                                cached_or_selected_soi_primary_body(*scenario,
+                                                                    spacecraft->state.position_m,
+                                                                    &orbiter.soi_kepler_primary_body_id,
+                                                                    context.soi_switch_options);
                         if (!primary || !finite_state(primary->state))
                         {
                             continue;
@@ -125,13 +456,24 @@ namespace Game
 
                         patches.push_back(Patch{.spacecraft_id = spacecraft->id,
                                                 .primary_id = primary->id,
+                                                .primary_cache = &orbiter.soi_kepler_primary_body_id,
                                                 .spacecraft0 = spacecraft->state,
                                                 .primary0 = primary->state,
                                                 .mu = G * primary->mass_kg});
                     }
+
+                    if (!patches.empty())
+                    {
+                        capture_runtime_body_start_states(scenario->sim,
+                                                          body_ids,
+                                                          body_start_states);
+                    }
                 }
 
-                scenario->sim.step(step_s);
+                if (!step_runtime_massive_bodies_only(scenario->sim, step_s))
+                {
+                    scenario->sim.step(step_s);
+                }
 
                 const double t1_s = t0_s + step_s;
                 for (const Patch &patch : patches)
@@ -159,9 +501,75 @@ namespace Game
                         continue;
                     }
 
-                    sample.state_relative.position_m += primary->state.position_m;
-                    sample.state_relative.velocity_mps += primary->state.velocity_mps;
-                    (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, sample.state_relative);
+                    orbitsim::State end_state = sample.state_relative;
+                    end_state.position_m += primary->state.position_m;
+                    end_state.velocity_mps += primary->state.velocity_mps;
+                    if (!finite_state(end_state))
+                    {
+                        continue;
+                    }
+
+                    orbitsim::SoiSwitchOptions transition_probe_options = context.soi_switch_options;
+                    transition_probe_options.fallback_to_max_accel = false;
+                    const orbitsim::CelestialEphemeris empty_ephemeris{};
+                    const orbitsim::BodyId endpoint_primary =
+                            orbitsim::select_primary_body_id_rails(scenario->sim,
+                                                                   empty_ephemeris,
+                                                                   end_state.position_m,
+                                                                   t1_s,
+                                                                   patch.primary_id,
+                                                                   transition_probe_options);
+                    if (endpoint_primary == orbitsim::kInvalidBodyId ||
+                        endpoint_primary == patch.primary_id)
+                    {
+                        (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, end_state);
+                        continue;
+                    }
+
+                    if (!step_ephemeris_ready)
+                    {
+                        if (!capture_runtime_body_end_states(scenario->sim,
+                                                             body_ids,
+                                                             body_end_states))
+                        {
+                            (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, end_state);
+                            continue;
+                        }
+                        step_ephemeris = make_runtime_step_ephemeris(body_ids,
+                                                                     body_start_states,
+                                                                     body_end_states,
+                                                                     t0_s,
+                                                                     t1_s);
+                        step_ephemeris_ready = !step_ephemeris.empty();
+                        if (!step_ephemeris_ready)
+                        {
+                            (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, end_state);
+                            continue;
+                        }
+                    }
+
+                    orbitsim::State patched_state{};
+                    orbitsim::BodyId patched_primary_id = patch.primary_id;
+                    if (propagate_spacecraft_patched_conics_step(scenario->sim,
+                                                                 step_ephemeris,
+                                                                 patch.spacecraft0,
+                                                                 patch.primary_id,
+                                                                 t0_s,
+                                                                 t1_s,
+                                                                 context,
+                                                                 patched_state,
+                                                                 patched_primary_id))
+                    {
+                        (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, patched_state);
+                        if (patch.primary_cache && patched_primary_id != orbitsim::kInvalidBodyId)
+                        {
+                            *patch.primary_cache = patched_primary_id;
+                        }
+                    }
+                    else
+                    {
+                        (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, end_state);
+                    }
                 }
                 remaining_s -= step_s;
             }

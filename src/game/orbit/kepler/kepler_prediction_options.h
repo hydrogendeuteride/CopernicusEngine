@@ -20,6 +20,17 @@ namespace Game
         bool operator==(const KeplerCelestialNBodyEphemerisOptions &) const = default;
     };
 
+    struct KeplerPatchedConicsOptions
+    {
+        bool enabled{true};
+        std::size_t max_patches{8};
+        double max_search_step_s{300.0};
+        double refine_tolerance_s{0.25};
+        double min_patch_duration_s{1.0e-3};
+
+        bool operator==(const KeplerPatchedConicsOptions &) const = default;
+    };
+
     struct KeplerPredictionOptions
     {
         double elliptic_period_count{1.0};
@@ -31,6 +42,7 @@ namespace Game
         orbitsim::SoiSwitchOptions primary_switch{};
         orbitsim::KeplerPropagationOptions propagation{};
         KeplerCelestialNBodyEphemerisOptions celestial_nbody_ephemeris{};
+        KeplerPatchedConicsOptions patched_conics{};
     };
 
     struct KeplerArcLineOptions

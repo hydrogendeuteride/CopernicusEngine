@@ -25,6 +25,7 @@ namespace Game
         bool enabled{true};
         double current_sim_time_s{0.0};
         double current_wall_time_s{0.0};
+        bool rails_warp_active{false};
         double requested_horizon_s{0.0};
         orbitsim::BodyId fixed_primary_body_id{orbitsim::kInvalidBodyId};
         KeplerPredictionOptions options{};
@@ -74,6 +75,18 @@ namespace Game
         };
     }
 
+    inline KeplerPatchedConicsFingerprint make_kepler_patched_conics_fingerprint(
+            const KeplerPatchedConicsOptions &options)
+    {
+        return KeplerPatchedConicsFingerprint{
+                .enabled = options.enabled,
+                .max_patches = options.max_patches,
+                .max_search_step_s = options.max_search_step_s,
+                .refine_tolerance_s = options.refine_tolerance_s,
+                .min_patch_duration_s = options.min_patch_duration_s,
+        };
+    }
+
     inline KeplerPredictionInputFingerprint make_kepler_prediction_input_fingerprint(
             const KeplerPredictionUpdateContext &context,
             const KeplerWorldFrame &world_frame)
@@ -98,6 +111,8 @@ namespace Game
                 .prediction_propagation = make_kepler_propagation_fingerprint(context.options.propagation),
                 .celestial_nbody_ephemeris =
                         make_kepler_ephemeris_fingerprint(context.options.celestial_nbody_ephemeris),
+                .patched_conics =
+                        make_kepler_patched_conics_fingerprint(context.options.patched_conics),
 
                 .line_max_time_step_s = context.line_options.max_time_step_s,
                 .line_min_time_step_s = context.line_options.min_time_step_s,

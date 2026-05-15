@@ -195,6 +195,10 @@ namespace Game
             request.current_primary_body_id =
                     subject.active_player ? previous_primary_body_id : orbitsim::kInvalidBodyId;
             request.options = context.options;
+            if (subject.celestial)
+            {
+                request.options.patched_conics.enabled = false;
+            }
             request.line_options =
                     subject.celestial
                             ? make_celestial_track_line_options(context.line_options, context.options)
@@ -224,6 +228,8 @@ namespace Game
             track.line_propagation = request.line_options.propagation;
             track.base_arcs = std::move(built.base_arcs);
             track.planned_arcs = std::move(built.planned_arcs);
+            track.base_patch_events = std::move(built.base_patch_events);
+            track.planned_patch_events = std::move(built.planned_patch_events);
             track.base_lines = std::move(built.base_lines);
             track.planned_lines = std::move(built.planned_lines);
             track.planned_requested = built.planned_requested;
@@ -297,6 +303,34 @@ namespace Game
                                        24.0 * 60.0 * 60.0);
         }
 
+        bool simulation_has_patched_conics_transition_candidates(
+                const orbitsim::GameSimulation &simulation)
+        {
+            std::size_t massive_body_count = 0u;
+            bool has_configured_soi = false;
+            for (const orbitsim::MassiveBody &body : simulation.massive_bodies())
+            {
+                if (!(body.mass_kg > 0.0) || !std::isfinite(body.mass_kg))
+                {
+                    continue;
+                }
+                ++massive_body_count;
+                has_configured_soi = has_configured_soi ||
+                                     (body.soi_radius_m > 0.0 &&
+                                      std::isfinite(body.soi_radius_m));
+            }
+            return massive_body_count > 1u && has_configured_soi;
+        }
+
+        bool has_patched_conics_subject(const std::span<const KeplerPredictionSubject> subjects)
+        {
+            return std::any_of(subjects.begin(),
+                               subjects.end(),
+                               [](const KeplerPredictionSubject &subject) {
+                                   return !subject.celestial;
+                               });
+        }
+
         struct ResolvedCelestialNBodyHorizon
         {
             double uncapped_horizon_s{0.0};
@@ -345,6 +379,7 @@ namespace Game
                 const orbitsim::BodyId previous_primary_body_id)
         {
             double uncapped_horizon_s = 0.0;
+            double patched_conics_horizon_floor_s = 0.0;
             for (const KeplerPredictionSubject &subject : subjects)
             {
                 const double track_horizon_s =
@@ -354,6 +389,11 @@ namespace Game
                                                  previous_primary_body_id);
                 uncapped_horizon_s = std::max(uncapped_horizon_s,
                                               track_horizon_s);
+                if (context.options.patched_conics.enabled && !subject.celestial)
+                {
+                    patched_conics_horizon_floor_s = std::max(patched_conics_horizon_floor_s,
+                                                              track_horizon_s);
+                }
             }
             const double maneuver_node_horizon_s =
                     required_kepler_maneuver_node_horizon_s(context.current_sim_time_s,
@@ -361,13 +401,26 @@ namespace Game
                                                             context.maneuver_nodes.size());
             uncapped_horizon_s = std::max(uncapped_horizon_s,
                                           maneuver_node_horizon_s);
+            const double planned_preview_horizon_s =
+                    required_kepler_planned_preview_horizon_s(context.current_sim_time_s,
+                                                              context.maneuver_nodes.data(),
+                                                              context.maneuver_nodes.size(),
+                                                              context.options);
+            uncapped_horizon_s = std::max(uncapped_horizon_s,
+                                          planned_preview_horizon_s);
+            if (context.options.patched_conics.enabled)
+            {
+                patched_conics_horizon_floor_s = std::max(patched_conics_horizon_floor_s,
+                                                          planned_preview_horizon_s);
+            }
 
             if (!(uncapped_horizon_s > 0.0) || !std::isfinite(uncapped_horizon_s))
             {
                 const KeplerCelestialNBodyHorizonLimit fallback =
                         limit_kepler_celestial_nbody_horizon(
                                 fallback_prediction_horizon_s(context),
-                                context.options);
+                                context.options,
+                                patched_conics_horizon_floor_s);
                 return ResolvedCelestialNBodyHorizon{
                         .uncapped_horizon_s = fallback.uncapped_horizon_s,
                         .horizon_s = fallback.horizon_s,
@@ -378,7 +431,8 @@ namespace Game
 
             const KeplerCelestialNBodyHorizonLimit limited =
                     limit_kepler_celestial_nbody_horizon(uncapped_horizon_s,
-                                                         context.options);
+                                                         context.options,
+                                                         patched_conics_horizon_floor_s);
             return ResolvedCelestialNBodyHorizon{
                     .uncapped_horizon_s = uncapped_horizon_s,
                     .horizon_s = limited.horizon_s,
@@ -387,25 +441,37 @@ namespace Game
             };
         }
 
-        // Throttles rebuilds, especially during maneuver previews.
+        // Throttles whole-track rebuilds. Patched conics rebuilds are relatively
+        // expensive because they run SOI transition search plus line resampling.
         double prediction_rebuild_interval_s(const KeplerPredictionUpdateContext &context)
         {
-            if (!context.maneuver_nodes.empty())
-            {
-                const double planned_interval_s =
-                        (std::isfinite(context.line_options.max_time_step_s) &&
-                         context.line_options.max_time_step_s > 0.0)
-                                ? context.line_options.max_time_step_s
-                                : 10.0;
-                return std::clamp(planned_interval_s, 1.0, 60.0);
-            }
-
             const double source_dt_s =
                     (std::isfinite(context.line_options.max_time_step_s) &&
                      context.line_options.max_time_step_s > 0.0)
                             ? context.line_options.max_time_step_s
                             : 10.0;
+
+            if (context.options.patched_conics.enabled && context.maneuver_nodes.empty())
+            {
+                return 0.05;
+            }
+
+            if (context.options.patched_conics.enabled || !context.maneuver_nodes.empty())
+            {
+                return std::clamp(source_dt_s, 1.0, 60.0);
+            }
+
             return std::clamp(source_dt_s * 0.005, 1.0 / 60.0, 0.05);
+        }
+
+        double prediction_rebuild_wall_interval_s(const KeplerPredictionUpdateContext &context)
+        {
+            if (!context.options.patched_conics.enabled)
+            {
+                return 0.0;
+            }
+
+            return !context.maneuver_nodes.empty() ? 0.20 : 0.10;
         }
 
         // Checks whether the current prediction can be reused.
@@ -435,6 +501,19 @@ namespace Game
             }
 
             const double elapsed_s = context.current_sim_time_s - state.build_time_s;
+            const double wall_interval_s = prediction_rebuild_wall_interval_s(context);
+            if (wall_interval_s > 0.0 &&
+                std::isfinite(state.build_wall_time_s) &&
+                std::isfinite(context.current_wall_time_s) &&
+                context.current_wall_time_s >= state.build_wall_time_s)
+            {
+                const double wall_elapsed_s = context.current_wall_time_s - state.build_wall_time_s;
+                if (wall_elapsed_s < wall_interval_s)
+                {
+                    return true;
+                }
+            }
+
             if (elapsed_s < prediction_rebuild_interval_s(context))
             {
                 return true;
@@ -533,8 +612,17 @@ namespace Game
         }
 
         KeplerCelestialNBodyEphemerisRequest build_request = horizon_request;
+        double build_horizon_cap_s = 0.0;
+        if (std::isfinite(horizon_cap_s) && horizon_cap_s > 0.0)
+        {
+            build_horizon_cap_s = std::max({
+                    required_horizon_s,
+                    horizon_cap_s,
+                    required_horizon_s + kepler_prediction_cache_reuse_horizon_s(required_horizon_s),
+            });
+        }
         const double build_horizon_s =
-                kepler_prediction_build_horizon_s(required_horizon_s, horizon_cap_s);
+                kepler_prediction_build_horizon_s(required_horizon_s, build_horizon_cap_s);
         build_request.requested_horizon_s = build_horizon_s;
 
         const KeplerCelestialNBodyEphemerisResult built =
@@ -673,8 +761,15 @@ namespace Game
         _state.tracks.reserve(subjects.size() +
                               (context.build_celestial_nbody_tracks ? celestial_subject_count : 0u));
 
+        const bool patched_conics_needs_ephemeris =
+                context.options.patched_conics.enabled &&
+                has_patched_conics_subject(
+                        std::span<const KeplerPredictionSubject>(subjects.data(), subjects.size())) &&
+                simulation_has_patched_conics_transition_candidates(context.orbit->scenario()->sim);
         const bool needs_celestial_nbody_cache =
-                context.build_celestial_nbody_tracks || context.build_celestial_kepler_tracks;
+                context.build_celestial_nbody_tracks ||
+                context.build_celestial_kepler_tracks ||
+                patched_conics_needs_ephemeris;
         // Share one celestial ephemeris across all tracks.
         const ResolvedCelestialNBodyHorizon required_celestial_nbody_horizon =
                 needs_celestial_nbody_cache

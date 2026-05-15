@@ -60,6 +60,12 @@ namespace Game
             double horizon_s,
             const KeplerPredictionOptions &options);
 
+    // Apply the configured cap without cutting below a correctness-critical floor.
+    KeplerCelestialNBodyHorizonLimit limit_kepler_celestial_nbody_horizon(
+            double horizon_s,
+            const KeplerPredictionOptions &options,
+            double horizon_floor_s);
+
     // Integrate massive bodies into an adaptive ephemeris.
     KeplerCelestialNBodyEphemerisResult build_kepler_celestial_nbody_ephemeris(
             const KeplerCelestialNBodyEphemerisRequest &request);

@@ -81,15 +81,32 @@ namespace Game
             const double horizon_s,
             const KeplerPredictionOptions &options)
     {
+        return limit_kepler_celestial_nbody_horizon(horizon_s, options, 0.0);
+    }
+
+    KeplerCelestialNBodyHorizonLimit limit_kepler_celestial_nbody_horizon(
+            const double horizon_s,
+            const KeplerPredictionOptions &options,
+            const double horizon_floor_s)
+    {
         KeplerCelestialNBodyHorizonLimit out{};
         out.uncapped_horizon_s = kepler_positive_or_default(horizon_s, 0.0);
         out.horizon_s = out.uncapped_horizon_s;
         out.cap_s = kepler_positive_or_default(options.celestial_nbody_horizon_cap_s, 0.0);
+        const double floor_s = kepler_positive_or_default(horizon_floor_s, 0.0);
 
-        if (out.cap_s > 0.0 && out.horizon_s > out.cap_s)
+        if (out.cap_s > 0.0)
         {
-            out.horizon_s = out.cap_s;
-            out.capped = true;
+            const double effective_cap_s = std::max(out.cap_s, floor_s);
+            if (out.horizon_s > effective_cap_s)
+            {
+                out.horizon_s = effective_cap_s;
+                out.capped = true;
+            }
+        }
+        if (floor_s > out.horizon_s)
+        {
+            out.horizon_s = floor_s;
         }
         return out;
     }

@@ -42,6 +42,24 @@ namespace Game
         RenderSeamSample = 1u << 4u,
     };
 
+    enum class KeplerPatchBoundaryReason : uint8_t
+    {
+        Horizon = 0,
+        SoiTransition,
+        Maneuver,
+        PatchLimit,
+        PropagationFailure,
+    };
+
+    struct KeplerPatchEvent
+    {
+        double t_s{std::numeric_limits<double>::quiet_NaN()};
+        orbitsim::BodyId from_primary_body_id{orbitsim::kInvalidBodyId};
+        orbitsim::BodyId to_primary_body_id{orbitsim::kInvalidBodyId};
+        KeplerPatchBoundaryReason reason{KeplerPatchBoundaryReason::Horizon};
+        orbitsim::State subject_state_inertial{};
+    };
+
     // Selected primary body and its state.
     struct KeplerPrimaryResolution
     {
@@ -87,6 +105,16 @@ namespace Game
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
         std::vector<KeplerOrbitArc> arcs{};
         orbitsim::KeplerManeuverDiagnostics diagnostics{};
+    };
+
+    // Patched-conics arc chain and transition diagnostics.
+    struct KeplerPatchChainBuildResult
+    {
+        bool valid{false};
+        KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
+        std::vector<KeplerOrbitArc> arcs{};
+        std::vector<KeplerPatchEvent> events{};
+        orbitsim::KeplerManeuverDiagnostics maneuver_diagnostics{};
     };
 
     // Moving-body state sampler.
