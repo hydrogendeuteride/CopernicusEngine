@@ -3,6 +3,8 @@
 #include "game/orbit/kepler/kepler_arc_builder.h"
 #include "game/orbit/kepler/kepler_types.h"
 
+#include "orbitsim/ephemeris.hpp"
+
 #include <span>
 
 namespace Game
@@ -10,6 +12,7 @@ namespace Game
     struct KeplerPatchChainBuildRequest
     {
         const orbitsim::GameSimulation *simulation{nullptr};
+        // Authoritative moving-body states; body_state_provider is fallback.
         const orbitsim::CelestialEphemeris *ephemeris{nullptr};
         KeplerBodyStateProvider body_state_provider{};
         orbitsim::State subject_state_inertial{};

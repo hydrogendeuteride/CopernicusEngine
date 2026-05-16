@@ -61,6 +61,32 @@ namespace Game
         return comp_ctx;
     }
 
+    OrbitalPhysicsSystem::Context GameplayState::build_orbital_physics_context()
+    {
+        return GameplayOrbitalContextBuilder(GameplayOrbitalContextInputs{
+                .renderer = _renderer,
+                .world = _world,
+                .orbit = _orbit,
+                .physics = _physics.get(),
+                .physics_context = _physics_context.get(),
+                .scenario_config = _scenario_config,
+                .spacecraft_gravity_mode =
+                        spacecraft_orbit_prediction_uses_kepler()
+                                ? SpacecraftGravityMode::SoiKepler
+                                : SpacecraftGravityMode::NBody,
+                .soi_switch_options = _kepler_prediction_options.primary_switch,
+                .kepler_propagation = _kepler_prediction_options.propagation,
+                .soi_kepler_max_step_s = 60.0,
+                .keybinds = &_keybinds,
+                .ui_capture_keyboard = [this](const GameStateContext &frame_ctx) {
+                    return ui_capture_keyboard(frame_ctx);
+                },
+                .mark_prediction_dirty = [this]() {
+                    mark_prediction_dirty();
+                },
+        }).build();
+    }
+
     bool GameplayPredictionAdapter::get_orbiter_world_state(const OrbiterInfo &orbiter,
                                                             WorldVec3 &out_pos_world,
                                                             glm::dvec3 &out_vel_world,
@@ -77,6 +103,21 @@ namespace Game
 
     void GameplayState::mark_prediction_dirty()
     {
+    }
+
+    bool GameplayState::spacecraft_orbit_prediction_uses_kepler() const
+    {
+        return _spacecraft_orbit_prediction_mode == SpacecraftOrbitPredictionMode::Kepler;
+    }
+
+    bool GameplayState::spacecraft_orbit_prediction_uses_nbody() const
+    {
+        return _spacecraft_orbit_prediction_mode == SpacecraftOrbitPredictionMode::NBody;
+    }
+
+    void GameplayState::set_spacecraft_orbit_prediction_mode(const SpacecraftOrbitPredictionMode mode)
+    {
+        _spacecraft_orbit_prediction_mode = mode;
     }
 
     void GameStateContext::quit() {}

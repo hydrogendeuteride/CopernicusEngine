@@ -26,10 +26,22 @@ namespace Game
                            const double t_s,
                            orbitsim::State &out_state)
         {
+            if (request.ephemeris && !request.ephemeris->empty())
+            {
+                std::size_t body_index = 0u;
+                if (request.ephemeris->body_index_for_id(body_id, &body_index))
+                {
+                    out_state = request.ephemeris->body_state_at(body_index, t_s);
+                    return kepler_finite_vec3(out_state.position_m) &&
+                           kepler_finite_vec3(out_state.velocity_mps);
+                }
+            }
+
             if (request.body_state_provider.state_at &&
                 request.body_state_provider.state_at(body_id, t_s, out_state))
             {
-                return true;
+                return kepler_finite_vec3(out_state.position_m) &&
+                       kepler_finite_vec3(out_state.velocity_mps);
             }
 
             if (!request.simulation)
@@ -40,13 +52,6 @@ namespace Game
             if (!body)
             {
                 return false;
-            }
-
-            if (request.ephemeris && !request.ephemeris->empty())
-            {
-                out_state = request.ephemeris->body_state_at_by_id(body_id, t_s);
-                return kepler_finite_vec3(out_state.position_m) &&
-                       kepler_finite_vec3(out_state.velocity_mps);
             }
 
             out_state = body->state;
@@ -228,7 +233,8 @@ namespace Game
             return out;
         }
 
-        const std::size_t max_patches = std::max<std::size_t>(1u, request.options.patched_conics.max_patches);
+        const std::size_t max_patch_attempts =
+                std::max<std::size_t>(1u, request.options.patched_conics.max_patches);
         const double min_patch_duration_s =
                 kepler_positive_or_default(request.options.patched_conics.min_patch_duration_s, 1.0e-3);
         for (const KeplerManeuverNode &node : request.maneuver_nodes)
@@ -245,15 +251,22 @@ namespace Game
         const orbitsim::CelestialEphemeris &ephemeris =
                 request.ephemeris ? *request.ephemeris : empty_ephemeris;
 
+        auto finalize = [&out](const KeplerOrbitStatus status) {
+            out.maneuver_diagnostics.arcs_built = out.arcs.size();
+            out.valid = !out.arcs.empty();
+            out.status = status;
+        };
+
         double cursor_t_s = request.t0_s;
         double chain_end_t_s = request.t1_s;
         orbitsim::State cursor_state_inertial = request.subject_state_inertial;
         orbitsim::BodyId current_primary_body_id = request.current_primary_body_id;
         bool initial_primary = true;
+        std::size_t patch_attempts = 0u;
 
         while (cursor_t_s < chain_end_t_s - kTimeEpsilonS)
         {
-            if (out.arcs.size() >= max_patches)
+            if (patch_attempts >= max_patch_attempts)
             {
                 out.events.push_back(KeplerPatchEvent{
                         .t_s = cursor_t_s,
@@ -262,7 +275,8 @@ namespace Game
                         .reason = KeplerPatchBoundaryReason::PatchLimit,
                         .subject_state_inertial = cursor_state_inertial,
                 });
-                break;
+                finalize(KeplerOrbitStatus::SampleBudgetExceeded);
+                return out;
             }
 
             const KeplerPrimaryResolution primary =
@@ -310,6 +324,7 @@ namespace Game
                 consumed_maneuver_nodes[*immediate_node_index] = true;
                 ++out.maneuver_diagnostics.impulses_applied;
             }
+            ++patch_attempts;
 
             KeplerOrbitArc candidate{};
             candidate.arc.mu_m3_s2 = primary.mu_m3_s2;
@@ -368,8 +383,15 @@ namespace Game
             double cut_t_s = chain_end_t_s;
             KeplerPatchBoundaryReason reason = KeplerPatchBoundaryReason::Horizon;
             orbitsim::BodyId next_primary_body_id = current_primary_body_id;
+            bool terminal_budget_hit = false;
 
-            if (transition.found &&
+            if (transition.budget_hit)
+            {
+                cut_t_s = transition.last_tested_t_s;
+                reason = KeplerPatchBoundaryReason::SearchBudget;
+                terminal_budget_hit = true;
+            }
+            else if (transition.found &&
                 transition.to_primary_body_id != orbitsim::kInvalidBodyId &&
                 transition.t_s > cursor_t_s + kTimeEpsilonS &&
                 transition.t_s < cut_t_s)
@@ -452,18 +474,22 @@ namespace Game
                 current_primary_body_id = next_primary_body_id;
             }
 
+            if (terminal_budget_hit)
+            {
+                finalize(KeplerOrbitStatus::SampleBudgetExceeded);
+                return out;
+            }
+
             cursor_t_s = cut_t_s;
         }
 
-        out.maneuver_diagnostics.arcs_built = out.arcs.size();
         if (out.arcs.empty())
         {
             out.status = KeplerOrbitStatus::InvalidArc;
             return out;
         }
 
-        out.valid = true;
-        out.status = KeplerOrbitStatus::Ok;
+        finalize(KeplerOrbitStatus::Ok);
         return out;
     }
 } // namespace Game

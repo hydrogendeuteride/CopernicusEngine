@@ -33,6 +33,7 @@ namespace Game
     {
         constexpr double kRuntimePatchTimeEpsilonS = 1.0e-9;
         constexpr double kRuntimePatchRefineToleranceS = 0.25;
+        constexpr double kRuntimeTransitionSearchSamplesPerStep = 4.0;
         constexpr std::size_t kRuntimeMaxPatchesPerStep = 8u;
 
         bool finite_state(const orbitsim::State &state)
@@ -42,6 +43,38 @@ namespace Game
                    finite_vec3(state.spin.axis) &&
                    std::isfinite(state.spin.angle_rad) &&
                    std::isfinite(state.spin.rate_rad_per_s);
+        }
+
+        bool runtime_has_other_soi_candidate(const orbitsim::GameSimulation &sim,
+                                             const orbitsim::BodyId current_primary_body_id)
+        {
+            for (const orbitsim::MassiveBody &body : sim.massive_bodies())
+            {
+                if (body.id != current_primary_body_id &&
+                    body.soi_radius_m > 0.0 &&
+                    std::isfinite(body.soi_radius_m))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        double runtime_transition_search_step_s(const OrbitalPhysicsSystem::Context &context,
+                                                const double t0_s,
+                                                const double t1_s)
+        {
+            const double fallback_step_s =
+                    std::isfinite(context.soi_kepler_max_step_s) && context.soi_kepler_max_step_s > 0.0
+                            ? context.soi_kepler_max_step_s
+                            : 60.0;
+            const double span_s = std::abs(t1_s - t0_s);
+            if (!(span_s > 0.0) || !std::isfinite(span_s))
+            {
+                return fallback_step_s;
+            }
+
+            return std::min(fallback_step_s, span_s / kRuntimeTransitionSearchSamplesPerStep);
         }
 
         orbitsim::CelestialEphemeris make_runtime_step_ephemeris(
@@ -260,10 +293,7 @@ namespace Game
 
                 orbitsim::SoiTransitionSearchOptions transition_options{};
                 transition_options.max_step_s =
-                        (std::isfinite(context.soi_kepler_max_step_s) &&
-                         context.soi_kepler_max_step_s > 0.0)
-                                ? context.soi_kepler_max_step_s
-                                : 60.0;
+                        runtime_transition_search_step_s(context, cursor_t_s, t1_s);
                 transition_options.refine_tolerance_s = kRuntimePatchRefineToleranceS;
                 transition_options.switch_options = context.soi_switch_options;
                 transition_options.propagation = context.kepler_propagation;
@@ -276,6 +306,10 @@ namespace Game
                                                                          t1_s,
                                                                          transition_options);
                 if (transition.first_failure != orbitsim::KeplerStatus::Ok)
+                {
+                    return false;
+                }
+                if (transition.budget_hit)
                 {
                     return false;
                 }
@@ -509,18 +543,7 @@ namespace Game
                         continue;
                     }
 
-                    orbitsim::SoiSwitchOptions transition_probe_options = context.soi_switch_options;
-                    transition_probe_options.fallback_to_max_accel = false;
-                    const orbitsim::CelestialEphemeris empty_ephemeris{};
-                    const orbitsim::BodyId endpoint_primary =
-                            orbitsim::select_primary_body_id_rails(scenario->sim,
-                                                                   empty_ephemeris,
-                                                                   end_state.position_m,
-                                                                   t1_s,
-                                                                   patch.primary_id,
-                                                                   transition_probe_options);
-                    if (endpoint_primary == orbitsim::kInvalidBodyId ||
-                        endpoint_primary == patch.primary_id)
+                    if (!runtime_has_other_soi_candidate(scenario->sim, patch.primary_id))
                     {
                         (void) scenario->sim.set_spacecraft_state(patch.spacecraft_id, end_state);
                         continue;

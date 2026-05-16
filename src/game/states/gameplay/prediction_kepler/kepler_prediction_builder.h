@@ -15,6 +15,7 @@ namespace Game
     struct KeplerPredictionBuildRequest
     {
         const orbitsim::GameSimulation *simulation{nullptr};
+        // Authoritative moving-body states; body_state_provider is fallback.
         const orbitsim::CelestialEphemeris *ephemeris{nullptr};
         orbitsim::State subject_state_inertial{};
         KeplerWorldFrame world_frame{};

@@ -3,6 +3,8 @@
 #include "game/orbit/kepler/kepler_prediction_options.h"
 #include "game/orbit/kepler/kepler_types.h"
 
+#include "orbitsim/ephemeris.hpp"
+
 #include <span>
 
 namespace Game
@@ -11,6 +13,8 @@ namespace Game
     struct KeplerArcLineBuildRequest
     {
         std::span<const KeplerOrbitArc> arcs{};
+        // Authoritative moving-body states; body_state_provider is fallback.
+        const orbitsim::CelestialEphemeris *ephemeris{nullptr};
         KeplerArcLineOptions options{};
         KeplerBodyStateProvider body_state_provider{};
         KeplerWorldFrame world_frame{};

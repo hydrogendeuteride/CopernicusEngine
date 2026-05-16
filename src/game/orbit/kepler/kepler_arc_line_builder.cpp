@@ -150,6 +150,35 @@ namespace Game
         }
     }
 
+    bool state_at_body(const KeplerArcLineBuildRequest &request,
+                       const orbitsim::BodyId body_id,
+                       const double t_s,
+                       orbitsim::State &out_state)
+    {
+        if (request.ephemeris && !request.ephemeris->empty())
+        {
+            std::size_t body_index = 0u;
+            if (request.ephemeris->body_index_for_id(body_id, &body_index))
+            {
+                const orbitsim::State ephemeris_state =
+                        request.ephemeris->body_state_at(body_index, t_s);
+                if (kepler_finite_vec3(ephemeris_state.position_m))
+                {
+                    out_state = ephemeris_state;
+                    return true;
+                }
+            }
+        }
+
+        if (request.body_state_provider.state_at &&
+            request.body_state_provider.state_at(body_id, t_s, out_state))
+        {
+            return kepler_finite_vec3(out_state.position_m);
+        }
+
+        return false;
+    }
+
     // Propagate one time sample and convert it into world space.
     LineSampleEvaluation evaluate_line_sample(const KeplerArcLineBuildRequest &request,
                                               const KeplerOrbitArc &game_arc,
@@ -170,32 +199,25 @@ namespace Game
             return out;
         }
 
-        // Prefer predicted body states when a provider is available.
+        // Prefer ephemeris states, falling back to the caller provider.
         orbitsim::State primary_state = game_arc.primary_state_inertial_at_t0;
-        if (request.body_state_provider.state_at)
+        orbitsim::State moving_primary_state{};
+        if (state_at_body(request, game_arc.arc.primary_body_id, sample.t_s, moving_primary_state))
         {
-            orbitsim::State provider_state{};
-            if (request.body_state_provider.state_at(game_arc.arc.primary_body_id,
-                                                     sample.t_s,
-                                                     provider_state))
-            {
-                primary_state = provider_state;
-            }
+            primary_state = moving_primary_state;
         }
 
         // Keep the line in the current world reference frame.
         orbitsim::State reference_state = request.world_frame.world_reference_state_inertial;
         if (request.world_frame.world_reference_body_id != orbitsim::kInvalidBodyId)
         {
-            if (request.body_state_provider.state_at)
+            orbitsim::State moving_reference_state{};
+            if (state_at_body(request,
+                              request.world_frame.world_reference_body_id,
+                              sample.t_s,
+                              moving_reference_state))
             {
-                orbitsim::State provider_state{};
-                if (request.body_state_provider.state_at(request.world_frame.world_reference_body_id,
-                                                         sample.t_s,
-                                                         provider_state))
-                {
-                    reference_state = provider_state;
-                }
+                reference_state = moving_reference_state;
             }
         }
 

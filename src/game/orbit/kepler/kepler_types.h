@@ -49,6 +49,7 @@ namespace Game
         Maneuver,
         PatchLimit,
         PropagationFailure,
+        SearchBudget,
     };
 
     struct KeplerPatchEvent

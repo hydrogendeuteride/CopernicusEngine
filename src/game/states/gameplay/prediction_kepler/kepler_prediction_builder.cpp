@@ -19,6 +19,7 @@ namespace Game
         {
             KeplerArcLineBuildRequest line_request{};
             line_request.arcs = std::span<const KeplerOrbitArc>(arcs.data(), arcs.size());
+            line_request.ephemeris = request.ephemeris;
             line_request.options = request.line_options;
             line_request.body_state_provider = request.body_state_provider;
             line_request.world_frame = request.world_frame;
@@ -277,10 +278,12 @@ namespace Game
             }
             out.base_arcs = base_chain.arcs;
             out.base_patch_events = base_chain.events;
+            out.status = base_chain.status;
         }
         else
         {
             out.base_arcs.push_back(out.orbit.base_arc);
+            out.status = KeplerOrbitStatus::Ok;
         }
         out.metrics = compute_kepler_arc_metrics(out.orbit.base_arc);
 
@@ -353,13 +356,19 @@ namespace Game
                 else
                 {
                     out.planned_valid = true;
-                    out.planned_status = KeplerOrbitStatus::Ok;
+                    if (out.planned_status == KeplerOrbitStatus::Ok)
+                    {
+                        out.planned_status = out.planned_lines.diagnostics.status;
+                    }
                 }
             }
         }
 
         out.valid = true;
-        out.status = KeplerOrbitStatus::Ok;
+        if (out.status == KeplerOrbitStatus::InvalidInput)
+        {
+            out.status = KeplerOrbitStatus::Ok;
+        }
         return out;
     }
 } // namespace Game

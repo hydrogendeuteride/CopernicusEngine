@@ -2,12 +2,14 @@
 
 #include "game/orbit/kepler/kepler_celestial_nbody.h"
 #include "game/orbit/kepler/kepler_arc_info.h"
+#include "game/orbit/kepler/kepler_patched_conics_builder.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_builder.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
 #include "orbitsim/soi.hpp"
 
 #include <glm/geometric.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <vector>
@@ -259,6 +261,109 @@ TEST(KeplerPrediction, SoiTransitionSearchSkipsWhenNoOtherSoiCandidateExists)
     EXPECT_FALSE(transition.found);
     EXPECT_EQ(transition.first_failure, orbitsim::KeplerStatus::Ok);
     EXPECT_EQ(transition.tested_samples, 0u);
+}
+
+TEST(KeplerPrediction, SoiTransitionSearchReportsStepBudgetHit)
+{
+    orbitsim::GameSimulation sim = make_static_transfer_sim();
+
+    const orbitsim::KeplerArc arc{
+            .mu_m3_s2 = kEarthMu,
+            .primary_body_id = kEarthId,
+            .t0_s = 0.0,
+            .t1_s = 1'000.0,
+            .state0_relative = orbitsim::make_state({20'000'000.0, 0.0, 0.0},
+                                                    {7'000.0, 100.0, 0.0}),
+    };
+
+    orbitsim::SoiTransitionSearchOptions options{};
+    options.max_step_s = 10.0;
+    options.max_steps = 1u;
+
+    const orbitsim::CelestialEphemeris ephemeris{};
+    const orbitsim::SoiTransitionSearchResult transition =
+            orbitsim::find_next_soi_transition_on_kepler_arc(sim,
+                                                             ephemeris,
+                                                             arc,
+                                                             kEarthId,
+                                                             arc.t1_s,
+                                                             options);
+
+    EXPECT_FALSE(transition.found);
+    EXPECT_TRUE(transition.budget_hit);
+    EXPECT_EQ(transition.first_failure, orbitsim::KeplerStatus::Ok);
+    EXPECT_EQ(transition.tested_samples, 1u);
+    EXPECT_TRUE(near_abs(transition.last_tested_t_s, 10.0, 1.0e-12));
+}
+
+TEST(KeplerPrediction, PatchedConicsPatchLimitReportsTruncation)
+{
+    orbitsim::GameSimulation sim = make_static_transfer_sim();
+    Game::KeplerPredictionBuildRequest request = make_static_transfer_request(sim);
+    request.options.patched_conics.max_patches = 1u;
+
+    const Game::KeplerPredictionBuildOutput result = Game::build_kepler_prediction(request);
+
+    ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
+    EXPECT_EQ(result.status, Game::KeplerOrbitStatus::SampleBudgetExceeded);
+    ASSERT_EQ(result.base_arcs.size(), 1u);
+    EXPECT_LT(result.base_arcs.back().arc.t1_s, request.t0_s + request.requested_horizon_s);
+    EXPECT_TRUE(std::any_of(result.base_patch_events.begin(),
+                            result.base_patch_events.end(),
+                            [](const Game::KeplerPatchEvent &event) {
+                                return event.reason == Game::KeplerPatchBoundaryReason::PatchLimit;
+                            }));
+}
+
+TEST(KeplerPrediction, PatchedConicsPatchLimitCountsTinyPatchAttempts)
+{
+    orbitsim::GameSimulation sim = make_static_transfer_sim();
+    Game::KeplerPredictionBuildRequest prediction_request = make_static_transfer_request(sim);
+    prediction_request.options.patched_conics.max_patches = 1u;
+    prediction_request.options.patched_conics.min_patch_duration_s = 20'000.0;
+
+    Game::KeplerPatchChainBuildRequest request{};
+    request.simulation = prediction_request.simulation;
+    request.ephemeris = prediction_request.ephemeris;
+    request.body_state_provider = prediction_request.body_state_provider;
+    request.subject_state_inertial = prediction_request.subject_state_inertial;
+    request.t0_s = prediction_request.t0_s;
+    request.t1_s = prediction_request.t0_s + prediction_request.requested_horizon_s;
+    request.current_primary_body_id = prediction_request.current_primary_body_id;
+    request.fixed_initial_primary_body_id = prediction_request.fixed_primary_body_id;
+    request.options = prediction_request.options;
+
+    const Game::KeplerPatchChainBuildResult result =
+            Game::build_kepler_patched_conics_chain(request);
+
+    EXPECT_FALSE(result.valid);
+    EXPECT_TRUE(result.arcs.empty());
+    EXPECT_EQ(result.status, Game::KeplerOrbitStatus::SampleBudgetExceeded);
+    EXPECT_TRUE(std::any_of(result.events.begin(),
+                            result.events.end(),
+                            [](const Game::KeplerPatchEvent &event) {
+                                return event.reason == Game::KeplerPatchBoundaryReason::PatchLimit;
+                            }));
+}
+
+TEST(KeplerPrediction, PatchedConicsSearchBudgetReportsTruncation)
+{
+    orbitsim::GameSimulation sim = make_static_transfer_sim();
+    Game::KeplerPredictionBuildRequest request = make_static_transfer_request(sim);
+    request.requested_horizon_s = 20.0;
+    request.options.patched_conics.max_search_step_s = 0.001;
+
+    const Game::KeplerPredictionBuildOutput result = Game::build_kepler_prediction(request);
+
+    ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
+    EXPECT_EQ(result.status, Game::KeplerOrbitStatus::SampleBudgetExceeded);
+    ASSERT_EQ(result.base_arcs.size(), 1u);
+    EXPECT_TRUE(near_abs(result.base_arcs.front().arc.t1_s, 10.0, 1.0e-9));
+    EXPECT_TRUE(std::any_of(result.base_patch_events.begin(),
+                            result.base_patch_events.end(),
+                            [](const Game::KeplerPatchEvent &event) {
+                                return event.reason == Game::KeplerPatchBoundaryReason::SearchBudget;
+                            }));
 }
 
 TEST(KeplerPrediction, BuilderProducesPlannedLinesWhenNodesAreProvided)

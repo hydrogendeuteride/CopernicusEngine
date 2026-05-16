@@ -25,9 +25,20 @@ def fail(message: str) -> None:
     raise SystemExit(f"ERROR: {message}")
 
 
-def run(cmd: list[str]) -> None:
+def run(cmd: list[str], vsdevcmd=None) -> None:
     print("+ " + " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=ROOT, check=True)
+    if vsdevcmd:
+        script = f'call "{vsdevcmd}" -arch=x64 >nul && {subprocess.list2cmdline(cmd)}'
+        subprocess.run(script, cwd=ROOT, shell=True, check=True)
+    else:
+        subprocess.run(cmd, cwd=ROOT, check=True)
+
+
+def find_vsdevcmd():
+    paths = [Path(os.environ["VSDEVCMD"])] if os.environ.get("VSDEVCMD") else []
+    for base in (r"C:\Program Files", r"C:\Program Files (x86)"):
+        paths.extend((Path(base) / "Microsoft Visual Studio").glob("*/*/Common7/Tools/VsDevCmd.bat"))
+    return next((path for path in paths if path.exists()), None)
 
 
 def main() -> int:
@@ -39,6 +50,10 @@ def main() -> int:
         fail("platform must be linux or windows")
 
     generator, required, defines, suffix = TOOLS[target]
+    vsdevcmd = find_vsdevcmd() if target == "windows" and os.name == "nt" else None
+    if target == "windows" and os.name == "nt" and not vsdevcmd:
+        fail("could not find Visual Studio VsDevCmd.bat")
+
     missing = [cmd for cmd in ("cmake", *required) if not shutil.which(cmd)]
     if missing:
         fail("missing commands: " + ", ".join(missing))
@@ -49,8 +64,8 @@ def main() -> int:
     else:
         build_dir = ROOT / DEFAULT_BUILD_DIRS.get(target, f"cmake-build-{config.lower()}-{suffix}")
     try:
-        run(["cmake", "-S", str(ROOT), "-B", str(build_dir), "-G", generator, f"-DCMAKE_BUILD_TYPE={config}", *defines])
-        run(["cmake", "--build", str(build_dir), "--target", "vulkan_engine", "--parallel", str(max(1, os.cpu_count() or 1))])
+        run(["cmake", "-S", str(ROOT), "-B", str(build_dir), "-G", generator, f"-DCMAKE_BUILD_TYPE={config}", *defines], vsdevcmd)
+        run(["cmake", "--build", str(build_dir), "--target", "vulkan_engine", "--parallel", str(max(1, os.cpu_count() or 1))], vsdevcmd)
     except subprocess.CalledProcessError as exc:
         return exc.returncode
     return 0
