@@ -38,6 +38,25 @@ namespace
         return sim;
     }
 
+    orbitsim::CelestialEphemeris make_single_body_ephemeris(const orbitsim::GameSimulation &sim,
+                                                            const double t0_s,
+                                                            const double t1_s)
+    {
+        orbitsim::CelestialEphemeris ephemeris{};
+        ephemeris.set_body_ids({kEarthId});
+
+        orbitsim::CelestialEphemerisSegment segment{};
+        segment.t0_s = t0_s;
+        segment.dt_s = t1_s - t0_s;
+        const orbitsim::MassiveBody *earth = sim.body_by_id(kEarthId);
+        EXPECT_NE(earth, nullptr);
+        const orbitsim::State state = earth ? earth->state : orbitsim::State{};
+        segment.start.push_back(state);
+        segment.end.push_back(state);
+        ephemeris.segments.push_back(segment);
+        return ephemeris;
+    }
+
     orbitsim::State make_circular_ship_state(const orbitsim::State &primary_state)
     {
         constexpr double r_m = 7'000'000.0;
@@ -550,6 +569,59 @@ TEST(KeplerPrediction, PlannedPreviewHorizonUsesPostBurnEllipticPeriod)
     EXPECT_TRUE(near_abs(horizon_s,
                          (nodes.front().t_s - request.t0_s) + metrics.period_s,
                          1.0e-6));
+}
+
+TEST(KeplerPrediction, PlannedPreviewEphemerisHorizonUsesBuiltPostBurnArc)
+{
+    orbitsim::GameSimulation sim = make_single_body_sim();
+    Game::KeplerPredictionBuildRequest request = make_request(sim);
+    request.options.patched_conics.enabled = true;
+    request.requested_horizon_s = 120.0;
+    request.options.open_orbit_window_s = 600.0;
+    request.line_options.max_time_step_s = 300.0;
+    request.line_options.max_vertices_per_arc = 32;
+    request.line_options.max_vertices_total = 64;
+
+    orbitsim::CelestialEphemeris ephemeris =
+            make_single_body_ephemeris(sim, request.t0_s, request.t0_s + 1'000.0);
+    request.ephemeris = &ephemeris;
+
+    const std::vector<Game::KeplerManeuverNode> nodes{
+            Game::KeplerManeuverNode{
+                    .node_id = 5,
+                    .t_s = request.t0_s + 60.0,
+                    .primary_body_id = kEarthId,
+                    .dv_rtn_mps = {0.0, 1'500.0, 0.0},
+            },
+    };
+    request.maneuver_nodes = std::span<const Game::KeplerManeuverNode>(nodes.data(), nodes.size());
+
+    const Game::KeplerPredictionBuildOutput result = Game::build_kepler_prediction(request);
+
+    ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
+    ASSERT_TRUE(result.planned_valid) << Game::kepler_orbit_status_name(result.planned_status);
+    ASSERT_FALSE(result.planned_arcs.empty());
+    ASSERT_FALSE(result.planned_patch_events.empty());
+    EXPECT_LE(result.planned_arcs.back().arc.t1_s, ephemeris.t_end_s());
+
+    const double horizon_s =
+            Game::required_kepler_planned_preview_ephemeris_horizon_s(
+                    std::span<const Game::KeplerOrbitArc>(result.planned_arcs.data(),
+                                                          result.planned_arcs.size()),
+                    std::span<const Game::KeplerPatchEvent>(result.planned_patch_events.data(),
+                                                            result.planned_patch_events.size()),
+                    request.t0_s,
+                    ephemeris.t_end_s(),
+                    request.options);
+
+    const Game::KeplerOrbitArc &last_arc = result.planned_arcs.back();
+    const double expected_horizon_s =
+            last_arc.arc.t0_s +
+            Game::select_kepler_arc_horizon_s(last_arc.arc, request.options) -
+            request.t0_s;
+
+    EXPECT_GT(horizon_s, ephemeris.t_end_s() - request.t0_s);
+    EXPECT_TRUE(near_abs(horizon_s, expected_horizon_s, 1.0e-6));
 }
 
 TEST(KeplerPrediction, InputFingerprintTracksCacheRelevantSettings)

@@ -229,6 +229,46 @@ namespace Game
         return preview_end_s - t0_s;
     }
 
+    double required_kepler_planned_preview_ephemeris_horizon_s(
+            const std::span<const KeplerOrbitArc> planned_arcs,
+            const std::span<const KeplerPatchEvent> planned_events,
+            const double t0_s,
+            const double ephemeris_end_s,
+            const KeplerPredictionOptions &options)
+    {
+        if (planned_arcs.empty() ||
+            planned_events.empty() ||
+            !std::isfinite(t0_s) ||
+            !std::isfinite(ephemeris_end_s))
+        {
+            return 0.0;
+        }
+
+        const KeplerOrbitArc &last_arc = planned_arcs.back();
+        const KeplerPatchEvent &last_event = planned_events.back();
+        if (last_event.reason != KeplerPatchBoundaryReason::Horizon ||
+            !kepler_same_sample_time(last_event.t_s, last_arc.arc.t1_s) ||
+            last_arc.arc.t1_s + 1.0e-6 < ephemeris_end_s)
+        {
+            return 0.0;
+        }
+
+        const double preview_horizon_s = select_kepler_arc_horizon_s(last_arc.arc, options);
+        const double preview_end_s = last_arc.arc.t0_s + preview_horizon_s;
+        if (!std::isfinite(preview_horizon_s) ||
+            !(preview_horizon_s > 0.0) ||
+            !std::isfinite(preview_end_s) ||
+            preview_end_s <= ephemeris_end_s + 1.0e-6)
+        {
+            return 0.0;
+        }
+
+        const double required_horizon_s = preview_end_s - t0_s;
+        return (std::isfinite(required_horizon_s) && required_horizon_s > 0.0)
+                       ? required_horizon_s
+                       : 0.0;
+    }
+
     // Builds one subject's base and optional maneuver prediction.
     KeplerPredictionBuildOutput build_kepler_prediction(const KeplerPredictionBuildRequest &request)
     {

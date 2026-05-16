@@ -787,7 +787,7 @@ namespace Game
                 context.build_celestial_kepler_tracks ||
                 patched_conics_needs_ephemeris;
         // Share one celestial ephemeris across all tracks.
-        const ResolvedCelestialNBodyHorizon required_celestial_nbody_horizon =
+        ResolvedCelestialNBodyHorizon required_celestial_nbody_horizon =
                 needs_celestial_nbody_cache
                         ? resolve_required_celestial_nbody_horizon(
                                   std::span<const KeplerPredictionSubject>(subjects.data(), subjects.size()),
@@ -795,80 +795,151 @@ namespace Game
                                   world_frame,
                                   previous_primary_body_id)
                         : ResolvedCelestialNBodyHorizon{};
-        const CelestialNBodyEphemerisCache &celestial_nbody =
-                needs_celestial_nbody_cache
-                        ? resolve_celestial_nbody_cache(context,
-                                                        world_frame,
-                                                        required_celestial_nbody_horizon.horizon_s,
-                                                        required_celestial_nbody_horizon.uncapped_horizon_s,
-                                                        required_celestial_nbody_horizon.cap_s,
-                                                        required_celestial_nbody_horizon.capped)
-                        : _celestial_nbody_cache;
-        _state.celestial_nbody_ephemeris.valid = celestial_nbody.valid;
-        _state.celestial_nbody_ephemeris.status = celestial_nbody.status;
-        _state.celestial_nbody_ephemeris.uncapped_required_horizon_s =
-                celestial_nbody.uncapped_required_horizon_s;
-        _state.celestial_nbody_ephemeris.required_horizon_s =
-                celestial_nbody.required_horizon_s;
-        _state.celestial_nbody_ephemeris.built_horizon_s =
-                celestial_nbody.built_horizon_s;
-        _state.celestial_nbody_ephemeris.horizon_cap_s =
-                celestial_nbody.horizon_cap_s;
-        _state.celestial_nbody_ephemeris.t0_s = celestial_nbody.t0_s;
-        _state.celestial_nbody_ephemeris.t_end_s = celestial_nbody.t_end_s;
-        _state.celestial_nbody_ephemeris.body_count = celestial_nbody.body_ids.size();
-        _state.celestial_nbody_ephemeris.accepted_segments =
-                celestial_nbody.diagnostics.accepted_segments;
-        _state.celestial_nbody_ephemeris.rejected_splits =
-                celestial_nbody.diagnostics.rejected_splits;
-        _state.celestial_nbody_ephemeris.forced_boundary_splits =
-                celestial_nbody.diagnostics.forced_boundary_splits;
-        _state.celestial_nbody_ephemeris.min_dt_s =
-                celestial_nbody.diagnostics.min_dt_s;
-        _state.celestial_nbody_ephemeris.avg_dt_s =
-                celestial_nbody.diagnostics.avg_dt_s;
-        _state.celestial_nbody_ephemeris.max_dt_s =
-                celestial_nbody.diagnostics.max_dt_s;
-        _state.celestial_nbody_ephemeris.horizon_capped =
-                celestial_nbody.horizon_capped;
-        _state.celestial_nbody_ephemeris.hard_cap_hit =
-                celestial_nbody.diagnostics.hard_cap_hit;
-        _state.celestial_nbody_ephemeris.cancelled =
-                celestial_nbody.diagnostics.cancelled;
-        if (!needs_celestial_nbody_cache)
-        {
-            _state.celestial_nbody_ephemeris = {};
-        }
 
-        const KeplerBodyStateProvider body_state_provider =
-                needs_celestial_nbody_cache && celestial_nbody.valid
-                        ? celestial_nbody.body_state_provider
-                        : make_current_kepler_body_state_provider(*context.orbit);
-
-        // Analytic Kepler tracks.
-        for (const KeplerPredictionSubject &subject : subjects)
-        {
-            _state.tracks.push_back(build_kepler_track(subject,
-                                                       context,
-                                                       world_frame,
-                                                       body_state_provider,
-                                                       celestial_nbody.ephemeris,
-                                                       previous_primary_body_id));
-        }
-
-        if (context.build_celestial_nbody_tracks)
-        {
-            // Sampled n-body celestial tracks.
-            for (const KeplerPredictionSubject &subject : celestial_subjects)
+        const auto publish_ephemeris_debug = [this, needs_celestial_nbody_cache](
+                                                     const CelestialNBodyEphemerisCache &cache) {
+            if (!needs_celestial_nbody_cache)
             {
-                _state.tracks.push_back(build_celestial_nbody_track(subject,
-                                                                    context,
-                                                                    world_frame,
-                                                                    celestial_nbody.ephemeris,
-                                                                    required_celestial_nbody_horizon.horizon_s));
+                _state.celestial_nbody_ephemeris = {};
+                return;
+            }
+
+            _state.celestial_nbody_ephemeris.valid = cache.valid;
+            _state.celestial_nbody_ephemeris.status = cache.status;
+            _state.celestial_nbody_ephemeris.uncapped_required_horizon_s =
+                    cache.uncapped_required_horizon_s;
+            _state.celestial_nbody_ephemeris.required_horizon_s =
+                    cache.required_horizon_s;
+            _state.celestial_nbody_ephemeris.built_horizon_s =
+                    cache.built_horizon_s;
+            _state.celestial_nbody_ephemeris.horizon_cap_s =
+                    cache.horizon_cap_s;
+            _state.celestial_nbody_ephemeris.t0_s = cache.t0_s;
+            _state.celestial_nbody_ephemeris.t_end_s = cache.t_end_s;
+            _state.celestial_nbody_ephemeris.body_count = cache.body_ids.size();
+            _state.celestial_nbody_ephemeris.accepted_segments =
+                    cache.diagnostics.accepted_segments;
+            _state.celestial_nbody_ephemeris.rejected_splits =
+                    cache.diagnostics.rejected_splits;
+            _state.celestial_nbody_ephemeris.forced_boundary_splits =
+                    cache.diagnostics.forced_boundary_splits;
+            _state.celestial_nbody_ephemeris.min_dt_s =
+                    cache.diagnostics.min_dt_s;
+            _state.celestial_nbody_ephemeris.avg_dt_s =
+                    cache.diagnostics.avg_dt_s;
+            _state.celestial_nbody_ephemeris.max_dt_s =
+                    cache.diagnostics.max_dt_s;
+            _state.celestial_nbody_ephemeris.horizon_capped =
+                    cache.horizon_capped;
+            _state.celestial_nbody_ephemeris.hard_cap_hit =
+                    cache.diagnostics.hard_cap_hit;
+            _state.celestial_nbody_ephemeris.cancelled =
+                    cache.diagnostics.cancelled;
+        };
+
+        const auto build_tracks = [&](const CelestialNBodyEphemerisCache &cache,
+                                      const double celestial_nbody_horizon_s) {
+            _state.tracks.clear();
+            _state.tracks.reserve(subjects.size() +
+                                  (context.build_celestial_nbody_tracks ? celestial_subject_count : 0u));
+
+            const KeplerBodyStateProvider body_state_provider =
+                    needs_celestial_nbody_cache && cache.valid
+                            ? cache.body_state_provider
+                            : make_current_kepler_body_state_provider(*context.orbit);
+
+            // Analytic Kepler tracks.
+            for (const KeplerPredictionSubject &subject : subjects)
+            {
+                _state.tracks.push_back(build_kepler_track(subject,
+                                                           context,
+                                                           world_frame,
+                                                           body_state_provider,
+                                                           cache.ephemeris,
+                                                           previous_primary_body_id));
+            }
+
+            if (context.build_celestial_nbody_tracks)
+            {
+                // Sampled n-body celestial tracks.
+                for (const KeplerPredictionSubject &subject : celestial_subjects)
+                {
+                    _state.tracks.push_back(build_celestial_nbody_track(subject,
+                                                                        context,
+                                                                        world_frame,
+                                                                        cache.ephemeris,
+                                                                        celestial_nbody_horizon_s));
+                }
+            }
+        };
+
+        const auto planned_ephemeris_horizon_s = [&](const double ephemeris_end_s) {
+            double horizon_s = 0.0;
+            for (const KeplerPredictionState::Track &track : _state.tracks)
+            {
+                if (!track.active_player)
+                {
+                    continue;
+                }
+                horizon_s = std::max(
+                        horizon_s,
+                        required_kepler_planned_preview_ephemeris_horizon_s(
+                                std::span<const KeplerOrbitArc>(track.planned_arcs.data(),
+                                                                track.planned_arcs.size()),
+                                std::span<const KeplerPatchEvent>(track.planned_patch_events.data(),
+                                                                  track.planned_patch_events.size()),
+                                context.current_sim_time_s,
+                                ephemeris_end_s,
+                                context.options));
+            }
+            return horizon_s;
+        };
+
+        const CelestialNBodyEphemerisCache *celestial_nbody =
+                needs_celestial_nbody_cache
+                        ? &resolve_celestial_nbody_cache(context,
+                                                         world_frame,
+                                                         required_celestial_nbody_horizon.horizon_s,
+                                                         required_celestial_nbody_horizon.uncapped_horizon_s,
+                                                         required_celestial_nbody_horizon.cap_s,
+                                                         required_celestial_nbody_horizon.capped)
+                        : &_celestial_nbody_cache;
+
+        build_tracks(*celestial_nbody, required_celestial_nbody_horizon.horizon_s);
+
+        if (patched_conics_needs_ephemeris &&
+            celestial_nbody->valid &&
+            std::isfinite(celestial_nbody->t_end_s))
+        {
+            const double planned_horizon_s =
+                    planned_ephemeris_horizon_s(celestial_nbody->t_end_s);
+            if (planned_horizon_s > celestial_nbody->required_horizon_s + 1.0e-6)
+            {
+                const double uncapped_horizon_s =
+                        std::max(required_celestial_nbody_horizon.uncapped_horizon_s,
+                                 planned_horizon_s);
+                const KeplerCelestialNBodyHorizonLimit limited =
+                        limit_kepler_celestial_nbody_horizon(uncapped_horizon_s,
+                                                             context.options,
+                                                             planned_horizon_s);
+                required_celestial_nbody_horizon = ResolvedCelestialNBodyHorizon{
+                        .uncapped_horizon_s = uncapped_horizon_s,
+                        .horizon_s = limited.horizon_s,
+                        .cap_s = limited.cap_s,
+                        .capped = limited.capped,
+                };
+                celestial_nbody =
+                        &resolve_celestial_nbody_cache(context,
+                                                       world_frame,
+                                                       required_celestial_nbody_horizon.horizon_s,
+                                                       required_celestial_nbody_horizon.uncapped_horizon_s,
+                                                       required_celestial_nbody_horizon.cap_s,
+                                                       required_celestial_nbody_horizon.capped);
+                build_tracks(*celestial_nbody, required_celestial_nbody_horizon.horizon_s);
             }
         }
 
+        publish_ephemeris_debug(*celestial_nbody);
         publish_representative_track(_state);
     }
 

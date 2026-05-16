@@ -67,4 +67,12 @@ namespace Game
             const KeplerManeuverNode *nodes,
             std::size_t node_count,
             const KeplerPredictionOptions &options);
+
+    // Returns the ephemeris horizon needed when a planned preview was clipped.
+    double required_kepler_planned_preview_ephemeris_horizon_s(
+            std::span<const KeplerOrbitArc> planned_arcs,
+            std::span<const KeplerPatchEvent> planned_events,
+            double t0_s,
+            double ephemeris_end_s,
+            const KeplerPredictionOptions &options);
 } // namespace Game
