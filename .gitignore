@@ -10,6 +10,7 @@
 /cmake-build-*/
 /__cmake_systeminformation/
 /tmp
+%SystemDrive%
 
 # Local tooling files
 /.cl[a-z]*
@@ -27,6 +28,8 @@
 /check_doc_freshness.py
 /workflow.md
 /debug*.png
+*plans.*
+CMakePresets.json
 
 # Third-party local artifacts
 /third_party/ImGuizmo/.gitignore
