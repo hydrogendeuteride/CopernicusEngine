@@ -13,7 +13,7 @@ struct IBLPaths
 {
     std::string specularCube; // .ktx2 (GPU-ready BC6H or R16G16B16A16)
     std::string diffuseCube; // .ktx2
-    std::string brdfLut2D; // .ktx2 (BC5 RG UNORM or similar)
+    std::string brdfLut2D; // .ktx2 R16G16_SFLOAT BRDF lookup table
     // Optional separate background environment map (2D equirect .ktx2).
     // When empty, the IBL system falls back to using specularCube for the background.
     std::string background2D;

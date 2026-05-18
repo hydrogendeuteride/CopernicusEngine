@@ -246,7 +246,7 @@ namespace
         if (!paths.brdfLut2D.empty())
         {
             ktxutil::Ktx2D lut{};
-            if (ktxutil::load_ktx2_2d(paths.brdfLut2D.c_str(), lut))
+            if (ktxutil::load_ktx2_brdf_lut_2d(paths.brdfLut2D.c_str(), lut))
             {
                 outData.has_brdf = true;
                 outData.brdf_2d = std::move(lut);

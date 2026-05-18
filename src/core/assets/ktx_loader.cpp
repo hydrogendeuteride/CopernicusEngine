@@ -31,6 +31,18 @@ namespace ktxutil
         }
     }
 
+    static inline bool is_2d_sampled_format(VkFormat f)
+    {
+        switch (f)
+        {
+            case VK_FORMAT_R8_UNORM:
+            case VK_FORMAT_R16G16_SFLOAT:
+                return true;
+            default:
+                return is_bc_format(f);
+        }
+    }
+
     static inline bool exists_file(const char* path)
     {
         std::error_code ec; return std::filesystem::exists(path, ec) && !ec;
@@ -123,7 +135,6 @@ namespace ktxutil
 
         if (ktxTexture2_NeedsTranscoding(ktex))
         {
-            // Common for BRDF LUTs: BC5 RG UNORM
             kres = ktxTexture2_TranscodeBasis(ktex, KTX_TTF_BC5_RG, 0);
             if (kres != KTX_SUCCESS)
             {
@@ -133,7 +144,7 @@ namespace ktxutil
         }
 
         VkFormat vkfmt = static_cast<VkFormat>(ktex->vkFormat);
-        if (!is_bc_format(vkfmt))
+        if (!is_2d_sampled_format(vkfmt))
         {
             ktxTexture_Destroy(ktxTexture(ktex));
             return false;
@@ -172,6 +183,14 @@ namespace ktxutil
 
         ktxTexture_Destroy(ktxTexture(ktex));
         return true;
+    }
+
+    bool load_ktx2_brdf_lut_2d(const char* path, Ktx2D& out)
+    {
+        if (!load_ktx2_2d(path, out)) return false;
+        if (out.fmt == VK_FORMAT_R16G16_SFLOAT) return true;
+        out = Ktx2D{};
+        return false;
     }
 
     bool load_ktx2_3d(const char* path, Ktx3D& out)

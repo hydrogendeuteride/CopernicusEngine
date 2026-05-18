@@ -160,7 +160,7 @@ Authoring IBL Assets
   - Alternative: prefiltered equirectangular 2D `.ktx2` with width = 2 x height and full mip chain.
   - Make sure the mip chain is generated with a GGX importance sampling tool so the BRDF LUT + mip chain match.
 - BRDF LUT:
-  - A standard 2D preintegrated GGX LUT (RG), usually stored as `R8G8_UNORM` or BC5.
+  - A standard 2D preintegrated GGX LUT (RG), stored as `R16G16_SFLOAT`.
   - The LUT is sampled with `(NoV, roughness)` coordinates.
 - Diffuse:
   - The engine currently uses SH coefficients baked from the specular equirectangular map. If you provide a separate diffuse cubemap, the CPU SH bake still uses the specular HDR; you can adjust this in `IBLManager` if you want SH to come from a different source.
@@ -177,4 +177,3 @@ Implementation Notes
   - Lighting and transparent passes create small fallback textures so that the IBL descriptor set is always valid, even when no IBL assets are loaded.
   - Background pass builds a 1x1x6 black cube as a fallback env.
   - When `background2D` is not provided, `IBLManager::background()` returns the same image as `specular()`.
-

@@ -256,10 +256,10 @@ struct PlanetCloudSettings
     std::string overlayTexturePath = "planets/earth/cloud/earth_clouds_8k_bc4.ktx2";
 
     // Relative to assets/ (KTX2 recommended). Tileable noise reused for weather modulation and internal breakup.
-    std::string noiseTexturePath = "vfx/perlin_bc4.ktx2";
+    std::string noiseTexturePath = "vfx/cloud_weather_perlin_512.ktx2";
 
     // Optional GPU-ready 3D KTX2 noise for seam-free internal cloud breakup.
-    std::string noiseTexture3DPath;
+    std::string noiseTexture3DPath = "vfx/cloud_perlin_worley_64_r8.ktx2";
 
     // Rotate the overlay around +Y (radians) to align the texture seam/orientation.
     float overlayRotationRad = 0.0f;

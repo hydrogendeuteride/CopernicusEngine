@@ -238,9 +238,9 @@ struct PlanetCloudSettings
     // Macro cloud/weather map wrapped over the sphere.
     std::string overlayTexturePath{"planets/earth/cloud/earth_clouds_8k_bc4.ktx2"};
     // Tileable noise reused for weather modulation and internal breakup.
-    std::string noiseTexturePath{"vfx/perlin_bc4.ktx2"};
+    std::string noiseTexturePath{"vfx/cloud_weather_perlin_512.ktx2"};
     // Optional GPU-ready 3D KTX2 noise for seam-free internal detail.
-    std::string noiseTexture3DPath{};
+    std::string noiseTexture3DPath{"vfx/cloud_perlin_worley_64_r8.ktx2"};
     float overlayRotationRad{0.0f};
     bool overlayFlipV{false};
 

@@ -96,7 +96,7 @@ Image‑Based Lighting (IBL) Textures
 - Inputs (`IBLPaths`):
   - `specularCube`: preferred is a GPU‑ready `.ktx2` (BC6H or `R16G16B16A16_SFLOAT`) containing either a cubemap or an equirectangular 2D env with prefiltered mips.
   - `diffuseCube`: optional `.ktx2` cubemap for diffuse irradiance. If missing, diffuse IBL falls back to SH only.
-  - `brdfLut2D`: `.ktx2` 2D RG LUT (e.g., `VK_FORMAT_R8G8_UNORM` or BC5).
+  - `brdfLut2D`: `.ktx2` 2D RG LUT in `VK_FORMAT_R16G16_SFLOAT`.
 - Loading:
   - Specular:
     - If `specularCube` is a cubemap `.ktx2`, `IBLManager` uses `ktxutil::load_ktx2_cubemap` and uploads via `ResourceManager::create_image_compressed_layers`, preserving the file’s format and mip chain.
@@ -105,7 +105,7 @@ Image‑Based Lighting (IBL) Textures
   - Diffuse (optional):
     - If `diffuseCube` is provided and valid, it is uploaded as a cubemap using `create_image_compressed_layers`. Current shaders use the SH buffer for diffuse; this cubemap can be wired into a future path if you want to sample it directly.
   - BRDF LUT:
-    - `brdfLut2D` is loaded as 2D `.ktx2` via `ktxutil::load_ktx2_2d` and uploaded with `create_image_compressed`.
+    - `brdfLut2D` is loaded as 2D `.ktx2` via `ktxutil::load_ktx2_brdf_lut_2d`, which requires `VK_FORMAT_R16G16_SFLOAT`, and uploaded with `create_image_compressed`.
   - Fallbacks:
     - `LightingPass` and `TransparentPass` create tiny 1×1 UNORM textures (grey 2D for env, RG for BRDF LUT) so shaders can safely sample IBL bindings even when IBL assets are not loaded.
 - Descriptor layout & bindings:

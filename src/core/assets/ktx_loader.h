@@ -24,7 +24,8 @@ namespace ktxutil
     // - Returns true on success and fills 'out'.
     bool load_ktx2_cubemap(const char* path, KtxCubemap& out);
 
-    // Optional: minimal 2D loader for BRDF LUTs (RG/BC5 etc.). Returns VkFormat and copies per mip.
+    // Optional: minimal 2D loader for equirect maps and sampled KTX2 payloads.
+    // Accepts BC formats plus R16G16_SFLOAT for the BRDF LUT path.
     struct Ktx2D
     {
         VkFormat fmt{VK_FORMAT_UNDEFINED};
@@ -35,6 +36,7 @@ namespace ktxutil
         std::vector<VkBufferImageCopy> copies;
     };
     bool load_ktx2_2d(const char* path, Ktx2D& out);
+    bool load_ktx2_brdf_lut_2d(const char* path, Ktx2D& out);
 
     struct Ktx3D
     {
