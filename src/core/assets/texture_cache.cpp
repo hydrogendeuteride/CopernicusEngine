@@ -338,6 +338,23 @@ bool TextureCache::isPinned(TextureHandle handle) const
     return _entries[handle].pinned;
 }
 
+static inline bool file_has_data(const std::filesystem::path &path)
+{
+    if (path.empty())
+    {
+        return false;
+    }
+
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec) || ec)
+    {
+        return false;
+    }
+
+    ec.clear();
+    return std::filesystem::file_size(path, ec) > 0 && !ec;
+}
+
 static inline size_t bytes_per_texel(VkFormat fmt)
 {
     switch (fmt)
@@ -693,8 +710,7 @@ void TextureCache::workerLoop()
                 ktxPath = p;
                 ktxPath.replace_extension(".ktx2");
             }
-            std::error_code ec;
-            bool hasKTX2 = (!ktxPath.empty() && std::filesystem::exists(ktxPath, ec) && !ec);
+            bool hasKTX2 = file_has_data(ktxPath);
             if (hasKTX2)
             {
                 ktxTexture2* ktex = nullptr;
@@ -751,10 +767,20 @@ void TextureCache::workerLoop()
                             case VK_FORMAT_BC6H_SFLOAT_BLOCK:
                             case VK_FORMAT_BC7_UNORM_BLOCK:
                             case VK_FORMAT_BC7_SRGB_BLOCK:
+                            case VK_FORMAT_R8_UNORM:
+                            case VK_FORMAT_R8_SRGB:
+                            case VK_FORMAT_R8G8_UNORM:
+                            case VK_FORMAT_R8G8_SRGB:
+                            case VK_FORMAT_R8G8B8A8_UNORM:
+                            case VK_FORMAT_R8G8B8A8_SRGB:
+                            case VK_FORMAT_B8G8R8A8_UNORM:
+                            case VK_FORMAT_B8G8R8A8_SRGB:
                             case VK_FORMAT_R16_UNORM:
+                            case VK_FORMAT_R16G16_SFLOAT:
+                            case VK_FORMAT_R16G16B16A16_SFLOAT:
                                 break;
                             default:
-                                Logger::warn("[TextureCache] libktx returned non-BC format {} -- skipping KTX2", string_VkFormat(vkfmt));
+                                Logger::warn("[TextureCache] libktx returned unsupported KTX2 format {} -- skipping KTX2", string_VkFormat(vkfmt));
                                 ktxTexture_Destroy(ktxTexture(ktex));
                                 ktex = nullptr;
                                 break;
@@ -786,7 +812,7 @@ void TextureCache::workerLoop()
             }
             else if (p.extension() == ".ktx2")
             {
-                Logger::warn("[TextureCache] Requested .ktx2 '{}' but file not found (ec={})", p.string(), ec.value());
+                Logger::warn("[TextureCache] Requested .ktx2 '{}' but file missing or empty", p.string());
             }
         }
 
@@ -961,7 +987,7 @@ size_t TextureCache::drainReadyUploads(ResourceManager &rm, size_t budgetBytes)
                 {
                     vkGetPhysicalDeviceFormatProperties(_context->getDevice()->physicalDevice(), fmt, &props);
                 }
-                Logger::warn("[TextureCache] Compressed format unsupported: format={} (optimalFeatures=0x{:08x}) -- fallback raster for {}",
+                Logger::warn("[TextureCache] KTX2 format unsupported: format={} (optimalFeatures=0x{:08x}) -- fallback raster for {}",
                               string_VkFormat(fmt), props.optimalTilingFeatures, e.path);
                 // Fall back to raster path: requeue by synthesizing a non-KTX result
                 // Attempt synchronous fallback decode from file if available.

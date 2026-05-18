@@ -73,8 +73,8 @@ struct ParticleParams
     float softDepthDistance{0.15f};  // 0 = disable
 
     // Flipbook animation
-    uint32_t flipbookCols{16};
-    uint32_t flipbookRows{4};
+    uint32_t flipbookCols{8};
+    uint32_t flipbookRows{8};
     float flipbookFps{30.0f};
     float flipbookIntensity{1.0f};
 
@@ -187,8 +187,8 @@ fire.params.drag = 1.0f;
 fire.params.gravity = -2.0f;  // Upward buoyancy
 fire.params.color = glm::vec4(1.0f, 0.7f, 0.3f, 1.0f);
 
-fire.params.flipbookCols = 16;
-fire.params.flipbookRows = 4;
+fire.params.flipbookCols = 8;
+fire.params.flipbookRows = 8;
 fire.params.flipbookFps = 24.0f;
 fire.params.flipbookIntensity = 1.5f;
 

@@ -77,10 +77,10 @@ sys.params.gravity = 0.0f; // Positive pulls down -Y in local space
 // Appearance
 sys.params.color = glm::vec4(1.0f, 0.5f, 0.1f, 1.0f); // Orange
 
-// Flipbook animation (16×4 atlas, 30 FPS)
+// Flipbook animation (8×8 atlas, 30 FPS)
 sys.flipbookTexture = "vfx/flame.ktx2";
-sys.params.flipbookCols = 16;
-sys.params.flipbookRows = 4;
+sys.params.flipbookCols = 8;
+sys.params.flipbookRows = 8;
 sys.params.flipbookFps = 30.0f;
 sys.params.flipbookIntensity = 1.0f;
 

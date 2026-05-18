@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cavity-small-radius", type=int, default=3, help="Small blur radius for cavity extraction")
     parser.add_argument("--cavity-large-radius", type=int, default=12, help="Large blur radius for cavity extraction")
     parser.add_argument("--cavity-gain", type=float, default=0.9, help="Cavity darkening multiplier")
+    parser.add_argument("--ocean-mask-dir", help="Optional face directory containing px/nx/py/ny/pz/nz.png; white ocean becomes neutral cavity")
     parser.add_argument("--edge-fade-px", type=int, default=6, help="Fade normals/cavity to neutral near face edges")
     parser.add_argument(
         "--write-ktx2",
@@ -59,6 +60,21 @@ def load_height_faces(height_dir: Path) -> dict[str, np.ndarray]:
         with Image.open(path) as image:
             faces[face] = load_height_image(image)
     return faces
+
+
+def load_mask_faces(mask_dir: Path, shape: tuple[int, int]) -> dict[str, np.ndarray]:
+    masks: dict[str, np.ndarray] = {}
+    target_h, target_w = shape
+    for face in FACE_NAMES:
+        path = mask_dir / f"{face}.png"
+        if not path.is_file():
+            raise SystemExit(f"missing ocean mask face: {path}")
+        with Image.open(path) as image:
+            mask = image.convert("L")
+            if mask.size != (target_w, target_h):
+                mask = mask.resize((target_w, target_h), Image.Resampling.BILINEAR)
+            masks[face] = np.asarray(mask, dtype=np.float32) / 255.0
+    return masks
 
 
 def box_blur(image: np.ndarray, radius: int) -> np.ndarray:
@@ -174,7 +190,7 @@ def save_gray_png(path: Path, gray: np.ndarray) -> None:
     Image.fromarray(encoded, mode="L").save(path, optimize=True)
 
 
-def write_ktx2_from_png(png_path: Path, target: str) -> None:
+def write_ktx2_from_png(png_path: Path, target: str, target_type: str = "RGBA") -> None:
     with tempfile.TemporaryDirectory(prefix=f"{png_path.stem}-ktx2-") as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         temp_ktx = temp_dir / f"{png_path.stem}.uastc.ktx2"
@@ -184,6 +200,7 @@ def write_ktx2_from_png(png_path: Path, target: str) -> None:
                 "--t2",
                 "--encode", "uastc",
                 "--uastc_quality", "2",
+                "--target_type", target_type,
                 "--assign_oetf", "linear",
                 "--genmipmap",
                 str(temp_ktx),
@@ -213,6 +230,10 @@ def main() -> int:
     cavity_output.mkdir(parents=True, exist_ok=True)
 
     height_faces = load_height_faces(height_dir)
+    first_face = next(iter(height_faces.values()))
+    ocean_masks = None
+    if args.ocean_mask_dir:
+        ocean_masks = load_mask_faces(Path(args.ocean_mask_dir).expanduser().resolve(), first_face.shape)
 
     cavity_metric = []
     for face_name in FACE_NAMES:
@@ -244,6 +265,9 @@ def main() -> int:
             cavity_gain=args.cavity_gain,
             edge_fade_px=args.edge_fade_px,
         )
+        if ocean_masks is not None:
+            ocean = np.clip(ocean_masks[face_name], 0.0, 1.0)
+            cavity = cavity * (1.0 - ocean) + ocean
 
         detail_png = detail_output / f"{face_name}.png"
         cavity_png = cavity_output / f"{face_name}.png"
@@ -251,8 +275,8 @@ def main() -> int:
         save_gray_png(cavity_png, cavity)
 
         if args.write_ktx2:
-            write_ktx2_from_png(detail_png, "bc7")
-            write_ktx2_from_png(cavity_png, "bc7")
+            write_ktx2_from_png(detail_png, "bc7", "RGBA")
+            write_ktx2_from_png(cavity_png, "bc4", "R")
 
         print(f"wrote {detail_png}")
         print(f"wrote {cavity_png}")

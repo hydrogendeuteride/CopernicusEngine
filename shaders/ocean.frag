@@ -209,15 +209,17 @@ vec3 evaluate_ocean_specular(vec3 N, vec3 V, vec3 L, float roughness, vec3 F0)
 
 void main()
 {
-    float rawMask = texture(planetSpecularTex, inUV).r;
+    float rawMask = textureLod(planetSpecularTex, inUV, 0.0).r;
     float strength = clamp(materialData.extra[2].w, 0.0, 1.0);
     float waterMask = rawMask * strength;
-    if (waterMask <= 0.001)
+
+    float edge = max(fwidth(waterMask), 0.002);
+    float coverage = smoothstep(0.45 - edge, 0.55 + edge, waterMask);
+    if (coverage <= 0.001)
     {
         discard;
     }
 
-    float coverage = smoothstep(0.005, 0.08, waterMask);
     float baseRoughness = clamp(materialData.extra[3].w, 0.04, 1.0);
 
     vec3 baseNormal = normalize(inBaseNormal);

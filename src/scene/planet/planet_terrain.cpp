@@ -42,6 +42,23 @@ namespace
                         props.limits.minUniformBufferOffsetAlignment);
     }
 
+    bool texture_file_ready(const std::string &path)
+    {
+        if (path.empty())
+        {
+            return false;
+        }
+
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(path, ec) || ec)
+        {
+            return false;
+        }
+
+        ec.clear();
+        return std::filesystem::file_size(path, ec) > 0 && !ec;
+    }
+
     std::string resolve_optional_face_texture_path(AssetManager &assets,
                                                    std::string_view dir,
                                                    const planet::CubeFace face)
@@ -53,14 +70,14 @@ namespace
 
         std::string rel = fmt::format("{}/{}.ktx2", dir, planet::cube_face_name(face));
         std::string abs_path = assets.assetPath(rel);
-        if (std::filesystem::exists(abs_path))
+        if (texture_file_ready(abs_path))
         {
             return abs_path;
         }
 
         rel = fmt::format("{}/{}.png", dir, planet::cube_face_name(face));
         abs_path = assets.assetPath(rel);
-        if (std::filesystem::exists(abs_path))
+        if (texture_file_ready(abs_path))
         {
             return abs_path;
         }
@@ -571,11 +588,15 @@ void PlanetSystem::ensure_terrain_face_materials(TerrainState &state,
         }
 
         const planet::CubeFace face = static_cast<planet::CubeFace>(face_index);
-        const std::string rel = fmt::format("{}/{}.ktx2", desired_albedo_dir, planet::cube_face_name(face));
+        const std::string abs_path = resolve_optional_face_texture_path(*assets, desired_albedo_dir, face);
+        if (abs_path.empty())
+        {
+            return;
+        }
 
         TextureCache::TextureKey tk{};
         tk.kind = TextureCache::TextureKey::SourceKind::FilePath;
-        tk.path = assets->assetPath(rel);
+        tk.path = abs_path;
         tk.srgb = true;
         tk.mipmapped = true;
 

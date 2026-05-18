@@ -49,8 +49,8 @@ public:
         float soft_depth_distance{0.15f};
 
         // Flipbook sampling (atlas layout and animation).
-        uint32_t flipbook_cols{16};
-        uint32_t flipbook_rows{4};
+        uint32_t flipbook_cols{8};
+        uint32_t flipbook_rows{8};
         float flipbook_fps{30.0f};
         float flipbook_intensity{1.0f};
 

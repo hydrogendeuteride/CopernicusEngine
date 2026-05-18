@@ -27,6 +27,75 @@ namespace Game
     namespace
     {
         std::mutex g_gltf_preload_mutex;
+
+        bool file_has_data(const std::string &path)
+        {
+            if (path.empty())
+            {
+                return false;
+            }
+
+            std::error_code ec;
+            if (!std::filesystem::is_regular_file(path, ec) || ec)
+            {
+                return false;
+            }
+
+            ec.clear();
+            return std::filesystem::file_size(path, ec) > 0 && !ec;
+        }
+
+        bool face_texture_exists(AssetManager &assets,
+                                 const std::string &dir,
+                                 const planet::CubeFace face,
+                                 const bool allow_png)
+        {
+            if (dir.empty())
+            {
+                return false;
+            }
+
+            const std::string face_name = planet::cube_face_name(face);
+            const std::string ktx_path = assets.assetPath(dir + "/" + face_name + ".ktx2");
+            if (file_has_data(ktx_path))
+            {
+                return true;
+            }
+
+            if (!allow_png)
+            {
+                return false;
+            }
+
+            const std::string png_path = assets.assetPath(dir + "/" + face_name + ".png");
+            return file_has_data(png_path);
+        }
+
+        bool has_any_face_texture(AssetManager &assets, const std::string &dir, const bool allow_png)
+        {
+            for (size_t face_index = 0; face_index < 6; ++face_index)
+            {
+                const auto face = static_cast<planet::CubeFace>(face_index);
+                if (face_texture_exists(assets, dir, face, allow_png))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool has_all_face_textures(AssetManager &assets, const std::string &dir, const bool allow_png)
+        {
+            for (size_t face_index = 0; face_index < 6; ++face_index)
+            {
+                const auto face = static_cast<planet::CubeFace>(face_index);
+                if (!face_texture_exists(assets, dir, face, allow_png))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
     }
 
     GameplayLoadingState::GameplayLoadingState(std::string scenario_asset_path)
@@ -91,6 +160,52 @@ namespace Game
             _error_text = "Failed to load scenario: " + scenario_path;
             Logger::error("[GameplayLoadingState] {}", _error_text);
             return;
+        }
+
+        for (auto &cdef : _scenario_config.celestials)
+        {
+            if (!cdef.has_terrain)
+            {
+                continue;
+            }
+
+            if (!cdef.height_dir.empty() && !has_all_face_textures(*ctx.renderer->_assetManager, cdef.height_dir, false))
+            {
+                Logger::warn("[GameplayLoadingState] Terrain '{}' height faces missing in '{}'; using flat terrain.",
+                             cdef.name,
+                             cdef.height_dir);
+                cdef.height_dir.clear();
+                cdef.height_max_m = 0.0;
+                cdef.height_offset_m = 0.0;
+            }
+
+            if (!cdef.detail_normal_dir.empty() &&
+                !has_any_face_texture(*ctx.renderer->_assetManager, cdef.detail_normal_dir, true))
+            {
+                Logger::warn("[GameplayLoadingState] Terrain '{}' detail normal faces missing in '{}'; using flat normals.",
+                             cdef.name,
+                             cdef.detail_normal_dir);
+                cdef.detail_normal_dir.clear();
+                cdef.detail_normal_strength = 0.0f;
+            }
+
+            if (!cdef.cavity_dir.empty() && !has_any_face_texture(*ctx.renderer->_assetManager, cdef.cavity_dir, true))
+            {
+                Logger::warn("[GameplayLoadingState] Terrain '{}' cavity faces missing in '{}'; disabling cavity.",
+                             cdef.name,
+                             cdef.cavity_dir);
+                cdef.cavity_dir.clear();
+                cdef.cavity_strength = 0.0f;
+            }
+
+            if (!cdef.specular_dir.empty() && !has_any_face_texture(*ctx.renderer->_assetManager, cdef.specular_dir, true))
+            {
+                Logger::warn("[GameplayLoadingState] Terrain '{}' specular faces missing in '{}'; disabling water mask.",
+                             cdef.name,
+                             cdef.specular_dir);
+                cdef.specular_dir.clear();
+                cdef.specular_strength = 0.0f;
+            }
         }
 
         start_preload_jobs(ctx);
@@ -400,7 +515,7 @@ namespace Game
                                        const bool required,
                                        const TextureCache::TextureKey::ChannelsHint channels =
                                                TextureCache::TextureKey::ChannelsHint::Auto) {
-                if (absolute_path.empty() || !std::filesystem::exists(absolute_path))
+                if (!file_has_data(absolute_path))
                 {
                     return;
                 }
@@ -446,9 +561,9 @@ namespace Game
                     const std::string face_name = planet::cube_face_name(face);
 
                     std::string absolute = assets->assetPath(dir + "/" + face_name + ".ktx2");
-                    if (allow_png_fallback && !std::filesystem::exists(absolute))
+                    if (!file_has_data(absolute))
                     {
-                        absolute = assets->assetPath(dir + "/" + face_name + ".png");
+                        absolute = allow_png_fallback ? assets->assetPath(dir + "/" + face_name + ".png") : std::string{};
                     }
 
                     enqueue_texture(absolute, srgb, sampler, required, channels);

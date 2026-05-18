@@ -543,8 +543,8 @@ struct ParticleParams
     float softDepthDistance{0.15f};
 
     // Flipbook sampling (atlas layout and animation)
-    uint32_t flipbookCols{16};
-    uint32_t flipbookRows{4};
+    uint32_t flipbookCols{8};
+    uint32_t flipbookRows{8};
     float flipbookFps{30.0f};
     float flipbookIntensity{1.0f};
 

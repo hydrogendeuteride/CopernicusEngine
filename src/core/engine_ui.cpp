@@ -443,8 +443,8 @@ namespace
         {
             s.flipbook_texture = "vfx/flame.ktx2";
             s.noise_texture = "vfx/simplex.ktx2";
-            s.params.flipbook_cols = 16;
-            s.params.flipbook_rows = 4;
+            s.params.flipbook_cols = 8;
+            s.params.flipbook_rows = 8;
             s.params.flipbook_fps = 30.0f;
             s.params.flipbook_intensity = 1.0f;
             s.params.noise_scale = 6.0f;
@@ -1287,7 +1287,7 @@ namespace
 
         ImGui::Separator();
         ImGui::TextUnformatted("Spawn async glTF instance");
-        static char gltfPath[256] = "mirage2000/scene.gltf";
+        static char gltfPath[256] = "mirage_c/scene.gltf";
         static char gltfName[128] = "async_gltf_01";
         static float gltfPos[3] = {0.0f, 0.0f, 0.0f};
         static float gltfRot[3] = {0.0f, 0.0f, 0.0f};
@@ -2193,7 +2193,7 @@ namespace
 
         // Spawn glTF instances (runtime)
         ImGui::TextUnformatted("Spawn glTF instance");
-        static char gltfPath[256] = "mirage2000/scene.gltf";
+        static char gltfPath[256] = "mirage_c/scene.gltf";
         static char gltfName[128] = "gltf_01";
         static float gltfPos[3] = {0.0f, 0.0f, 0.0f};
         static float gltfRot[3] = {0.0f, 0.0f, 0.0f}; // pitch, yaw, roll (deg)

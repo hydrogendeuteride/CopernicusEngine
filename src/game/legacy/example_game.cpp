@@ -39,7 +39,6 @@ namespace Game
         {
             GameAPI::IBLPaths ibl{};
             ibl.specularCube = renderer->_assetManager->assetPath("ibl/sky.ktx2");
-            ibl.diffuseCube = renderer->_assetManager->assetPath("ibl/sky.ktx2");
             ibl.brdfLut = renderer->_assetManager->assetPath("ibl/brdf_lut.ktx2");
             ibl.background = renderer->_assetManager->assetPath("ibl/sky.ktx2");
             api.load_global_ibl(ibl);
@@ -181,7 +180,7 @@ namespace Game
         mirage_tr.rotation = glm::angleAxis(glm::radians(9.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         mirage_tr.scale = glm::vec3(1.0f);
         const bool mirage_added = api.add_gltf_instance(_mirage_instance_name,
-                                                        "mirage_c/mirage_c.gltf",
+                                                        "mirage_c/scene.gltf",
                                                         mirage_tr,
                                                         true);
 

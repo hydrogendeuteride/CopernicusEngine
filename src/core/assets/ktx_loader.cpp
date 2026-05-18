@@ -36,7 +36,9 @@ namespace ktxutil
         switch (f)
         {
             case VK_FORMAT_R8_UNORM:
+            case VK_FORMAT_R8G8_UNORM:
             case VK_FORMAT_R16G16_SFLOAT:
+            case VK_FORMAT_R16G16B16A16_SFLOAT:
                 return true;
             default:
                 return is_bc_format(f);
