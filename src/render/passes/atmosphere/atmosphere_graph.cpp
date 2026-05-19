@@ -135,6 +135,7 @@ RGImageHandle AtmospherePass::register_graph(RenderGraph *graph, RGImageHandle h
         (body_selection.body && body_selection.body->terrain)
             ? static_cast<float>(std::max(0.0, body_selection.body->terrain_height_offset_m))
             : 0.0f;
+    next_snapshot.oceanShellOffsetM = body_ocean_shell_offset_m(body_selection.body);
     next_snapshot.cloudBaseM = _context->planetClouds.baseHeightM;
     next_snapshot.cloudThicknessM = _context->planetClouds.thicknessM;
     next_snapshot.cloudDensityScale = _context->planetClouds.densityScale;
@@ -170,6 +171,7 @@ RGImageHandle AtmospherePass::register_graph(RenderGraph *graph, RGImageHandle h
                         _historySnapshot.terrainHeightPath != next_snapshot.terrainHeightPath ||
                         !nearly_equal(_historySnapshot.terrainHeightMaxM, next_snapshot.terrainHeightMaxM) ||
                         !nearly_equal(_historySnapshot.terrainHeightOffsetM, next_snapshot.terrainHeightOffsetM) ||
+                        !nearly_equal(_historySnapshot.oceanShellOffsetM, next_snapshot.oceanShellOffsetM) ||
                         !nearly_equal(_historySnapshot.cloudBaseM, next_snapshot.cloudBaseM) ||
                         !nearly_equal(_historySnapshot.cloudThicknessM, next_snapshot.cloudThicknessM) ||
                         !nearly_equal(_historySnapshot.cloudDensityScale, next_snapshot.cloudDensityScale) ||

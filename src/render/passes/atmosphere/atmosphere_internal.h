@@ -93,6 +93,22 @@ namespace atmosphere::detail
         return extent;
     }
 
+    static bool body_has_ocean(const PlanetSystem::PlanetBody *body)
+    {
+        return body && body->terrain && !body->terrain_specular_dir.empty() && body->specular_strength > 0.0f;
+    }
+
+    static float ocean_shell_offset_m(double radius_m)
+    {
+        const double scaled = radius_m * 1.0e-6;
+        return static_cast<float>(std::max(2.0, scaled));
+    }
+
+    static float body_ocean_shell_offset_m(const PlanetSystem::PlanetBody *body)
+    {
+        return body_has_ocean(body) ? ocean_shell_offset_m(body->radius_m) : 0.0f;
+    }
+
     static bool nearly_equal(float a, float b, float eps = 1.0e-3f)
     {
         return std::abs(a - b) <= eps;
@@ -262,6 +278,7 @@ namespace atmosphere::detail
         const float terrain_height_offset_m = terrain_height_enabled
             ? static_cast<float>(std::max(0.0, body->terrain_height_offset_m))
             : 0.0f;
+        const float ocean_shell_offset = body_ocean_shell_offset_m(body);
         const int view_steps = std::clamp(s.viewSteps, 4, 64);
 
         const float cloud_base_m = std::max(0.0f, c.baseHeightM);
@@ -327,7 +344,7 @@ namespace atmosphere::detail
         push.beta_rayleigh = glm::vec4(beta_rayleigh, intensity);
         push.beta_mie = glm::vec4(beta_mie, absorption_strength);
         push.jitter_params = glm::vec4(jitter_strength, planet_snap_m, cloud_overlay_sin, cloud_overlay_cos);
-        push.terrain_params = glm::vec4(terrain_height_scale_m, terrain_height_offset_m, 0.0f, 0.0f);
+        push.terrain_params = glm::vec4(terrain_height_scale_m, terrain_height_offset_m, ocean_shell_offset, 0.0f);
         push.cloud_layer = glm::vec4(cloud_base_m, cloud_thickness_m, cloud_density_scale, cloud_coverage);
         push.cloud_params = glm::vec4(cloud_noise_scale, cloud_detail_scale, cloud_wind_speed, cloud_wind_angle);
         push.cloud_color = glm::vec4(cloud_color, 1.0f);

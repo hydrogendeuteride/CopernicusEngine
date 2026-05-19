@@ -58,6 +58,7 @@ private:
         std::string terrainHeightPath;
         float terrainHeightMaxM = 0.0f;
         float terrainHeightOffsetM = 0.0f;
+        float oceanShellOffsetM = 0.0f;
         float cloudBaseM = 0.0f;
         float cloudThicknessM = 0.0f;
         float cloudDensityScale = 0.0f;
