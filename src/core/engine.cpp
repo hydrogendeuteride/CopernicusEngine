@@ -1478,7 +1478,8 @@ void VulkanEngine::draw()
 
             if (auto *ocean = _renderPassManager->getPass<OceanPass>())
             {
-                ocean->register_graph(_renderGraph.get(), hdrTarget, hDepth);
+                // Ocean updates G-buffer position for visible water so downstream volume bounds read the current surface.
+                ocean->register_graph(_renderGraph.get(), hdrTarget, hDepth, hGBufferPosition);
             }
 
             // Optional voxel volumetrics pass: reads hdrTarget + gbufferPosition and outputs a new HDR target.

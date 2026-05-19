@@ -12,7 +12,7 @@
 //   2.0 + frac           = planet surface (planet flag + payload)
 //
 // Payload (fractional part * 256 -> 8-bit unsigned integer):
-//   [7:4] waterMask       — ocean mask       (4-bit, 0~15 -> 0.0~1.0)
+//   [7:4] waterMask       — ocean flag/mask  (4-bit, 0~15 -> 0.0~1.0)
 //   [3:0] terrainSunVis   — terminator self-shadow visibility (4-bit, 0~15 -> 0.0~1.0)
 // ---------------------------------------------------------------------------
 

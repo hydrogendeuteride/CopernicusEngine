@@ -1,6 +1,7 @@
 #include "ocean.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <unordered_set>
@@ -108,7 +109,11 @@ void OceanPass::init(EngineContext *context)
         b.set_multisampling_none();
         b.disable_blending();
         b.enable_depthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-        b.set_color_attachment_format(_context->getSwapchain()->drawImage().imageFormat);
+        std::array<VkFormat, 2> color_formats{
+            _context->getSwapchain()->drawImage().imageFormat,
+            _context->getSwapchain()->gBufferPosition().imageFormat
+        };
+        b.set_color_attachment_formats(std::span<VkFormat>(color_formats));
         b.set_depth_format(_context->getSwapchain()->depthImage().imageFormat);
     };
     _context->pipelines->createGraphicsPipeline("ocean.surface", info);
@@ -145,9 +150,10 @@ void OceanPass::execute(VkCommandBuffer)
 void OceanPass::register_graph(RenderGraph *graph,
                                RGImageHandle drawHandle,
                                RGImageHandle depthHandle,
+                               RGImageHandle surfacePositionHandle,
                                RGImageHandle transmittanceLut)
 {
-    if (!graph || !drawHandle.valid() || !depthHandle.valid())
+    if (!graph || !drawHandle.valid() || !depthHandle.valid() || !surfacePositionHandle.valid())
     {
         return;
     }
@@ -252,9 +258,10 @@ void OceanPass::register_graph(RenderGraph *graph,
     graph->add_pass(
         "Ocean",
         RGPassType::Graphics,
-        [drawHandle, depthHandle, transmittanceLut](RGPassBuilder &builder, EngineContext *ctx)
+        [drawHandle, depthHandle, surfacePositionHandle, transmittanceLut](RGPassBuilder &builder, EngineContext *ctx)
         {
             builder.write_color(drawHandle);
+            builder.write_color(surfacePositionHandle);
             builder.write_depth(depthHandle, false /* load existing depth */);
             if (transmittanceLut.valid())
             {
@@ -289,15 +296,19 @@ void OceanPass::register_graph(RenderGraph *graph,
                 }
             }
         },
-        [this, drawHandle, depthHandle, transmittanceLut](VkCommandBuffer cmd, const RGPassResources &resources, EngineContext *ctx)
+        [this, drawHandle, depthHandle, surfacePositionHandle, transmittanceLut](
+            VkCommandBuffer cmd,
+            const RGPassResources &resources,
+            EngineContext *ctx)
         {
-            draw_ocean(cmd, ctx, resources, drawHandle, depthHandle, transmittanceLut);
+            draw_ocean(cmd, ctx, resources, drawHandle, depthHandle, surfacePositionHandle, transmittanceLut);
         });
 }
 
 void OceanPass::draw_ocean(VkCommandBuffer cmd,
                            EngineContext *context,
                            const RGPassResources &resources,
+                           RGImageHandle,
                            RGImageHandle,
                            RGImageHandle,
                            RGImageHandle transmittanceLut) const

@@ -5,8 +5,10 @@
 #include "input_structures.glsl"
 #include "ibl_common.glsl"
 #include "lighting_common.glsl"
+#include "planet_gbuffer_payload.glsl"
 #include "planet_shadow.glsl"
 #include "planet_terrain_common.glsl"
+#include "planet_ocean_mask_common.glsl"
 
 layout(location = 0) in vec3 inBaseNormal;
 layout(location = 1) in vec2 inUV;
@@ -14,6 +16,7 @@ layout(location = 2) in vec3 inWorldPos;
 layout(location = 3) in float inSeaRadius;
 
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outSurfacePos;
 
 layout(set = 2, binding = 0) uniform sampler2D transmittanceLut;
 
@@ -209,17 +212,13 @@ vec3 evaluate_ocean_specular(vec3 N, vec3 V, vec3 L, float roughness, vec3 F0)
 
 void main()
 {
-    float rawMask = textureLod(planetSpecularTex, inUV, 0.0).r;
-    float strength = clamp(materialData.extra[2].w, 0.0, 1.0);
-    float waterMask = rawMask * strength;
-
-    float edge = max(fwidth(waterMask), 0.002);
-    float coverage = smoothstep(0.45 - edge, 0.55 + edge, waterMask);
-    if (coverage <= 0.001)
+    float coverage = sample_planet_ocean_coverage(inUV);
+    if (!planet_ocean_visible(coverage))
     {
         discard;
     }
 
+    float strength = planet_ocean_strength();
     float baseRoughness = clamp(materialData.extra[3].w, 0.04, 1.0);
 
     vec3 baseNormal = normalize(inBaseNormal);
@@ -242,7 +241,6 @@ void main()
     directSpec += evaluate_ocean_specular(N, V, Lsun, lobe1, F0) * (1.75 * strength);
 
     vec3 directTransmittance = vec3(1.0);
-    vec3 viewTransmittance = vec3(1.0);
     vec3 skyTransmittance = vec3(1.0);
     bool atmosphereActive = (pc.shell_params.y > 0.5) &&
                             (pc.atmosphere_center_radius.w > 0.0) &&
@@ -287,24 +285,13 @@ void main()
                 betaM,
                 betaA,
                 false);
-            viewTransmittance = sample_atmosphere_transmittance(
-                inWorldPos,
-                V,
-                cameraLocal,
-                center,
-                planetRadius,
-                atmRadius,
-                Hr,
-                Hm,
-                betaR,
-                betaM,
-                betaA,
-                true);
         }
     }
 
+    // The atmosphere composite attenuates the camera segment after ocean writes surface position.
+    // Keep ocean shading to incoming light paths to avoid double-tinting grazing water.
     vec3 direct = directSpec * sceneData.sunlightColor.rgb * sceneData.sunlightColor.a * sunVis *
-                  directTransmittance * viewTransmittance;
+                  directTransmittance;
 
     vec3 R = reflect(-V, N);
     float NdotV = max(dot(N, V), 0.0);
@@ -322,11 +309,12 @@ void main()
         skyTransmittance,
         atmosphereActive);
     vec3 fresnel = fresnelSchlick(NdotV, F0);
-    vec3 skyReflection = skyColor * fresnel * viewTransmittance * nightReflectionFactor;
+    vec3 skyReflection = skyColor * fresnel * nightReflectionFactor;
 
     vec3 waterTint = vec3(0.012, 0.026, 0.041);
-    vec3 grazingTint = waterTint * mix(0.14, 0.03, NdotV) * viewTransmittance * nightReflectionFactor;
+    vec3 grazingTint = waterTint * mix(0.14, 0.03, NdotV) * nightReflectionFactor;
 
     vec3 color = (direct + skyReflection + grazingTint) * coverage;
     outColor = vec4(color, 1.0);
+    outSurfacePos = vec4(inWorldPos, encode_planet_gbuffer_pos_w(1.0, 1.0, 1.0));
 }

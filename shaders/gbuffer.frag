@@ -5,6 +5,7 @@
 #include "blackbody.glsl"
 #include "planet_gbuffer_payload.glsl"
 #include "planet_terrain_common.glsl"
+#include "planet_ocean_mask_common.glsl"
 
 layout(location = 0) in vec3 inNormal;
 layout(location = 1) in vec3 inColor;
@@ -40,45 +41,19 @@ layout(push_constant) uniform constants
     uint objectID;
 } PushConstants;
 
-float sample_planet_water_mask(vec2 uv)
+void apply_planet_water_override(inout vec3 albedo, inout float roughness, float oceanCoverage)
 {
-    if (materialData.extra[2].z <= 0.5)
-    {
-        return 0.0;
-    }
-
-    float mask = texture(planetSpecularTex, uv).r;
-    float strength = clamp(materialData.extra[2].w, 0.0, 1.0);
-    return clamp(mask * strength, 0.0, 1.0);
-}
-
-float sample_planet_ocean_coverage(vec2 uv)
-{
-    if (materialData.extra[2].z <= 0.5)
-    {
-        return 0.0;
-    }
-
-    float rawMask = textureLod(planetSpecularTex, uv, 0.0).r;
-    float strength = clamp(materialData.extra[2].w, 0.0, 1.0);
-    float waterMask = rawMask * strength;
-    float edge = max(fwidth(waterMask), 0.002);
-    return smoothstep(0.45 - edge, 0.55 + edge, waterMask);
-}
-
-void apply_planet_water_override(inout vec3 albedo, inout float roughness, float waterMask)
-{
-    if (waterMask <= 0.0)
+    if (oceanCoverage <= 0.0)
     {
         return;
     }
 
     float oceanRoughness = clamp(materialData.extra[3].w, 0.04, 1.0);
-    roughness = mix(roughness, oceanRoughness, waterMask);
+    roughness = mix(roughness, oceanRoughness, oceanCoverage);
 
     float luma = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
     vec3 oceanTarget = max(mix(vec3(luma), vec3(0.08, 0.11, 0.15), 0.6), vec3(0.05, 0.06, 0.07));
-    albedo = mix(albedo, oceanTarget, waterMask * 0.45);
+    albedo = mix(albedo, oceanTarget, oceanCoverage * 0.45);
 }
 
 void main() {
@@ -95,8 +70,9 @@ void main() {
     bool isTerrain = terrain_material_enabled();
 
     float oceanCoverage = isTerrain ? sample_planet_ocean_coverage(inUV) : 0.0;
-    // Keep ocean-color payloads, but do not let terrain water depth occlude the ocean shell.
-    gl_FragDepth = (oceanCoverage > 0.001) ? 0.0 : gl_FragCoord.z;
+    float oceanPayload = planet_ocean_flag(oceanCoverage);
+    // Match the terrain depth override to the ocean payload consumed by atmosphere/cloud bounds.
+    gl_FragDepth = (oceanPayload > 0.5) ? 0.0 : gl_FragCoord.z;
 
     float roughness = clamp(materialData.metal_rough_factors.y, 0.04, 1.0);
     float metallic  = clamp(materialData.metal_rough_factors.x, 0.0, 1.0);
@@ -107,8 +83,7 @@ void main() {
         roughness = clamp(mrTex.x * materialData.metal_rough_factors.y, 0.04, 1.0);
         metallic = clamp(mrTex.y * materialData.metal_rough_factors.x, 0.0, 1.0);
     }
-    float waterMask = sample_planet_water_mask(inUV);
-    apply_planet_water_override(albedo, roughness, waterMask);
+    apply_planet_water_override(albedo, roughness, oceanCoverage);
 
     // Normal mapping: decode tangent-space normal and transform to world space
     // Expect UNORM normal map; support BC5 (RG) by reconstructing Z from XY.
@@ -146,7 +121,7 @@ void main() {
     float gbuffer_flags = materialData.extra[2].y;
     vec3 Lsun = -sceneData.sunlightDirection.xyz;
     float terrainSunVis = isTerrain ? terrain_terminator_visibility(inUV, terrainTerminatorNormal, terrainGeomNormal, inWorldPos, Lsun) : 1.0;
-    outPos = vec4(inWorldPos, encode_planet_gbuffer_pos_w(gbuffer_flags, waterMask, terrainSunVis));
+    outPos = vec4(inWorldPos, encode_planet_gbuffer_pos_w(gbuffer_flags, oceanPayload, terrainSunVis));
     outNorm = vec4(Nw, roughness);
     outAlbedo = vec4(albedo, metallic);
     // Extra G-buffer: x = AO, yzw = emissive

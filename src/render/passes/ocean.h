@@ -17,6 +17,7 @@ public:
     void register_graph(RenderGraph *graph,
                         RGImageHandle drawHandle,
                         RGImageHandle depthHandle,
+                        RGImageHandle surfacePositionHandle,
                         RGImageHandle transmittanceLut = {});
 
 private:
@@ -25,6 +26,7 @@ private:
                     const RGPassResources &resources,
                     RGImageHandle drawHandle,
                     RGImageHandle depthHandle,
+                    RGImageHandle surfacePositionHandle,
                     RGImageHandle transmittanceLut) const;
 
     EngineContext *_context{};
