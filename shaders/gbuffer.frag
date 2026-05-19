@@ -52,6 +52,20 @@ float sample_planet_water_mask(vec2 uv)
     return clamp(mask * strength, 0.0, 1.0);
 }
 
+float sample_planet_ocean_coverage(vec2 uv)
+{
+    if (materialData.extra[2].z <= 0.5)
+    {
+        return 0.0;
+    }
+
+    float rawMask = textureLod(planetSpecularTex, uv, 0.0).r;
+    float strength = clamp(materialData.extra[2].w, 0.0, 1.0);
+    float waterMask = rawMask * strength;
+    float edge = max(fwidth(waterMask), 0.002);
+    return smoothstep(0.45 - edge, 0.55 + edge, waterMask);
+}
+
 void apply_planet_water_override(inout vec3 albedo, inout float roughness, float waterMask)
 {
     if (waterMask <= 0.0)
@@ -79,6 +93,10 @@ void main() {
     }
     vec3 albedo = inColor * baseTex.rgb * materialData.colorFactors.rgb;
     bool isTerrain = terrain_material_enabled();
+
+    float oceanCoverage = isTerrain ? sample_planet_ocean_coverage(inUV) : 0.0;
+    // Keep ocean-color payloads, but do not let terrain water depth occlude the ocean shell.
+    gl_FragDepth = (oceanCoverage > 0.001) ? 0.0 : gl_FragCoord.z;
 
     float roughness = clamp(materialData.metal_rough_factors.y, 0.04, 1.0);
     float metallic  = clamp(materialData.metal_rough_factors.x, 0.0, 1.0);
