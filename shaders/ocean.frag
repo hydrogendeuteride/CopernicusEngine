@@ -9,6 +9,7 @@
 #include "planet_shadow.glsl"
 #include "planet_terrain_common.glsl"
 #include "planet_ocean_mask_common.glsl"
+#include "atmosphere/include/transmittance_lut.glsl"
 
 layout(location = 0) in vec3 inBaseNormal;
 layout(location = 1) in vec2 inUV;
@@ -119,9 +120,7 @@ vec2 sample_air_mass(vec3 positionLocal, vec3 rayDir, vec3 center, float planetR
 
     vec3 up = (positionLocal - center) / r;
     float mu = dot(up, normalize(rayDir));
-    float u = clamp(mu * 0.5 + 0.5, 0.0, 1.0);
-    float v = clamp((r - planetRadius) / max(atmRadius - planetRadius, 1.0e-4), 0.0, 1.0);
-    return textureLod(transmittanceLut, vec2(u, v), 0.0).rg;
+    return sample_transmittance_air_mass(transmittanceLut, r, mu, planetRadius, atmRadius);
 }
 
 vec3 sample_atmosphere_transmittance(vec3 startLocal,
@@ -241,7 +240,6 @@ void main()
     directSpec += evaluate_ocean_specular(N, V, Lsun, lobe1, F0) * (1.75 * strength);
 
     vec3 directTransmittance = vec3(1.0);
-    vec3 skyTransmittance = vec3(1.0);
     bool atmosphereActive = (pc.shell_params.y > 0.5) &&
                             (pc.atmosphere_center_radius.w > 0.0) &&
                             (pc.atmosphere_params.x > pc.atmosphere_center_radius.w) &&
@@ -271,25 +269,12 @@ void main()
                 betaM,
                 betaA,
                 false);
-            vec3 Rsky = reflect(-V, N);
-            skyTransmittance = sample_atmosphere_transmittance(
-                inWorldPos,
-                Rsky,
-                cameraLocal,
-                center,
-                planetRadius,
-                atmRadius,
-                Hr,
-                Hm,
-                betaR,
-                betaM,
-                betaA,
-                false);
         }
     }
 
     // The atmosphere composite attenuates the camera segment after ocean writes surface position.
     // Keep ocean shading to incoming light paths to avoid double-tinting grazing water.
+    // Sky reflection uses local sky radiance, then the composite pass attenuates the camera segment.
     vec3 direct = directSpec * sceneData.sunlightColor.rgb * sceneData.sunlightColor.a * sunVis *
                   directTransmittance;
 
@@ -306,8 +291,8 @@ void main()
         Lsun,
         sceneData.sunlightColor.rgb * sceneData.sunlightColor.a,
         sceneData.ambientColor.rgb,
-        skyTransmittance,
-        atmosphereActive);
+        vec3(1.0),
+        false);
     vec3 fresnel = fresnelSchlick(NdotV, F0);
     vec3 skyReflection = skyColor * fresnel * nightReflectionFactor;
 

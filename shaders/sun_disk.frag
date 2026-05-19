@@ -109,7 +109,7 @@ void main()
         disk *= limb;
 
         vec3 centerCol = vec3(1.0, 1.0, 0.95);
-        vec3 edgeCol   = vec3(1.0, 0.45, 0.15);
+        vec3 edgeCol   = vec3(1.0, 0.82, 0.15);
         diskColor = mix(edgeCol, centerCol, mu * mu);
     }
 

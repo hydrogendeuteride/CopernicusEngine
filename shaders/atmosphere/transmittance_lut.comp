@@ -2,9 +2,9 @@
 
 layout(local_size_x = 16, local_size_y = 16) in;
 
-// Stores optical depth (Rayleigh, Mie) from a point at radius r to the top of
-// the atmosphere along a direction defined by mu = cos(theta), where theta is
-// the angle between the direction and the local up vector.
+// Stores optical depth (Rayleigh, Mie) from a point at radius r along a
+// direction defined by mu = cos(theta), where theta is the angle between the
+// direction and the local up vector.
 //
 // Output:
 //   R: rayleigh optical depth / Hr (unitless "air mass")
@@ -13,7 +13,8 @@ layout(local_size_x = 16, local_size_y = 16) in;
 //
 // NOTE:
 // We store OD normalized by the scale heights so the values stay in a small,
-// filter-friendly range (enables RGBA16F + linear filtering without overflow).
+// filter-friendly range. Ground-intersecting rays are integrated only to the
+// ground entry point; shaders decide occlusion analytically before sampling.
 layout(rgba16f, set = 0, binding = 0) uniform image2D out_lut;
 
 layout(push_constant) uniform AtmosphereLutPush
@@ -72,18 +73,13 @@ void main()
     }
 
     float tEnd = tAtm1;
-
-    // If the ray hits the planet before exiting the atmosphere, treat as fully occluded.
     float tP0, tP1;
     if (ray_sphere_intersect(r, mu, planetRadius, tP0, tP1))
     {
-        // If the intersection is in front of the origin (t1 > 0), the ray enters
-        // the planet (or starts on the surface heading inward), so sunlight is blocked.
-        if (tP1 > 0.0 && tP0 < tEnd)
+        float tGround = (tP0 > 0.0) ? tP0 : ((mu < 0.0 && tP1 > 0.0) ? 0.0 : tEnd);
+        if (tGround < tEnd)
         {
-            const float MAX_AIRMASS = 65504.0; // max finite FP16
-            imageStore(out_lut, coord, vec4(MAX_AIRMASS, MAX_AIRMASS, 0.0, 0.0));
-            return;
+            tEnd = max(tGround, 0.0);
         }
     }
 

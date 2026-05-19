@@ -1,3 +1,5 @@
+#include "atmosphere/include/transmittance_lut.glsl"
+
 const float RAYLEIGH_PHASE_SCALE = 3.0 / (16.0 * PI);
 const float MIE_PHASE_SCALE = 1.0 / (4.0 * PI);
 
@@ -14,9 +16,7 @@ float phase_mie_hg(float cosTheta, float g)
 }
 vec2 sun_optical_depth(float r, float muS, float planetRadius, float atmRadius)
 {
-    float u = clamp(muS * 0.5 + 0.5, 0.0, 1.0);
-    float v = clamp((r - planetRadius) / max(atmRadius - planetRadius, 1e-4), 0.0, 1.0);
-    return textureLod(transmittanceLut, vec2(u, v), 0.0).rg;
+    return sample_transmittance_air_mass(transmittanceLut, r, muS, planetRadius, atmRadius);
 }
 
 struct MarchParams
