@@ -6,7 +6,7 @@
 
 Encapsulates everything the renderer needs on a per-frame basis so that
 multiple frames can be in flight simultaneously. Each `FrameResources`
-instance is self-contained — it holds its own command pool, fence,
+instance is self-contained - it holds its own command pool, fence,
 semaphores, a growable descriptor allocator (cleared every frame), and a
 `DeletionQueue` for transient GPU resources created during that frame.
 
@@ -14,8 +14,8 @@ semaphores, a growable descriptor allocator (cleared every frame), and a
 
 ```
 frame/
-├── resources.h    — FrameResources struct declaration
-└── resources.cpp  — init / cleanup implementation
+├── resources.h    - FrameResources struct declaration
+└── resources.cpp  - init / cleanup implementation
 ```
 
 ## Key Types
@@ -82,7 +82,7 @@ FrameResources* frame = ctx->currentFrame;
 ```cpp
 VkDescriptorSet set = ctx->currentFrame->_frameDescriptors
     .allocate(ctx->device->device(), layout);
-// No manual free needed — cleared at the start of next frame reuse
+// No manual free needed - cleared at the start of next frame reuse
 ```
 
 ### Deferring resource destruction
@@ -109,6 +109,6 @@ temporary images, etc.).
 
 ## Related Docs
 
-- [docs/FrameResources.md](../../../docs/FrameResources.md) — high-level frame resource documentation
-- [src/core/descriptor/README.md](../descriptor/README.md) — descriptor allocator details
-- [src/core/device/README.md](../device/README.md) — resource manager and VMA allocation
+- [docs/FrameResources.md](../../../docs/FrameResources.md) - high-level frame resource documentation
+- [src/core/descriptor/README.md](../descriptor/README.md) - descriptor allocator details
+- [src/core/device/README.md](../device/README.md) - resource manager and VMA allocation

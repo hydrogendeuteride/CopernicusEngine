@@ -309,6 +309,6 @@ api.set_particle_system(systemId, system);
 
 ## See Also
 
-- [Particle System](../ParticleSystem.md) — Low-level implementation details
-- [Textures](Textures.md) — Texture loading for flipbooks
-- [Volumetrics](Volumetrics.md) — Voxel-based volumetric effects
+- [Particle System](../ParticleSystem.md) - Low-level implementation details
+- [Textures](Textures.md) - Texture loading for flipbooks
+- [Volumetrics](Volumetrics.md) - Voxel-based volumetric effects

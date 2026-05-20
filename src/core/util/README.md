@@ -1,6 +1,6 @@
 # Util
 
-> Vulkan boilerplate helpers — struct initializers and debug labeling utilities.
+> Vulkan boilerplate helpers - struct initializers and debug labeling utilities.
 
 ## Purpose
 
@@ -12,15 +12,15 @@ Also provides lightweight command buffer debug labeling via `VK_EXT_debug_utils`
 
 ```
 util/
-├── initializers.h   — factory function declarations (namespace vkinit)
-├── initializers.cpp — implementation
-├── debug.h          — command buffer debug label helpers (namespace vkdebug)
-└── debug.cpp        — implementation with lazy function pointer lookup
+├── initializers.h   - factory function declarations (namespace vkinit)
+├── initializers.cpp - implementation
+├── debug.h          - command buffer debug label helpers (namespace vkdebug)
+└── debug.cpp        - implementation with lazy function pointer lookup
 ```
 
 ## Key Types
 
-### `vkinit` — Struct Initializers
+### `vkinit` - Struct Initializers
 
 | Function | Returns |
 |----------|---------|
@@ -48,7 +48,7 @@ util/
 | `pipeline_layout_create_info` | `VkPipelineLayoutCreateInfo` |
 | `pipeline_shader_stage_create_info` | `VkPipelineShaderStageCreateInfo` |
 
-### `vkdebug` — Debug Labels
+### `vkdebug` - Debug Labels
 
 | Function | Role |
 |----------|------|
@@ -92,7 +92,7 @@ Labels appear in tools like RenderDoc and Nsight Graphics for easier debugging.
 ## Integration
 
 `vkinit` functions are used throughout the engine wherever Vulkan structs need
-to be constructed — engine initialization, pipeline creation, render graph
+to be constructed - engine initialization, pipeline creation, render graph
 execution, image/buffer creation, and compute dispatch.
 
 `vkdebug` labels are inserted by the render graph (`graph.cpp`) to annotate

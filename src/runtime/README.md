@@ -10,20 +10,20 @@ Provides a clean separation between engine rendering and game logic. The Runtime
 
 ```
 runtime/
-├── game_runtime.h      — Runtime class and IAudioSystem interface
-├── game_runtime.cpp    — Main loop implementation
-├── i_game_callbacks.h  — IGameCallbacks interface for game logic hooks
-├── time_manager.h      — TimeManager class declaration
-└── time_manager.cpp    — Time management implementation
+├── game_runtime.h      - Runtime class and IAudioSystem interface
+├── game_runtime.cpp    - Main loop implementation
+├── i_game_callbacks.h  - IGameCallbacks interface for game logic hooks
+├── time_manager.h      - TimeManager class declaration
+└── time_manager.cpp    - Time management implementation
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `Runtime` | Central game loop manager — integrates time, physics, audio, and delegates to game callbacks |
+| `Runtime` | Central game loop manager - integrates time, physics, audio, and delegates to game callbacks |
 | `IGameCallbacks` | Interface for game logic (init, update, fixed_update, shutdown) |
-| `TimeManager` | Time management — delta time, time scale, fixed timestep accumulation, interpolation alpha |
+| `TimeManager` | Time management - delta time, time scale, fixed timestep accumulation, interpolation alpha |
 | `Physics::PhysicsWorld` | Physics interface from `src/physics` (bound to Runtime for fixed-step simulation) |
 | `IAudioSystem` | Abstract audio backend (3D/2D playback, buses, master volume, listener) |
 
@@ -157,10 +157,10 @@ Input handling is delegated to `VulkanEngine::input()` (SDL2 backend), with even
 - Picking system (mouse-based ray picking)
 - Camera rig (WASD/mouse look)
 
-Physics and audio backends are optional — `Runtime` checks for null before calling their methods.
+Physics and audio backends are optional - `Runtime` checks for null before calling their methods.
 
 ## Related Docs
 
-- [docs/GameRuntime.md](../../docs/GameRuntime.md) — detailed runtime system architecture (to be created)
-- [src/core/game_api.h](../core/game_api.h) — high-level engine API exposed to game logic
-- [src/core/input/](../core/input/) — input system integration
+- [docs/GameRuntime.md](../../docs/GameRuntime.md) - detailed runtime system architecture (to be created)
+- [src/core/game_api.h](../core/game_api.h) - high-level engine API exposed to game logic
+- [src/core/input/](../core/input/) - input system integration

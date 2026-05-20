@@ -39,7 +39,7 @@ Runtime UI
 Key APIs (src/core/assets/texture_cache.h)
 - `TextureHandle request(const TextureKey&, VkSampler)`
 - `void watchBinding(TextureHandle, VkDescriptorSet, uint32_t binding, VkSampler, VkImageView fallback)`
-- `void unwatchSet(VkDescriptorSet)` — call before destroying descriptor pools/sets
+- `void unwatchSet(VkDescriptorSet)` - call before destroying descriptor pools/sets
 - `void markSetUsed(VkDescriptorSet, uint32_t frameIndex)` and `void markUsed(TextureHandle, uint32_t frameIndex)`
 - `void pumpLoads(ResourceManager&, FrameResources&)`
 - `void evictToBudget(size_t bytes)`
@@ -110,9 +110,9 @@ Image‑Based Lighting (IBL) Textures
     - `LightingPass` and `TransparentPass` create tiny 1×1 UNORM textures (grey 2D for env, RG for BRDF LUT) so shaders can safely sample IBL bindings even when IBL assets are not loaded.
 - Descriptor layout & bindings:
   - `IBLManager::ensureLayout()` creates a descriptor set layout for set=3 with:
-    - binding 0: `COMBINED_IMAGE_SAMPLER` — specular env (2D equirect with mips or cubemap sampled via 2D path).
-    - binding 1: `COMBINED_IMAGE_SAMPLER` — BRDF LUT 2D.
-    - binding 2: `UNIFORM_BUFFER` — SH coefficients (`vec4 sh[9]`, RGB in `.xyz`).
+    - binding 0: `COMBINED_IMAGE_SAMPLER` - specular env (2D equirect with mips or cubemap sampled via 2D path).
+    - binding 1: `COMBINED_IMAGE_SAMPLER` - BRDF LUT 2D.
+    - binding 2: `UNIFORM_BUFFER` - SH coefficients (`vec4 sh[9]`, RGB in `.xyz`).
   - Render passes that use IBL fetch this layout from `EngineContext::ibl` and allocate per‑frame sets:
     - `passes/lighting.cpp`: deferred lighting (set=3).
     - `passes/transparent.cpp`: forward/transparent PBR materials (set=3).

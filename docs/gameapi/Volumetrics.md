@@ -334,6 +334,6 @@ api.set_voxel_volume(3, explosion);
 
 ## See Also
 
-- [Volumetrics System](../Volumetrics.md) — Low-level implementation details
-- [Particles](Particles.md) — Particle-based effects
-- [Compute](../Compute.md) — GPU compute pipeline
+- [Volumetrics System](../Volumetrics.md) - Low-level implementation details
+- [Particles](Particles.md) - Particle-based effects
+- [Compute](../Compute.md) - GPU compute pipeline

@@ -8,7 +8,7 @@ Centralizes pipeline creation and access with a clean, uniform API. Avoids dupli
 - Compute pipelines: Created through `PipelineManager` but executed by `ComputeManager` under the hood.
 - Access from anywhere via `EngineContext` (`context->pipelines`).
 
-### Quick Start — Graphics
+### Quick Start - Graphics
 
 ```c++
 // In pass/material init
@@ -39,7 +39,7 @@ vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, mp.pipeline);
 Notes:
 - Graphics hot-reload runs each frame. If you cache pipeline handles, re-fetch with `getGraphics()` before use to pick up changes.
 
-### Quick Start — Compute
+### Quick Start - Compute
 
 Define and create a compute pipeline through the same manager:
 

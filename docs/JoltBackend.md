@@ -16,7 +16,7 @@ Jolt Physics (https://github.com/jrouwe/JoltPhysics) backend for the engine's ph
 
 ### Key Components
 
-#### `JoltPhysicsWorld` — Main Backend Class
+#### `JoltPhysicsWorld` - Main Backend Class
 
 Located in `src/physics/jolt/jolt_physics_world.h/.cpp`, this class wraps the Jolt Physics API and implements all `PhysicsWorld` methods.
 
@@ -56,8 +56,8 @@ JPH::BodyInterface& body_iface = jolt_world->body_interface();
 Jolt uses a 2-layer broad-phase hierarchy for optimization:
 
 **Broad-phase layers:**
-- `BroadPhaseLayers::non_moving` — Static and kinematic bodies
-- `BroadPhaseLayers::moving` — Dynamic bodies
+- `BroadPhaseLayers::non_moving` - Static and kinematic bodies
+- `BroadPhaseLayers::moving` - Dynamic bodies
 
 **Object layers:**
 - Map 1:1 to engine's `Physics::Layer` constants (0-15)
@@ -471,7 +471,7 @@ jolt_sys.GetBodyInterface().AddBody(body->GetID(), JPH::EActivation::Activate);
 
 ### See Also
 
-- [PhysicsSystem.md](PhysicsSystem.md) — Abstract physics system API
-- [ColliderSystem.md](ColliderSystem.md) — glTF collider authoring
-- [FloatingOrigin.md](FloatingOrigin.md) — Large-world coordinate management
+- [PhysicsSystem.md](PhysicsSystem.md) - Abstract physics system API
+- [ColliderSystem.md](ColliderSystem.md) - glTF collider authoring
+- [FloatingOrigin.md](FloatingOrigin.md) - Large-world coordinate management
 - Jolt Physics documentation: https://jrouwe.github.io/JoltPhysics/

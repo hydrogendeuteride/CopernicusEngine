@@ -6,8 +6,8 @@ Procedural planets with sphere meshes or LOD terrain, atmosphere scattering, and
 
 The engine supports two planet types:
 
-1. **Sphere Planets** — Simple procedural sphere meshes (fast, no LOD)
-2. **Terrain Planets** — Cube-sphere quadtree patches with displacement (LOD, high detail)
+1. **Sphere Planets** - Simple procedural sphere meshes (fast, no LOD)
+2. **Terrain Planets** - Cube-sphere quadtree patches with displacement (LOD, high detail)
 
 ## Planet Sphere
 
@@ -79,7 +79,7 @@ struct PlanetTerrain
     std::string detail_normal_dir;           // e.g., "planets/moon/detail_normal/L0"
     float detail_normal_strength{0.0f};      // Blend strength (0 = off)
 
-    // Cavity / AO (cube faces, optional — applied to indirect light via AO path)
+    // Cavity / AO (cube faces, optional - applied to indirect light via AO path)
     std::string cavity_dir;                  // e.g., "planets/moon/cavity/L0"
     float cavity_strength{0.0f};             // Cavity multiplier (0 = off)
 
@@ -94,7 +94,7 @@ struct PlanetTerrain
     std::string emission_dir;       // e.g., "planets/earth/emission/L0"
     glm::vec3 emission_factor{0.0f, 0.0f, 0.0f};  // Emission intensity multiplier
 
-    // Specular mask (cube faces, optional — e.g., ocean specular)
+    // Specular mask (cube faces, optional - e.g., ocean specular)
     std::string specular_dir;                // e.g., "planets/earth/specular/L0"
     float specular_strength{1.0f};           // Specular mask multiplier
     float specular_roughness{0.06f};         // Override roughness for specular areas
@@ -129,10 +129,10 @@ bool success = api.add_planet_terrain(earth);
 - Each directory should contain 6 KTX2 files: `px.ktx2`, `nx.ktx2`, `py.ktx2`, `ny.ktx2`, `pz.ktx2`, `nz.ktx2`
 - Albedo: sRGB color (BC7/ASTC)
 - Height: Linear R8 or BC4 (0 = radius, 1 = radius + height_max_m)
-- Detail Normal: Object-space RGB (BC7, linear) — blended with terrain normal
-- Cavity/AO: Linear R channel (BC4/R8) — applied to indirect light via AO path
+- Detail Normal: Object-space RGB (BC7, linear) - blended with terrain normal
+- Cavity/AO: Linear R channel (BC4/R8) - applied to indirect light via AO path
 - Emission: sRGB color (BC7/ASTC)
-- Specular: Linear R channel (BC4/R8) — ocean/surface specular mask
+- Specular: Linear R channel (BC4/R8) - ocean/surface specular mask
 
 ## Managing Planets
 
@@ -507,7 +507,7 @@ api.camera_look_at(glm::dvec3(0.0, 0.0, 0.0));
 
 ## See Also
 
-- [Planet System](../PlanetSystem.md) — Low-level implementation details
-- [Lighting](Lighting.md) — Sun direction for atmosphere
-- [Camera](Camera.md) — Camera positioning for planet rendering
-- [Floating Origin](../FloatingOrigin.md) — Large-world coordinate handling
+- [Planet System](../PlanetSystem.md) - Low-level implementation details
+- [Lighting](Lighting.md) - Sun direction for atmosphere
+- [Camera](Camera.md) - Camera positioning for planet rendering
+- [Floating Origin](../FloatingOrigin.md) - Large-world coordinate handling

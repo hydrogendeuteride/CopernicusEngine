@@ -54,7 +54,7 @@ Shader File Reference
 | `sky.comp` | Compute | Procedural sky background |
 | `gradient_color.comp` | Compute | Gradient background |
 | `background_env.frag` | Fragment | Environment map background |
-| `mesh_vfx.frag` | Fragment | Mesh VFX forward pass — animated noise, UV gradient, fresnel |
+| `mesh_vfx.frag` | Fragment | Mesh VFX forward pass - animated noise, UV gradient, fresnel |
 
 GLSL Includes
 

@@ -18,7 +18,7 @@ Context is wired in `VulkanEngine::init()` and refreshed each frame before passe
 - Use your pass’ `register_graph(graph, ...)` to declare attachments and resource accesses; the Render Graph inserts barriers and begins/ends dynamic rendering.
 - See `docs/RenderGraph.md` for the builder API and scheduling.
 
-### Quick Start — In a Render Pass (essentials)
+### Quick Start - In a Render Pass (essentials)
 
 ```c++
 void MyPass::init(EngineContext* context) {

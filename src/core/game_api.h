@@ -94,7 +94,7 @@ enum class PrimitiveType
     Capsule
 };
 
-// Mirrors ::DecalShape in vk_scene.h — keep values in sync.
+// Mirrors ::DecalShape in vk_scene.h - keep values in sync.
 enum class DecalShape : uint8_t
 {
     Box = 0,

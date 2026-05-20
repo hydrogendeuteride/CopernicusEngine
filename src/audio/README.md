@@ -4,21 +4,21 @@
 
 ## Purpose
 
-Provides a complete audio solution for game engines — 2D/3D sound playback, background music with fade in/out, preloading, bus-based mixing (Sfx, Ui, Voice, Bgm, Ambience), and master volume control. Supports custom decoders (libvorbis/libopus) for efficient OGG/Opus playback.
+Provides a complete audio solution for game engines - 2D/3D sound playback, background music with fade in/out, preloading, bus-based mixing (Sfx, Ui, Voice, Bgm, Ambience), and master volume control. Supports custom decoders (libvorbis/libopus) for efficient OGG/Opus playback.
 
 ## Directory Layout
 
 ```
 audio/
-├── miniaudio_system.h    — IAudioSystem implementation and MiniAudioSystem class
-└── miniaudio_system.cpp  — implementation
+├── miniaudio_system.h    - IAudioSystem implementation and MiniAudioSystem class
+└── miniaudio_system.cpp  - implementation
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `MiniAudioSystem` | Main audio engine — implements `IAudioSystem` interface |
+| `MiniAudioSystem` | Main audio engine - implements `IAudioSystem` interface |
 | `SoundHandle` | Opaque uint64_t handle identifying an active sound instance |
 | `Bus` | Mix bus categories (Sfx, Ui, Voice, Bgm, Ambience) for independent volume control |
 | `ActiveSound` | Internal runtime state for a playing sound (volume, pitch, bus, looping) |
@@ -157,9 +157,9 @@ audio->stop(engine_loop);
 The system requires `update()` to be called every frame (typically from `VulkanEngine::run()`) to cleanup finished sounds.
 
 Custom decoders are enabled via CMake options:
-- `VULKAN_ENGINE_AUDIO_LIBVORBIS` — use libvorbis for OGG files
-- `VULKAN_ENGINE_AUDIO_LIBOPUS` — use libopus for Opus files
+- `VULKAN_ENGINE_AUDIO_LIBVORBIS` - use libvorbis for OGG files
+- `VULKAN_ENGINE_AUDIO_LIBOPUS` - use libopus for Opus files
 
 ## Related Docs
 
-- [docs/Audio.md](../../docs/Audio.md) — detailed audio system architecture
+- [docs/Audio.md](../../docs/Audio.md) - detailed audio system architecture

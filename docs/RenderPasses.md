@@ -10,7 +10,7 @@ Pass classes (`IRenderPass`) define initialization and recording logic, but exec
 - Shared targets: Passes coordinate through `SwapchainManager` images: `drawImage`, `gBufferPosition/Normal/Albedo`, `depthImage` (imported into the graph each frame).
 - Hot reload: Fetch graphics pipeline/layout by key each frame through `PipelineManager` in the record callback.
 
-### Quick Start — Add a New Pass (Render Graph)
+### Quick Start - Add a New Pass (Render Graph)
 
 ```c++
 class MyPass : public IRenderPass {

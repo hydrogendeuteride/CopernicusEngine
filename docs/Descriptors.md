@@ -9,7 +9,7 @@ Utilities to define descriptor layouts, write descriptor sets, and efficiently a
 - Pools: `DescriptorAllocatorGrowable` manages a growable pool-of-pools for resilient allocations; `FrameResources` keeps one per overlapping frame.
 - Common layouts: `DescriptorManager` pre-creates reusable layouts such as `gpuSceneDataLayout()` and `singleImageLayout()`.
 
-### Quick Start — Transient Per-Frame Set
+### Quick Start - Transient Per-Frame Set
 
 ```c++
 // 1) Create/update a small uniform buffer for the frame

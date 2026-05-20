@@ -318,6 +318,6 @@ api.set_spot_light(leftIdx, leftHeadlight);
 
 ## See Also
 
-- [Shadows](Shadows.md) — Shadow casting from directional light
-- [IBL](IBL.md) — Image-based ambient lighting
-- [Multi-Light System](../MultiLighting.md) — Low-level implementation details
+- [Shadows](Shadows.md) - Shadow casting from directional light
+- [IBL](IBL.md) - Image-based ambient lighting
+- [Multi-Light System](../MultiLighting.md) - Low-level implementation details

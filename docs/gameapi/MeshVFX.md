@@ -47,11 +47,11 @@ bool get_mesh_vfx_material(const std::string &materialName,
 
 The fragment shader (`shaders/mesh_vfx.frag`) composites in this order:
 
-1. **Base texture** — albedo sampling with alpha cutoff
-2. **Noise layer** — two noise textures scroll independently; noise1 cross-distorts noise2's UVs, then both are blended
-3. **UV gradient** — smoothstep along the chosen axis interpolates `coreColor` → `edgeColor`
-4. **Fresnel** — rim lighting based on view angle
-5. **Composite** — `color = base × gradient × noise × (1 + fresnel) × emission`; `alpha = baseAlpha × opacity × (1 - grad) × noise`
+1. **Base texture** - albedo sampling with alpha cutoff
+2. **Noise layer** - two noise textures scroll independently; noise1 cross-distorts noise2's UVs, then both are blended
+3. **UV gradient** - smoothstep along the chosen axis interpolates `coreColor` → `edgeColor`
+4. **Fresnel** - rim lighting based on view angle
+5. **Composite** - `color = base × gradient × noise × (1 + fresnel) × emission`; `alpha = baseAlpha × opacity × (1 - grad) × noise`
 
 Time is supplied via `sceneData.timeParams.x` (elapsed seconds, wraps at 10000s to preserve float precision).
 
@@ -99,7 +99,7 @@ shield.gradientStart     = 1.0f;
 shield.gradientEnd       = 1.0f;
 shield.coreColor         = glm::vec3(1.0f);
 shield.edgeColor         = glm::vec3(1.0f);
-// No noise textures — falls back to white (1.0)
+// No noise textures - falls back to white (1.0)
 
 api.create_or_update_mesh_vfx_material("energy_shield", shield);
 ```
@@ -108,11 +108,11 @@ api.create_or_update_mesh_vfx_material("energy_shield", shield);
 
 To use Mesh VFX as a static material (fresnel + tint only, no scrolling or noise):
 
-1. Set `scrollVelocity1 = scrollVelocity2 = {0, 0}` — stops UV movement
-2. Set `distortionStrength = 0` — no cross-distortion
-3. Set `gradientStart = gradientEnd = 1.0` — disables gradient (keeps `alpha × (1-grad) = alpha × 1`)
-4. Set `coreColor = edgeColor = {1, 1, 1}` — neutral gradient color
-5. Omit `noise1Path` / `noise2Path` — fallback textures are white (1.0), so noise has no effect
+1. Set `scrollVelocity1 = scrollVelocity2 = {0, 0}` - stops UV movement
+2. Set `distortionStrength = 0` - no cross-distortion
+3. Set `gradientStart = gradientEnd = 1.0` - disables gradient (keeps `alpha × (1-grad) = alpha × 1`)
+4. Set `coreColor = edgeColor = {1, 1, 1}` - neutral gradient color
+5. Omit `noise1Path` / `noise2Path` - fallback textures are white (1.0), so noise has no effect
 
 ## Tuning Guide
 
@@ -133,7 +133,7 @@ To use Mesh VFX as a static material (fresnel + tint only, no scrolling or noise
 
 ## Related
 
-- [Materials Overview](../materials.md) — PBR material system and `extra[]` layout
-- [Shaders](../SHADERS.md) — Shader file reference and hot reload
-- [Particles](Particles.md) — GPU particle alternative for scattered effects
-- [Asset Manager](../asset_manager.md) — Texture loading and path resolution
+- [Materials Overview](../materials.md) - PBR material system and `extra[]` layout
+- [Shaders](../SHADERS.md) - Shader file reference and hot reload
+- [Particles](Particles.md) - GPU particle alternative for scattered effects
+- [Asset Manager](../asset_manager.md) - Texture loading and path resolution

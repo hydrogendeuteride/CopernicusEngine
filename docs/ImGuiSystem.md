@@ -305,9 +305,9 @@ void draw_object_gizmo(const glm::mat4& view, const glm::mat4& proj,
 - Use `wantCaptureKeyboard()` before processing game keyboard input.
 - Register draw callbacks during initialization, not every frame.
 - Call `onSwapchainRecreated()` after window resize/mode change.
-- The descriptor pool is sized for 1000 sets of each type — sufficient for most debug UIs.
+- The descriptor pool is sized for 1000 sets of each type - sufficient for most debug UIs.
 - For production games, consider conditionally compiling out debug UI.
-- ImGui windows are persistent between frames — state is preserved automatically.
+- ImGui windows are persistent between frames - state is preserved automatically.
 
 ### Frame Flow
 

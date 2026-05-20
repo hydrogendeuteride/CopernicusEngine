@@ -10,7 +10,7 @@ Standalone compute subsystem with a small, explicit API. Used by passes (e.g., B
 
 ### Key Types
 
-#### `ComputeBinding` — Descriptor Binding Abstraction
+#### `ComputeBinding` - Descriptor Binding Abstraction
 
 Unified wrapper for all descriptor types. Use static factory methods:
 
@@ -29,7 +29,7 @@ struct ComputeBinding {
 };
 ```
 
-#### `ComputePipelineCreateInfo` — Pipeline Configuration
+#### `ComputePipelineCreateInfo` - Pipeline Configuration
 
 ```c++
 struct ComputePipelineCreateInfo {
@@ -44,7 +44,7 @@ struct ComputePipelineCreateInfo {
 };
 ```
 
-#### `ComputeDispatchInfo` — Dispatch Configuration
+#### `ComputeDispatchInfo` - Dispatch Configuration
 
 ```c++
 struct ComputeDispatchInfo {
@@ -111,7 +111,7 @@ void copyBuffer(VkCommandBuffer cmd, VkBuffer src, VkBuffer dst, VkDeviceSize si
                 VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0);
 ```
 
-### Quick Start — One‑Shot Dispatch
+### Quick Start - One‑Shot Dispatch
 
 For ad-hoc compute work where bindings change each dispatch:
 
@@ -136,7 +136,7 @@ di.pushConstantSize = sizeof(pc);
 context->compute->dispatch(cmd, "blur", di);
 ```
 
-### Quick Start — Persistent Instance
+### Quick Start - Persistent Instance
 
 For effects that reuse the same bindings across frames:
 
@@ -153,7 +153,7 @@ di.pushConstantSize = sizeof(ComputePushConstants);
 context->compute->dispatchInstance(cmd, "background.sky", di);
 ```
 
-### Quick Start — Immediate Execution
+### Quick Start - Immediate Execution
 
 For GPU-blocking operations (uploads, preprocessing):
 
@@ -209,8 +209,8 @@ Reference: `src/render/passes/background.cpp`.
 #### Automatic (Render Graph)
 
 When using the render graph, declare resource usage and let the graph handle barriers:
-- `builder.write(image, RGImageUsage::ComputeWrite)` — storage image write
-- `builder.read(image, RGImageUsage::SampledCompute)` — sampled image read in compute
+- `builder.write(image, RGImageUsage::ComputeWrite)` - storage image write
+- `builder.read(image, RGImageUsage::SampledCompute)` - sampled image read in compute
 
 #### Manual (Dispatch Barriers)
 

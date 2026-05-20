@@ -18,9 +18,9 @@ api.set_instance_animation("player", -1);
 ```
 
 **Parameters:**
-- `instanceName` — glTF instance name
-- `animationIndex` — Animation index in glTF file (-1 to disable)
-- `resetTime` — If `true`, restart from time 0
+- `instanceName` - glTF instance name
+- `animationIndex` - Animation index in glTF file (-1 to disable)
+- `resetTime` - If `true`, restart from time 0
 
 Returns `false` if instance doesn't exist.
 
@@ -72,10 +72,10 @@ api.transition_instance_animation("player", "run", 0.5f, true);
 ```
 
 **Parameters:**
-- `instanceName` — glTF instance name
-- `animationIndex`/`animationName` — Target animation
-- `blendDurationSeconds` — Cross-fade duration
-- `resetTime` — If `true`, target animation starts at time 0
+- `instanceName` - glTF instance name
+- `animationIndex`/`animationName` - Target animation
+- `blendDurationSeconds` - Cross-fade duration
+- `resetTime` - If `true`, target animation starts at time 0
 
 The system automatically blends from the current animation to the target over the specified duration.
 
@@ -212,5 +212,5 @@ api.set_instance_node_offset("building", "FrontDoor", offset);
 
 ## See Also
 
-- [Scene Management](Scene.md) — Managing instances
-- [Picking](Picking.md) — Selecting nodes interactively
+- [Scene Management](Scene.md) - Managing instances
+- [Picking](Picking.md) - Selecting nodes interactively

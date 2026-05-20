@@ -18,22 +18,22 @@ render loop stays lean.
 
 ```
 debug_draw/
-├── debug_draw.h           — DebugDrawSystem class, enums, vertex format
-├── debug_draw.cpp         — primitive tessellation and vertex generation
-├── engine_debug_draw.h    — free function for engine-layer debug visuals
-└── engine_debug_draw.cpp  — implementation (picking, lights, particles, volumetrics)
+├── debug_draw.h           - DebugDrawSystem class, enums, vertex format
+├── debug_draw.cpp         - primitive tessellation and vertex generation
+├── engine_debug_draw.h    - free function for engine-layer debug visuals
+└── engine_debug_draw.cpp  - implementation (picking, lights, particles, volumetrics)
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `DebugDrawSystem` | Central command buffer — stores draw commands, builds per-frame line vertices |
+| `DebugDrawSystem` | Central command buffer - stores draw commands, builds per-frame line vertices |
 | `DebugDrawSystem::Settings` | Runtime toggles: enabled, depth/overlay visibility, layer mask, segment count |
-| `DebugDrawSystem::LineVertexLists` | Output of `build_line_vertices()` — interleaved depth + overlay vertex arrays |
+| `DebugDrawSystem::LineVertexLists` | Output of `build_line_vertices()` - interleaved depth + overlay vertex arrays |
 | `DebugDrawVertex` | 32-byte GPU vertex: `vec3 position`, `float _pad`, `vec4 color` |
-| `DebugDepth` | Enum — `DepthTested` (occluded by geometry) or `AlwaysOnTop` (overlay) |
-| `DebugDrawLayer` | Bitmask enum — `Physics`, `Picking`, `Lights`, `Particles`, `Volumetrics`, `Misc` |
+| `DebugDepth` | Enum - `DepthTested` (occluded by geometry) or `AlwaysOnTop` (overlay) |
+| `DebugDrawLayer` | Bitmask enum - `Physics`, `Picking`, `Lights`, `Particles`, `Volumetrics`, `Misc` |
 
 ## Lifecycle
 
@@ -105,9 +105,9 @@ dd->add_line(a_world, b_world,
 
 ```cpp
 auto lists = dd->build_line_vertices(floating_origin);
-// lists.vertices         — all line vertices (depth first, then overlay)
-// lists.depth_vertex_count   — number of depth-tested vertices
-// lists.overlay_vertex_count — number of overlay vertices
+// lists.vertices         - all line vertices (depth first, then overlay)
+// lists.depth_vertex_count   - number of depth-tested vertices
+// lists.overlay_vertex_count - number of overlay vertices
 // Upload to GPU buffer and draw as VK_PRIMITIVE_TOPOLOGY_LINE_LIST
 ```
 
@@ -133,4 +133,4 @@ depth-tested first (with depth test enabled), then overlay (depth test disabled)
 
 ## Related Docs
 
-- [docs/debug_draw_api_examples.md](../../../docs/debug_draw_api_examples.md) — GameAPI usage examples
+- [docs/debug_draw_api_examples.md](../../../docs/debug_draw_api_examples.md) - GameAPI usage examples

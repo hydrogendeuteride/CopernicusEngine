@@ -303,11 +303,11 @@ The `window_to_swapchain_pixels()` helper handles HiDPI scaling. Letterboxing is
 
 ### Frame Flow
 
-1. `begin_frame()` — Resolve pending async ID-buffer picks from previous frame.
-2. `process_input()` — Handle mouse events (click start/end, motion).
-3. `update_hover()` — CPU ray-cast for current hover under cursor.
-4. RenderGraph build — If ID-buffer picking enabled, register readback pass.
-5. Next frame — Async pick result becomes available.
+1. `begin_frame()` - Resolve pending async ID-buffer picks from previous frame.
+2. `process_input()` - Handle mouse events (click start/end, motion).
+3. `update_hover()` - CPU ray-cast for current hover under cursor.
+4. RenderGraph build - If ID-buffer picking enabled, register readback pass.
+5. Next frame - Async pick result becomes available.
 
 ### Integration with ImGui
 

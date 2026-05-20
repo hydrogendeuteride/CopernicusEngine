@@ -39,10 +39,10 @@ struct TextureLoadParams
 ```
 
 **Channel Hints:**
-- `Auto` — Detect from source (default)
-- `R` — Single channel (e.g., occlusion, metallic)
-- `RG` — Two channels (e.g., normal map XY)
-- `RGBA` — Full color
+- `Auto` - Detect from source (default)
+- `R` - Single channel (e.g., occlusion, metallic)
+- `RG` - Two channels (e.g., normal map XY)
+- `RGBA` - Full color
 
 ## Querying Texture State
 
@@ -98,9 +98,9 @@ fmt::println("Texture budget: {} MiB", budget / (1024 * 1024));
 
 The budget is calculated from VMA heap info and config constants in `src/core/config.h`:
 
-- `kTextureBudgetFraction` — Fraction of device-local VRAM for textures (default `0.35`)
-- `kTextureBudgetFallbackBytes` — Fallback when memory info unavailable (default `512 MiB`)
-- `kTextureBudgetMinBytes` — Minimum budget clamp (default `128 MiB`)
+- `kTextureBudgetFraction` - Fraction of device-local VRAM for textures (default `0.35`)
+- `kTextureBudgetFallbackBytes` - Fallback when memory info unavailable (default `512 MiB`)
+- `kTextureBudgetMinBytes` - Minimum budget clamp (default `128 MiB`)
 
 ### Runtime Budget Control
 

@@ -89,7 +89,7 @@ void DecalPass::init(EngineContext *context)
         b.set_cull_mode(VK_CULL_MODE_FRONT_BIT, VK_FRONT_FACE_CLOCKWISE);
         b.set_multisampling_none();
         b.enable_blending_alphablend();
-        // Write RGB only — preserve G-Buffer alpha (metallic / material ID).
+        // Write RGB only - preserve G-Buffer alpha (metallic / material ID).
         b.set_color_write_mask(VK_COLOR_COMPONENT_R_BIT |
                                VK_COLOR_COMPONENT_G_BIT |
                                VK_COLOR_COMPONENT_B_BIT);

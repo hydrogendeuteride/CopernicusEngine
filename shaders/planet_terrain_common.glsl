@@ -192,7 +192,7 @@ vec3 terrain_shading_normal_from_height(vec2 uv, vec3 worldPos, vec3 fallbackNor
     // Clamp extreme deviations using the continuous radialDir (not fallback,
     // which has patch-boundary discontinuities from CPU-side edge blending).
     // Only suppress normals nearly perpendicular to or facing away from the
-    // surface — legitimate steep terrain (up to ~80°) passes through untouched.
+    // surface - legitimate steep terrain (up to ~80°) passes through untouched.
     float radialAgreement = clamp(dot(n, radialDir), 0.0, 1.0);
     float radialBias = 1.0 - smoothstep(0.0, 0.15, radialAgreement);
     n = normalize(mix(n, radialDir, radialBias));

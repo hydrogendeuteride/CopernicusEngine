@@ -327,6 +327,6 @@ api.set_camera_rotation(pitch, yaw);
 
 ## See Also
 
-- [Input System](../InputSystem.md) — Keyboard/mouse input for camera control
-- [Floating Origin](../FloatingOrigin.md) — Large-world camera positioning
-- [Picking](Picking.md) — Select objects to orbit/follow
+- [Input System](../InputSystem.md) - Keyboard/mouse input for camera control
+- [Floating Origin](../FloatingOrigin.md) - Large-world camera positioning
+- [Picking](Picking.md) - Select objects to orbit/follow

@@ -12,7 +12,7 @@ The runtime layer orchestrates the main game loop, manages frame timing with fix
 
 ### Key Types
 
-#### `Runtime` — Main Loop Manager
+#### `Runtime` - Main Loop Manager
 
 Central coordinator that wraps a `VulkanEngine*` and provides:
 
@@ -51,7 +51,7 @@ public:
 - GPU fence waiting and per-frame resource cleanup
 - ImGui frame lifecycle
 
-#### `TimeManager` — Time Management
+#### `TimeManager` - Time Management
 
 ```c++
 class TimeManager {
@@ -91,7 +91,7 @@ float alpha = time.interpolation_alpha();
 // smooths rendering when display framerate != physics rate
 ```
 
-#### `IGameCallbacks` — Game Logic Interface
+#### `IGameCallbacks` - Game Logic Interface
 
 ```c++
 class IGameCallbacks {
@@ -110,7 +110,7 @@ public:
 | `on_fixed_update` | Fixed intervals (1/60 default) | Physics, AI, deterministic simulation |
 | `on_shutdown` | Once before exit | Cleanup game resources |
 
-#### `Physics::PhysicsWorld` — Physics Backend Interface
+#### `Physics::PhysicsWorld` - Physics Backend Interface
 
 ```c++
 class PhysicsWorld {
@@ -128,7 +128,7 @@ public:
 - Physics backend (Jolt/PhysX/Bullet) implements `Physics::PhysicsWorld`
 - Game-side systems (e.g. `GameWorld`) use the same interface directly
 
-#### `IAudioSystem` — Audio Backend Interface
+#### `IAudioSystem` - Audio Backend Interface
 
 ```c++
 class IAudioSystem {
@@ -398,7 +398,7 @@ void on_update(float dt) {
 
 ### Related Docs
 
-- [src/runtime/README.md](../src/runtime/README.md) — module overview and quick reference
-- [src/core/game_api.h](../src/core/game_api.h) — high-level engine API for game code
-- [docs/PhysicsSystem.md](PhysicsSystem.md) — Jolt physics backend implementation
-- [docs/Audio.md](Audio.md) — audio system architecture
+- [src/runtime/README.md](../src/runtime/README.md) - module overview and quick reference
+- [src/core/game_api.h](../src/core/game_api.h) - high-level engine API for game code
+- [docs/PhysicsSystem.md](PhysicsSystem.md) - Jolt physics backend implementation
+- [docs/Audio.md](Audio.md) - audio system architecture

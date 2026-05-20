@@ -36,54 +36,54 @@ while (engine.running()) {
 ## Documentation Index
 
 ### Core Systems
-- **[Overview](gameapi/Overview.md)** — Architecture, `GameAPI::Engine` introduction, basic concepts
-- **[Scene Management](gameapi/Scene.md)** — Instances, primitives, transforms, object lifecycle
-- **[Animation](gameapi/Animation.md)** — glTF animations, playback control, node offsets
+- **[Overview](gameapi/Overview.md)** - Architecture, `GameAPI::Engine` introduction, basic concepts
+- **[Scene Management](gameapi/Scene.md)** - Instances, primitives, transforms, object lifecycle
+- **[Animation](gameapi/Animation.md)** - glTF animations, playback control, node offsets
 
 ### Rendering
-- **[Textures](gameapi/Textures.md)** — Texture loading, streaming, VRAM budget management
-- **[Lighting](gameapi/Lighting.md)** — Directional (sun), point, and spot lights
-- **[Shadows](gameapi/Shadows.md)** — Shadow modes (raster/RT), resolution, quality settings
-- **[IBL](gameapi/IBL.md)** — Image-based lighting, global and local volumes
-- **[Post-Processing](gameapi/PostProcessing.md)** — Tonemapping, bloom, FXAA, SSR
+- **[Textures](gameapi/Textures.md)** - Texture loading, streaming, VRAM budget management
+- **[Lighting](gameapi/Lighting.md)** - Directional (sun), point, and spot lights
+- **[Shadows](gameapi/Shadows.md)** - Shadow modes (raster/RT), resolution, quality settings
+- **[IBL](gameapi/IBL.md)** - Image-based lighting, global and local volumes
+- **[Post-Processing](gameapi/PostProcessing.md)** - Tonemapping, bloom, FXAA, SSR
 
 ### Effects
-- **[Mesh VFX](gameapi/MeshVFX.md)** — Animated procedural effects (exhaust, beams, shields) with noise scrolling, gradients, and fresnel
-- **[Particles](gameapi/Particles.md)** — GPU particle systems with flipbook animation
-- **[Volumetrics](gameapi/Volumetrics.md)** — Voxel-based clouds, smoke, and flame
-- **[Planets](gameapi/Planets.md)** — Procedural planets, terrain, atmosphere, clouds
+- **[Mesh VFX](gameapi/MeshVFX.md)** - Animated procedural effects (exhaust, beams, shields) with noise scrolling, gradients, and fresnel
+- **[Particles](gameapi/Particles.md)** - GPU particle systems with flipbook animation
+- **[Volumetrics](gameapi/Volumetrics.md)** - Voxel-based clouds, smoke, and flame
+- **[Planets](gameapi/Planets.md)** - Procedural planets, terrain, atmosphere, clouds
 
 ### Camera & Interaction
-- **[Camera](gameapi/Camera.md)** — Camera modes (free/orbit/follow/chase), controls
-- **[Picking](gameapi/Picking.md)** — Object selection, hover detection, hierarchy navigation
+- **[Camera](gameapi/Camera.md)** - Camera modes (free/orbit/follow/chase), controls
+- **[Picking](gameapi/Picking.md)** - Object selection, hover detection, hierarchy navigation
 
 ### Debugging
-- **[Debug Drawing](gameapi/Debug.md)** — Runtime visualization (lines, spheres, boxes, etc.)
+- **[Debug Drawing](gameapi/Debug.md)** - Runtime visualization (lines, spheres, boxes, etc.)
 
 ## Related Systems
 
 These systems are accessed separately from `GameAPI::Engine`:
 
-- **[Input System](InputSystem.md)** — Keyboard, mouse, and cursor mode handling
-- **[ImGui System](ImGuiSystem.md)** — Immediate-mode UI integration
-- **[Scene Manager](Scene.md)** — Low-level scene graph and draw context
-- **[Render Graph](RenderGraph.md)** — Custom render passes and resource management
+- **[Input System](InputSystem.md)** - Keyboard, mouse, and cursor mode handling
+- **[ImGui System](ImGuiSystem.md)** - Immediate-mode UI integration
+- **[Scene Manager](Scene.md)** - Low-level scene graph and draw context
+- **[Render Graph](RenderGraph.md)** - Custom render passes and resource management
 
 ## Header and Implementation
 
 - **Header**: `src/core/game_api.h`
 - **Implementation**: `src/core/game_api/*.cpp` (split by subsystem)
-  - `game_api.cpp` — Core and transform utilities
-  - `game_api_textures.cpp` — Texture streaming
-  - `game_api_scene.cpp` — Instance management
-  - `game_api_camera.cpp` — Camera control
-  - `game_api_lighting.cpp` — Light management
-  - `game_api_particles.cpp` — Particle systems
-  - `game_api_volumetrics.cpp` — Voxel volumes
-  - `game_api_planets.cpp` — Planet system
-  - `game_api_postfx.cpp` — Post-processing
-  - `game_api_mesh_vfx.cpp` — Mesh VFX materials
-  - `game_api_debug.cpp` — Debug drawing
+  - `game_api.cpp` - Core and transform utilities
+  - `game_api_textures.cpp` - Texture streaming
+  - `game_api_scene.cpp` - Instance management
+  - `game_api_camera.cpp` - Camera control
+  - `game_api_lighting.cpp` - Light management
+  - `game_api_particles.cpp` - Particle systems
+  - `game_api_volumetrics.cpp` - Voxel volumes
+  - `game_api_planets.cpp` - Planet system
+  - `game_api_postfx.cpp` - Post-processing
+  - `game_api_mesh_vfx.cpp` - Mesh VFX materials
+  - `game_api_debug.cpp` - Debug drawing
 
 ## Design Philosophy
 

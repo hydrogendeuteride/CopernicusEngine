@@ -15,15 +15,15 @@ readback.
 
 ```
 picking/
-├── picking_system.h    — PickingSystem class, PickInfo result struct
-└── picking_system.cpp  — implementation (event handling, readback, coordinate transforms)
+├── picking_system.h    - PickingSystem class, PickInfo result struct
+└── picking_system.cpp  - implementation (event handling, readback, coordinate transforms)
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `PickingSystem` | Central entry point — event processing, pick state, RenderGraph integration |
+| `PickingSystem` | Central entry point - event processing, pick state, RenderGraph integration |
 | `PickInfo` | Result of a pick: mesh, node, owner, world position, transform, surface indices, and glTF node hierarchy metadata |
 | `PickRequest` | Internal pending pick request with window/ID-buffer coordinates |
 | `DragState` | Internal mouse drag tracking (start, current, threshold detection) |
@@ -91,10 +91,10 @@ picking.move_last_pick_to_child("Armature/Spine");
 
 For glTF picks, `PickInfo` now includes:
 
-- `nodeName` — selected node name in `LoadedGLTF::nodes`
-- `nodeParentName` — direct parent node name (empty for roots)
-- `nodeChildren` — direct child node names
-- `nodePath` — root→selected node path
+- `nodeName` - selected node name in `LoadedGLTF::nodes`
+- `nodeParentName` - direct parent node name (empty for roots)
+- `nodeChildren` - direct child node names
+- `nodePath` - root→selected node path
 
 ### GPU ID-Buffer Picking
 
@@ -123,10 +123,10 @@ for (const auto& pick : selection)
 `PickingSystem` is owned by `VulkanEngine` and exposed via `EngineContext`.
 It interacts with:
 
-- **SceneManager** — CPU ray-casting (`pick`, `selectRect`, `resolveObjectID`)
-- **RenderGraph** — registers a `PickReadback` transfer pass for ID-buffer mode
-- **InputSystem** — consumes mouse input (`process_input`, `MouseButton`, `InputEvent`)
-- **ImGui** — respects `ui_want_capture_mouse` to avoid picking through UI
+- **SceneManager** - CPU ray-casting (`pick`, `selectRect`, `resolveObjectID`)
+- **RenderGraph** - registers a `PickReadback` transfer pass for ID-buffer mode
+- **InputSystem** - consumes mouse input (`process_input`, `MouseButton`, `InputEvent`)
+- **ImGui** - respects `ui_want_capture_mouse` to avoid picking through UI
 
 Coordinate transforms handle HiDPI scaling (window pixels → drawable pixels →
 swapchain pixels) and letterboxing when render resolution differs from swapchain
@@ -134,4 +134,4 @@ size.
 
 ## Related Docs
 
-- [docs/Picking.md](../../../docs/Picking.md) — detailed picking system documentation
+- [docs/Picking.md](../../../docs/Picking.md) - detailed picking system documentation

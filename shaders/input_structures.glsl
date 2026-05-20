@@ -106,7 +106,7 @@ layout(set = 1, binding = 0) uniform GLTFMaterialData{
 // - Mesh VFX materials:
 //   extra[3].x = opacity multiplier, extra[3].y = fresnel power, extra[3].z = fresnel strength
 //   extra[4].rgb = tint
-// - extra[5]: (scrollVelocity1.xy, scrollVelocity2.xy) — noise UV scroll speeds
+// - extra[5]: (scrollVelocity1.xy, scrollVelocity2.xy) - noise UV scroll speeds
 // - extra[6]: (distortionStrength, noiseBlend, gradientAxis, emissionStrength)
 // - extra[7]: (coreColor.rgb, gradientStart)
 // - extra[8]: (edgeColor.rgb, gradientEnd)

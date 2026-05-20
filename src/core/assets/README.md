@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Provides the full asset pipeline — from locating files on disk, through
+Provides the full asset pipeline - from locating files on disk, through
 asynchronous glTF loading and texture streaming, to IBL environment map
 management. All subsystems are designed around deferred GPU uploads and
 frame-paced resource creation to avoid stalls.
@@ -13,25 +13,25 @@ frame-paced resource creation to avoid stalls.
 
 ```
 core/assets/
-├── manager.h / .cpp        — AssetManager: central facade for meshes, materials, glTF
-├── async_loader.h / .cpp   — AsyncAssetLoader: background glTF loading with worker threads
-├── texture_cache.h / .cpp  — TextureCache: deduplicated texture streaming with LRU eviction
-├── ktx_loader.h / .cpp     — ktxutil: KTX2 cubemap / 2D helpers (libktx wrapper)
-├── ibl_manager.h / .cpp    — IBLManager: specular + diffuse + BRDF LUT environment maps
-└── locator.h / .cpp        — AssetLocator / AssetPaths: filesystem path resolution
+├── manager.h / .cpp        - AssetManager: central facade for meshes, materials, glTF
+├── async_loader.h / .cpp   - AsyncAssetLoader: background glTF loading with worker threads
+├── texture_cache.h / .cpp  - TextureCache: deduplicated texture streaming with LRU eviction
+├── ktx_loader.h / .cpp     - ktxutil: KTX2 cubemap / 2D helpers (libktx wrapper)
+├── ibl_manager.h / .cpp    - IBLManager: specular + diffuse + BRDF LUT environment maps
+└── locator.h / .cpp        - AssetLocator / AssetPaths: filesystem path resolution
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `AssetManager` | Central entry point — glTF loading, mesh/material creation, path helpers, fallback textures |
+| `AssetManager` | Central entry point - glTF loading, mesh/material creation, path helpers, fallback textures |
 | `AssetLocator` | Resolves shader / model / asset paths from an auto-detected or user-set root |
 | `AssetPaths` | POD holding root, assets, and shaders directory paths |
 | `AsyncAssetLoader` | Multi-threaded glTF loading orchestrator with job tracking and progress reporting |
 | `TextureCache` | Streaming cache with dedup, LRU eviction, descriptor patching (UPDATE_AFTER_BIND), and async decode |
 | `TextureKey` | Hash-based key for texture deduplication (file path or raw bytes, sRGB, mip options) |
-| `IBLManager` | KTX2-based IBL pipeline — specular cubemap, diffuse cubemap, BRDF LUT, SH coefficients |
+| `IBLManager` | KTX2-based IBL pipeline - specular cubemap, diffuse cubemap, BRDF LUT, SH coefficients |
 | `IBLPaths` | POD specifying the .ktx2 paths for specular, diffuse, BRDF, and optional background maps |
 | `ktxutil::KtxCubemap` | Loaded cubemap data with Vulkan copy regions ready for staging upload |
 | `ktxutil::Ktx2D` | Loaded 2D texture data (e.g. BRDF LUT) with Vulkan copy regions |
@@ -40,7 +40,7 @@ core/assets/
 
 ```
 AssetLocator::init()
-  └─ AssetPaths::detect() — walks up from CWD to find assets/ and shaders/ dirs
+  └─ AssetPaths::detect() - walks up from CWD to find assets/ and shaders/ dirs
 
 AssetManager::init(engine)
   └─ initializes locator, ready to load glTF / create meshes
@@ -56,9 +56,9 @@ IBLManager::init(ctx)
 
 ── per frame ──
 TextureCache::pumpLoads(rm, frame)
-  ├─ drainReadyUploads()  — upload decoded images to GPU (budget-gated)
-  ├─ patchReadyEntry()    — rewrite watched descriptors to new image views
-  └─ evictCpuToBudget()     — trim retained CPU source bytes
+  ├─ drainReadyUploads()  - upload decoded images to GPU (budget-gated)
+  ├─ patchReadyEntry()    - rewrite watched descriptors to new image views
+  └─ evictCpuToBudget()     - trim retained CPU source bytes
 
 AsyncAssetLoader::pumpMainThread(scene)
   └─ commit completed jobs into SceneManager
@@ -157,5 +157,5 @@ descriptor sets.
 
 ## Related Docs
 
-- [docs/AssetManager.md](../../../docs/AssetManager.md) — asset management system documentation
-- [docs/TextureCache.md](../../../docs/TextureCache.md) — texture streaming documentation
+- [docs/AssetManager.md](../../../docs/AssetManager.md) - asset management system documentation
+- [docs/TextureCache.md](../../../docs/TextureCache.md) - texture streaming documentation

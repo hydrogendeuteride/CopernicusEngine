@@ -8,8 +8,8 @@ Blackbody materials extend the standard PBR material by repurposing the emissive
 
 Two usage modes are supported:
 
-1. **Standalone blackbody material** — a full PBR material with integrated blackbody emission, created via `create_or_update_blackbody_material()`. Used for procedural/primitive meshes.
-2. **glTF material patch** — applies blackbody emission to an existing glTF material at runtime via `set_gltf_material_blackbody()`. Preserves the original PBR textures and only overwrites the emissive slot and blackbody constants.
+1. **Standalone blackbody material** - a full PBR material with integrated blackbody emission, created via `create_or_update_blackbody_material()`. Used for procedural/primitive meshes.
+2. **glTF material patch** - applies blackbody emission to an existing glTF material at runtime via `set_gltf_material_blackbody()`. Preserves the original PBR textures and only overwrites the emissive slot and blackbody constants.
 
 ## API
 
@@ -86,12 +86,12 @@ The blackbody emission is evaluated in both `gbuffer.frag` (deferred) and `mesh.
 
 `nozzle_blackbody_heat()` computes a `[0,1]` heat factor from:
 
-1. **Axial projection** — dot product of object-space position with `heatAxisLocal`, normalized to `[0,1]` and warped by edge noise
-2. **Hot-zone masking** — smoothstep between `hotRangeStart` and `hotRangeEnd`, with `hotEndBias` selecting which end is hot
-3. **Radial shell/core** — concentric falloff from axis center
-4. **Triplanar noise** — object-space triplanar sampling of the noise texture with scrolling UVs
-5. **Streak noise** — axial/circumferential noise layer blended with triplanar for organic streaks
-6. **Turbulence** — exponential contrast applied to combined noise
+1. **Axial projection** - dot product of object-space position with `heatAxisLocal`, normalized to `[0,1]` and warped by edge noise
+2. **Hot-zone masking** - smoothstep between `hotRangeStart` and `hotRangeEnd`, with `hotEndBias` selecting which end is hot
+3. **Radial shell/core** - concentric falloff from axis center
+4. **Triplanar noise** - object-space triplanar sampling of the noise texture with scrolling UVs
+5. **Streak noise** - axial/circumferential noise layer blended with triplanar for organic streaks
+6. **Turbulence** - exponential contrast applied to combined noise
 
 ### Temperature to Color
 
@@ -200,7 +200,7 @@ barrel.hotRangeEnd = 0.95f;
 
 ## Related
 
-- [Mesh VFX](MeshVFX.md) — Animated procedural VFX materials (noise scrolling, fresnel)
-- [Materials Overview](../materials.md) — PBR material system and `extra[]` layout
-- [Shaders](../SHADERS.md) — Shader file reference and `blackbody.glsl` include
-- [Particles](Particles.md) — GPU particle alternative for scattered fire/spark effects
+- [Mesh VFX](MeshVFX.md) - Animated procedural VFX materials (noise scrolling, fresnel)
+- [Materials Overview](../materials.md) - PBR material system and `extra[]` layout
+- [Shaders](../SHADERS.md) - Shader file reference and `blackbody.glsl` include
+- [Particles](Particles.md) - GPU particle alternative for scattered fire/spark effects

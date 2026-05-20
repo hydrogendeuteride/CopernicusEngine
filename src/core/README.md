@@ -1,6 +1,6 @@
 # Core
 
-> Engine foundation layer — device management, resource allocation, descriptors, pipelines, asset loading, input, debug drawing, and shared types.
+> Engine foundation layer - device management, resource allocation, descriptors, pipelines, asset loading, input, debug drawing, and shared types.
 
 ## Purpose
 
@@ -13,36 +13,36 @@ the same `init → per-frame pump → cleanup` lifecycle pattern.
 
 ```
 core/
-├── config.h              — compile-time constants (render resolution, shadow params, VRAM budget)
-├── context.h / .cpp      — EngineContext: central DI container holding all manager pointers
-├── engine.h / .cpp       — VulkanEngine: top-level engine class, main loop orchestration
-├── engine_ui.cpp         — built-in debug UI (ImGui panels for scene, lighting, post-FX, etc.)
-├── game_api.h            — GameAPI namespace: high-level stable API for gameplay code
-├── types.h               — shared GPU types (AllocatedImage/Buffer, Vertex, GPUSceneData, Node, etc.)
-├── world.h               — WorldVec3 (double-precision), floating-origin coordinate helpers
+├── config.h              - compile-time constants (render resolution, shadow params, VRAM budget)
+├── context.h / .cpp      - EngineContext: central DI container holding all manager pointers
+├── engine.h / .cpp       - VulkanEngine: top-level engine class, main loop orchestration
+├── engine_ui.cpp         - built-in debug UI (ImGui panels for scene, lighting, post-FX, etc.)
+├── game_api.h            - GameAPI namespace: high-level stable API for gameplay code
+├── types.h               - shared GPU types (AllocatedImage/Buffer, Vertex, GPUSceneData, Node, etc.)
+├── world.h               - WorldVec3 (double-precision), floating-origin coordinate helpers
 │
-├── assets/               — asset loading, texture streaming, IBL environment maps
+├── assets/               - asset loading, texture streaming, IBL environment maps
 │   └── README.md
-├── debug_draw/           — immediate-mode wireframe debug visualization
+├── debug_draw/           - immediate-mode wireframe debug visualization
 │   └── README.md
-├── descriptor/           — descriptor set layout creation, writing, and pool management
+├── descriptor/           - descriptor set layout creation, writing, and pool management
 │   └── README.md
-├── device/               — Vulkan device init, VMA resource allocation, swapchain
+├── device/               - Vulkan device init, VMA resource allocation, swapchain
 │   └── README.md
-├── frame/                — per-frame state (command buffer, sync primitives, deletion queue)
+├── frame/                - per-frame state (command buffer, sync primitives, deletion queue)
 │   └── README.md
-├── game_api/             — GameAPI implementation split by domain (camera, lighting, scene, etc.)
-├── input/                — platform-agnostic input system (keyboard, mouse, window events)
+├── game_api/             - GameAPI implementation split by domain (camera, lighting, scene, etc.)
+├── input/                - platform-agnostic input system (keyboard, mouse, window events)
 │   └── README.md
-├── picking/              — object selection (CPU ray-cast / GPU ID-buffer readback)
+├── picking/              - object selection (CPU ray-cast / GPU ID-buffer readback)
 │   └── README.md
-├── pipeline/             — graphics pipeline registry, hot-reload, sampler management
+├── pipeline/             - graphics pipeline registry, hot-reload, sampler management
 │   └── README.md
-├── raytracing/           — Vulkan acceleration structures (BLAS/TLAS) for hybrid shadows
+├── raytracing/           - Vulkan acceleration structures (BLAS/TLAS) for hybrid shadows
 │   └── README.md
-├── ui/                   — ImGui integration (Vulkan dynamic rendering, DPI-aware fonts)
+├── ui/                   - ImGui integration (Vulkan dynamic rendering, DPI-aware fonts)
 │   └── README.md
-└── util/                 — Vulkan struct initializers (vkinit) and debug labels (vkdebug)
+└── util/                 - Vulkan struct initializers (vkinit) and debug labels (vkdebug)
     └── README.md
 ```
 
@@ -68,10 +68,10 @@ core/
 | File | Role |
 |------|------|
 | `config.h` | Compile-time constants: render resolution (`kRenderWidth/Height`), shadow cascade count/distances/bias, texture budget, validation layer toggle |
-| `context.h` | `EngineContext` — central struct holding pointers to all managers, per-frame state, shadow/render settings, engine stats |
-| `engine.h/.cpp` | `VulkanEngine` — owns all subsystems, runs init/main-loop/cleanup, orchestrates frame recording and RenderGraph execution |
+| `context.h` | `EngineContext` - central struct holding pointers to all managers, per-frame state, shadow/render settings, engine stats |
+| `engine.h/.cpp` | `VulkanEngine` - owns all subsystems, runs init/main-loop/cleanup, orchestrates frame recording and RenderGraph execution |
 | `engine_ui.cpp` | Built-in ImGui debug panels: scene hierarchy, lighting controls, shadow settings, post-FX tweaks, performance stats |
-| `game_api.h` | `GameAPI` namespace — stable high-level API surface for gameplay code (texture streaming, shadows, cameras, animation, particles, etc.) |
+| `game_api.h` | `GameAPI` namespace - stable high-level API surface for gameplay code (texture streaming, shadows, cameras, animation, particles, etc.) |
 | `types.h` | Shared GPU-visible types: `AllocatedImage`, `AllocatedBuffer`, `GPUMeshBuffers`, `GPUSceneData`, `GPUDrawPushConstants`, `Vertex`, `Node`, `DeletionQueue`, `VK_CHECK` |
 | `world.h` | `WorldVec3` (`glm::dvec3`) typedef, `world_to_local` / `local_to_world` coordinate conversion for floating-origin support |
 
@@ -161,22 +161,22 @@ across multiple files in `game_api/`, split by domain:
 `core/` is the foundational layer of the engine. Every other top-level module
 depends on it:
 
-- **`src/render/`** — render passes and the RenderGraph consume `DeviceManager`,
+- **`src/render/`** - render passes and the RenderGraph consume `DeviceManager`,
   `ResourceManager`, `PipelineManager`, `DescriptorManager`, and `FrameResources`
-- **`src/scene/`** — scene graph uses `AssetManager`, `TextureCache`, and
+- **`src/scene/`** - scene graph uses `AssetManager`, `TextureCache`, and
   `ResourceManager` for mesh/material GPU uploads
-- **`src/compute/`** — `ComputeManager` uses `DeviceManager` and
+- **`src/compute/`** - `ComputeManager` uses `DeviceManager` and
   `DescriptorAllocatorGrowable` for compute pipeline management
 
-No module outside `core/` should need to call Vulkan directly — all GPU
+No module outside `core/` should need to call Vulkan directly - all GPU
 operations go through the core abstractions.
 
 ## Related Docs
 
-- [docs/EngineContext.md](../../docs/EngineContext.md) — EngineContext detailed documentation
-- [docs/ResourceManager.md](../../docs/ResourceManager.md) — VMA resource allocation
-- [docs/FrameResources.md](../../docs/FrameResources.md) — per-frame state management
-- [docs/Descriptors.md](../../docs/Descriptors.md) — descriptor system
-- [docs/PipelineManager.md](../../docs/PipelineManager.md) — pipeline registry
-- [docs/RenderGraph.md](../../docs/RenderGraph.md) — DAG-based pass scheduling
-- [docs/GameAPI.md](../../docs/GameAPI.md) — high-level gameplay API
+- [docs/EngineContext.md](../../docs/EngineContext.md) - EngineContext detailed documentation
+- [docs/ResourceManager.md](../../docs/ResourceManager.md) - VMA resource allocation
+- [docs/FrameResources.md](../../docs/FrameResources.md) - per-frame state management
+- [docs/Descriptors.md](../../docs/Descriptors.md) - descriptor system
+- [docs/PipelineManager.md](../../docs/PipelineManager.md) - pipeline registry
+- [docs/RenderGraph.md](../../docs/RenderGraph.md) - DAG-based pass scheduling
+- [docs/GameAPI.md](../../docs/GameAPI.md) - high-level gameplay API

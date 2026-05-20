@@ -6,9 +6,9 @@ Provides a workflow for authoring physics colliders in 3D modeling tools (e.g., 
 
 - `gltf_collider_parser.h/.cpp` (src/physics/)
   - Core collider parsing logic with `GltfColliderMarkerType` enum.
-  - `parse_collider_marker_type()` — parses `COL_*` prefixes (case-insensitive).
-  - `build_colliders_from_markers()` — scans a glTF scene for marker nodes.
-  - `build_colliders_from_sidecar()` — maps sidecar colliders to destination scene nodes.
+  - `parse_collider_marker_type()` - parses `COL_*` prefixes (case-insensitive).
+  - `build_colliders_from_markers()` - scans a glTF scene for marker nodes.
+  - `build_colliders_from_sidecar()` - maps sidecar colliders to destination scene nodes.
 
 - `collider_asset.h/.cpp` (src/physics/)
   - Uniform scaling utilities for collision shapes.
@@ -383,10 +383,10 @@ This ensures `collider_compounds` keys are consistent across loads and can be us
 
 ### Tips
 
-- Keep collider geometry simple — use boxes and capsules for best physics performance.
+- Keep collider geometry simple - use boxes and capsules for best physics performance.
 - Place collider markers as direct children of the node they represent.
 - For skinned meshes, attach colliders to bone nodes for automatic skeletal following.
 - Use meaningful marker names (e.g., `COL_BOX_hitbox_head`) for debugging.
 - Non-uniform scale on instances is not fully supported; use uniform scale when possible.
-- Collider sync creates kinematic bodies — for dynamic physics, copy transforms to dynamic bodies manually.
+- Collider sync creates kinematic bodies - for dynamic physics, copy transforms to dynamic bodies manually.
 - Call `disableColliderSync()` before removing instances to clean up physics bodies (done automatically by `removeGLTFInstance()`).

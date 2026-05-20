@@ -13,10 +13,10 @@ operations (layout transitions, blits, mipmap generation).
 
 ```
 device/
-├── device.h / device.cpp       — Vulkan instance, device, VMA allocator setup
-├── resource.h / resource.cpp   — Buffer/image creation, staging uploads, RenderGraph upload pass
-├── swapchain.h / swapchain.cpp — Swapchain + per-frame render targets (HDR draw, depth, GBuffer)
-└── images.h / images.cpp       — Image utility functions (transitions, blits, mipmaps, letterboxing)
+├── device.h / device.cpp       - Vulkan instance, device, VMA allocator setup
+├── resource.h / resource.cpp   - Buffer/image creation, staging uploads, RenderGraph upload pass
+├── swapchain.h / swapchain.cpp - Swapchain + per-frame render targets (HDR draw, depth, GBuffer)
+└── images.h / images.cpp       - Image utility functions (transitions, blits, mipmaps, letterboxing)
 ```
 
 ## Key Types
@@ -48,7 +48,7 @@ ResourceManager::init(DeviceManager*)
 
 SwapchainManager::init(DeviceManager*, ResourceManager*)
   └─ init_swapchain()
-       ├─ create_swapchain(width, height)  — VkSwapchainKHR via vkb::SwapchainBuilder
+       ├─ create_swapchain(width, height)  - VkSwapchainKHR via vkb::SwapchainBuilder
        └─ resize_render_targets(renderExtent)
             ├─ HDR draw image (R16G16B16A16_SFLOAT)
             ├─ depth image (D32_SFLOAT)
@@ -113,13 +113,13 @@ ctx->resources->register_upload_pass(graph, frame);  // batched Transfer pass
 and exposed via `EngineContext`. All other engine subsystems access device resources
 through `EngineContext` pointers rather than directly.
 
-The `vkutil` image helpers are used throughout the render pipeline — by render passes
+The `vkutil` image helpers are used throughout the render pipeline - by render passes
 for layout transitions, by `SwapchainManager` for final present blits, and by
 `ResourceManager` for mipmap generation during uploads.
 
 ## Related Docs
 
-- [docs/ResourceManager.md](../../../docs/ResourceManager.md) — detailed upload system documentation
-- [docs/FrameResources.md](../../../docs/FrameResources.md) — per-frame lifetime and deletion queues
-- [docs/RenderGraph.md](../../../docs/RenderGraph.md) — DAG-based pass scheduling and barrier insertion
-- [docs/EngineContext.md](../../../docs/EngineContext.md) — central dependency injection container
+- [docs/ResourceManager.md](../../../docs/ResourceManager.md) - detailed upload system documentation
+- [docs/FrameResources.md](../../../docs/FrameResources.md) - per-frame lifetime and deletion queues
+- [docs/RenderGraph.md](../../../docs/RenderGraph.md) - DAG-based pass scheduling and barrier insertion
+- [docs/EngineContext.md](../../../docs/EngineContext.md) - central dependency injection container

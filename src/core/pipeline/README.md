@@ -13,17 +13,17 @@ manager. A companion `SamplerManager` owns commonly-used `VkSampler` objects.
 
 ```
 pipeline/
-├── manager.h    — GraphicsPipelineCreateInfo, PipelineManager class
-├── manager.cpp  — implementation (build, hot-reload worker, compute forwarding)
-├── sampler.h    — SamplerManager class
-└── sampler.cpp  — implementation (sampler creation / cleanup)
+├── manager.h    - GraphicsPipelineCreateInfo, PipelineManager class
+├── manager.cpp  - implementation (build, hot-reload worker, compute forwarding)
+├── sampler.h    - SamplerManager class
+└── sampler.cpp  - implementation (sampler creation / cleanup)
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `PipelineManager` | Central registry — register/get/unregister graphics pipelines, forward compute API, async hot-reload |
+| `PipelineManager` | Central registry - register/get/unregister graphics pipelines, forward compute API, async hot-reload |
 | `GraphicsPipelineCreateInfo` | Shader paths, descriptor set layouts, push constants, builder configure callback |
 | `SamplerManager` | Owns a set of commonly-used `VkSampler` objects (linear, nearest, clamp, shadow) |
 
@@ -138,6 +138,6 @@ accessors safe to call from any thread after init.
 
 ## Related Docs
 
-- [docs/PipelineManager.md](../../../docs/PipelineManager.md) — high-level pipeline management documentation
-- [src/compute/README.md](../../compute/README.md) — compute pipeline system
-- [src/core/descriptor/README.md](../descriptor/README.md) — descriptor set management
+- [docs/PipelineManager.md](../../../docs/PipelineManager.md) - high-level pipeline management documentation
+- [src/compute/README.md](../../compute/README.md) - compute pipeline system
+- [src/core/descriptor/README.md](../descriptor/README.md) - descriptor set management

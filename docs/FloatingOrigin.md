@@ -195,8 +195,8 @@ If you observe jitter at large world coordinates, verify:
 
 ### Related Files
 
-- `src/core/world.h` — `WorldVec3` type and conversion functions
-- `src/scene/vk_scene.h` — `SceneManager` origin management
-- `src/scene/vk_scene.cpp` — Recentering logic in `update_scene()`
-- `src/scene/camera.h` — `Camera::position_world` double-precision position
-- `src/core/game_api.h` — `Transform` / `TransformD` API types
+- `src/core/world.h` - `WorldVec3` type and conversion functions
+- `src/scene/vk_scene.h` - `SceneManager` origin management
+- `src/scene/vk_scene.cpp` - Recentering logic in `update_scene()`
+- `src/scene/camera.h` - `Camera::position_world` double-precision position
+- `src/core/game_api.h` - `Transform` / `TransformD` API types

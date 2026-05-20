@@ -16,15 +16,15 @@ Provides a unified physics abstraction layer that supports:
 
 ```
 physics/
-├── physics_world.h              — abstract PhysicsWorld interface + BodyBuilder fluent API
-├── physics_context.h/.cpp       — PhysicsContext for floating origin management
-├── physics_body.h/.cpp          — BodyId, BodyHandle, query types (RayHit, OverlapHit, etc.)
-├── body_settings.h              — BodySettings, MotionType enum, Layer constants
-├── collision_shape.h            — shape types (BoxShape, SphereShape, CompoundShape, etc.)
-├── collider_asset.h/.cpp        — collider scaling utilities for glTF instances
-├── collider_mesh_instance.h     — triangle mesh collider metadata
-├── gltf_collider_parser.h/.cpp  — COL_* marker parsing for glTF collider authoring
-└── jolt/                        — Jolt Physics backend implementation (see jolt/README.md)
+├── physics_world.h              - abstract PhysicsWorld interface + BodyBuilder fluent API
+├── physics_context.h/.cpp       - PhysicsContext for floating origin management
+├── physics_body.h/.cpp          - BodyId, BodyHandle, query types (RayHit, OverlapHit, etc.)
+├── body_settings.h              - BodySettings, MotionType enum, Layer constants
+├── collision_shape.h            - shape types (BoxShape, SphereShape, CompoundShape, etc.)
+├── collider_asset.h/.cpp        - collider scaling utilities for glTF instances
+├── collider_mesh_instance.h     - triangle mesh collider metadata
+├── gltf_collider_parser.h/.cpp  - COL_* marker parsing for glTF collider authoring
+└── jolt/                        - Jolt Physics backend implementation (see jolt/README.md)
     ├── jolt_physics_world.h/.cpp
     └── jolt_query_filters.h
 ```
@@ -201,8 +201,8 @@ bool rebased = physics_context->maybe_rebase_origin_to_body(
 `PhysicsContext*` is stored in `EngineContext::physics_context` and manages coordinate system rebasing.
 
 **SceneManager** integrates physics via:
-- `enableColliderSync(instanceName, physicsWorld, layer, user_data)` — creates kinematic bodies from glTF colliders
-- `syncColliders()` — updates physics body transforms to match animated node transforms each frame
+- `enableColliderSync(instanceName, physicsWorld, layer, user_data)` - creates kinematic bodies from glTF colliders
+- `syncColliders()` - updates physics body transforms to match animated node transforms each frame
 
 **AssetManager** automatically extracts colliders from glTF files via:
 - Embedded `COL_*` marker nodes (see `gltf_collider_parser.h`)
@@ -210,7 +210,7 @@ bool rebased = physics_context->maybe_rebase_origin_to_body(
 
 ## Related Docs
 
-- [docs/PhysicsSystem.md](../../docs/PhysicsSystem.md) — detailed physics system documentation
-- [docs/JoltBackend.md](../../docs/JoltBackend.md) — Jolt Physics backend implementation
-- [docs/ColliderSystem.md](../../docs/ColliderSystem.md) — glTF collider authoring workflow
-- [docs/FloatingOrigin.md](../../docs/FloatingOrigin.md) — large-world coordinate management
+- [docs/PhysicsSystem.md](../../docs/PhysicsSystem.md) - detailed physics system documentation
+- [docs/JoltBackend.md](../../docs/JoltBackend.md) - Jolt Physics backend implementation
+- [docs/ColliderSystem.md](../../docs/ColliderSystem.md) - glTF collider authoring workflow
+- [docs/FloatingOrigin.md](../../docs/FloatingOrigin.md) - large-world coordinate management

@@ -344,7 +344,7 @@ for (const std::string& name : selectedObjects) {
 
 ## See Also
 
-- [Scene Management](Scene.md) — Object lifecycle
-- [Camera](Camera.md) — Camera target from pick
-- [Debug Drawing](Debug.md) — Visualize selections
-- [Picking System](../Picking.md) — Low-level implementation details
+- [Scene Management](Scene.md) - Object lifecycle
+- [Camera](Camera.md) - Camera target from pick
+- [Debug Drawing](Debug.md) - Visualize selections
+- [Picking System](../Picking.md) - Low-level implementation details

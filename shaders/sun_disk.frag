@@ -42,7 +42,7 @@ float noise2D(vec2 p)
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Fractal Brownian Motion — 4 octaves
+// Fractal Brownian Motion - 4 octaves
 float fbm(vec2 p)
 {
     float v = 0.0, a = 0.5;

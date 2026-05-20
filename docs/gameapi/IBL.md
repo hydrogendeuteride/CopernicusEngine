@@ -288,8 +288,8 @@ api.set_ibl_volume(roomIdx, room);
 
 IBL textures must be pre-processed from HDR environment maps. Tools:
 
-- [cmftStudio](https://github.com/dariomanesku/cmftStudio) — Cubemap filtering
-- [IBLBaker](https://github.com/derkreature/IBLBaker) — PBR IBL generation
+- [cmftStudio](https://github.com/dariomanesku/cmftStudio) - Cubemap filtering
+- [IBLBaker](https://github.com/derkreature/IBLBaker) - PBR IBL generation
 - Custom: Use glTF-IBL-Sampler or similar
 
 Expected formats:
@@ -299,6 +299,6 @@ Expected formats:
 
 ## See Also
 
-- [Lighting](Lighting.md) — Point, spot, and directional lights
-- [Post-Processing](PostProcessing.md) — Reflections (SSR/RT)
-- [IBL System](../IBL.md) — Low-level implementation details
+- [Lighting](Lighting.md) - Point, spot, and directional lights
+- [Post-Processing](PostProcessing.md) - Reflections (SSR/RT)
+- [IBL System](../IBL.md) - Low-level implementation details

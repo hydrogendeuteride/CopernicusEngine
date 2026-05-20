@@ -380,5 +380,5 @@ if (explosion_triggered) {
 
 ## See Also
 
-- [Picking](Picking.md) — Object selection for interactive debugging
-- [ImGui System](../ImGuiSystem.md) — UI-based debugging tools
+- [Picking](Picking.md) - Object selection for interactive debugging
+- [ImGui System](../ImGuiSystem.md) - UI-based debugging tools

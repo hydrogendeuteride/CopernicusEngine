@@ -49,7 +49,7 @@ namespace Game
     };
 
     // ============================================================================
-    // GameplayState: Main gameplay — orbital mechanics, combat, ship control
+    // GameplayState: Main gameplay - orbital mechanics, combat, ship control
     //
     // This is where the actual game simulation lives.
     // Owns GameWorld, physics, and orbital simulation.

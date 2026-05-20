@@ -28,7 +28,7 @@ engine.init();
 GameAPI::Engine api(&engine);  // Non-owning wrapper
 ```
 
-The `GameAPI::Engine` instance is lightweight and non-owning—it simply holds a pointer to the `VulkanEngine`.
+The `GameAPI::Engine` instance is lightweight and non-owning-it simply holds a pointer to the `VulkanEngine`.
 
 ## Design Principles
 
@@ -188,7 +188,7 @@ This recompiles all changed GLSL files and rebuilds pipelines.
 
 ## Next Steps
 
-- **[Scene Management](Scene.md)** — Learn how to spawn and control objects
-- **[Textures](Textures.md)** — Understand texture loading and VRAM management
-- **[Lighting](Lighting.md)** — Add lights to your scene
-- **[Camera](Camera.md)** — Control camera movement and modes
+- **[Scene Management](Scene.md)** - Learn how to spawn and control objects
+- **[Textures](Textures.md)** - Understand texture loading and VRAM management
+- **[Lighting](Lighting.md)** - Add lights to your scene
+- **[Camera](Camera.md)** - Control camera movement and modes

@@ -26,7 +26,7 @@ Per-frame struct that owns the command buffer, semaphores/fence, a transient des
 ### Do/Don’t
 - Do use `currentFrame->_frameDescriptors` for descriptor sets that live only for this frame.
 - Do push transient resource destruction into `currentFrame->_deletionQueue`.
-- Don’t stash per-frame descriptor sets across frames — they are reset on `clear_pools()`.
+- Don’t stash per-frame descriptor sets across frames - they are reset on `clear_pools()`.
 
 ### Extending
 - If a pass needs additional short-lived command buffers, allocate them from `_commandPool` and reset per frame.

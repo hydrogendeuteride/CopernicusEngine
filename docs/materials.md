@@ -2,11 +2,11 @@ Materials and Textures Overview (PBR)
 
 - PBR textures bound per material (set=1):
   - binding=0: GLTFMaterialData (UBO)
-  - binding=1: `colorTex` (albedo/base color) — sRGB
-  - binding=2: `metalRoughTex` (G=roughness, B=metallic) — UNORM
+  - binding=1: `colorTex` (albedo/base color) - sRGB
+  - binding=2: `metalRoughTex` (G=roughness, B=metallic) - UNORM
   - binding=3: `normalMap` (tangent-space normal, UNORM)
-  - binding=4: `occlusionTex` (ambient occlusion, R channel) — UNORM
-  - binding=5: `emissiveTex` (emissive RGB) — sRGB
+  - binding=4: `occlusionTex` (ambient occlusion, R channel) - UNORM
+  - binding=5: `emissiveTex` (emissive RGB) - sRGB
 - G‑Buffer writes world‑space normals. Tangent‑space normal maps are decoded with TBN using a sign‑correct bitangent (B = sign * cross(N, T)).
 - Numeric fallbacks via `MaterialConstants` (CPU) / `GLTFMaterialData` (GPU):
   - `colorFactors` (RGBA). Defaults to 1 if zero.
@@ -54,19 +54,19 @@ Mesh VFX Materials
 Mesh VFX is a dedicated forward-rendered material pass for animated procedural effects (engine exhaust, energy beams, shields, etc.). It uses the same `GLTFMaterialData` UBO but repurposes texture bindings and `extra[]` slots for VFX-specific parameters.
 
 - Texture bindings (set=1, shared layout with PBR):
-  - binding=1: `colorTex` — base color / alpha mask (albedo)
-  - binding=2: `metalRoughTex` — **noise texture 1** (R channel sampled)
-  - binding=3: `normalMap` — **noise texture 2** (R channel sampled, cross-distorted by noise 1)
+  - binding=1: `colorTex` - base color / alpha mask (albedo)
+  - binding=2: `metalRoughTex` - **noise texture 1** (R channel sampled)
+  - binding=3: `normalMap` - **noise texture 2** (R channel sampled, cross-distorted by noise 1)
   - Fallback: `_whiteImage` for albedo/noise1, `_flatNormalImage` for noise2
 
 - `extra[]` layout for Mesh VFX:
-  - `extra[2].x` — alpha cutoff
-  - `extra[3]` — (opacity, fresnelPower, fresnelStrength, _)
-  - `extra[4]` — (tint.rgb, _)
-  - `extra[5]` — (scrollVelocity1.xy, scrollVelocity2.xy) — noise UV scroll speeds (units/sec)
-  - `extra[6]` — (distortionStrength, noiseBlend, gradientAxis, emissionStrength)
-  - `extra[7]` — (coreColor.rgb, gradientStart)
-  - `extra[8]` — (edgeColor.rgb, gradientEnd)
+  - `extra[2].x` - alpha cutoff
+  - `extra[3]` - (opacity, fresnelPower, fresnelStrength, _)
+  - `extra[4]` - (tint.rgb, _)
+  - `extra[5]` - (scrollVelocity1.xy, scrollVelocity2.xy) - noise UV scroll speeds (units/sec)
+  - `extra[6]` - (distortionStrength, noiseBlend, gradientAxis, emissionStrength)
+  - `extra[7]` - (coreColor.rgb, gradientStart)
+  - `extra[8]` - (edgeColor.rgb, gradientEnd)
 
 - Time: `sceneData.timeParams.x` (elapsed seconds, wraps at 10000s) drives UV scrolling.
 
@@ -87,21 +87,21 @@ Blackbody materials repurpose the emissive texture slot (`emissiveTex`, binding=
 
 - Texture bindings (set=1, shared layout with PBR):
   - binding=1–4: Standard PBR textures (albedo, metal-rough, normal, occlusion)
-  - binding=5: `emissiveTex` — **noise texture** (linear, tileable) when blackbody is enabled
+  - binding=5: `emissiveTex` - **noise texture** (linear, tileable) when blackbody is enabled
   - Fallback: `_blackImage` (no emission) when noise path is empty or blackbody is disabled
 
 - `extra[]` layout for blackbody:
-  - `extra[9]`  — (enable, intensity, tempMinK, tempMaxK)
-  - `extra[10]` — (noiseScale, noiseContrast, scrollU, scrollV)
-  - `extra[11]` — (heatAxisLocal.xyz, hotEndBias)
-  - `extra[12]` — (noiseSpeed, 0, 0, 0)
-  - `extra[13]` — (hotRangeStart, hotRangeEnd, 0, 0)
+  - `extra[9]`  - (enable, intensity, tempMinK, tempMaxK)
+  - `extra[10]` - (noiseScale, noiseContrast, scrollU, scrollV)
+  - `extra[11]` - (heatAxisLocal.xyz, hotEndBias)
+  - `extra[12]` - (noiseSpeed, 0, 0, 0)
+  - `extra[13]` - (hotRangeStart, hotRangeEnd, 0, 0)
 
 - When blackbody is enabled (`extra[9].x > 0.5`), standard `emissiveFactor` (`extra[1]`) is zeroed to avoid double emission.
 
 - Two usage modes:
-  1. **Standalone**: `create_or_update_blackbody_material()` — full PBR + blackbody for procedural meshes.
-  2. **glTF patch**: `set_gltf_material_blackbody()` — patches an existing glTF material's constants and emissive binding at runtime.
+  1. **Standalone**: `create_or_update_blackbody_material()` - full PBR + blackbody for procedural meshes.
+  2. **glTF patch**: `set_gltf_material_blackbody()` - patches an existing glTF material's constants and emissive binding at runtime.
 
 - See [Blackbody](gameapi/Blackbody.md) for full API reference and usage examples.
 

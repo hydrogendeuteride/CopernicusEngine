@@ -6,11 +6,11 @@ The volumetric system provides GPU-accelerated voxel-based rendering for clouds,
 
 The system is implemented across multiple components:
 
-- **CloudPass** (`src/render/passes/clouds.h/.cpp`) — Render pass managing voxel volumes, compute simulation, and raymarching
-- **GameAPI** (`src/core/game_api.h`) — High-level API for configuring volumetric effects
+- **CloudPass** (`src/render/passes/clouds.h/.cpp`) - Render pass managing voxel volumes, compute simulation, and raymarching
+- **GameAPI** (`src/core/game_api.h`) - High-level API for configuring volumetric effects
 - **Shaders**
-  - `shaders/cloud_voxel_advect.comp` — Voxel density simulation (advection + injection)
-  - `shaders/clouds.frag` — Raymarching fragment shader
+  - `shaders/cloud_voxel_advect.comp` - Voxel density simulation (advection + injection)
+  - `shaders/clouds.frag` - Raymarching fragment shader
 
 ## Key Features
 
@@ -480,8 +480,8 @@ class CloudPass : public IRenderPass
 
 ## See Also
 
-- `docs/ParticleSystem.md` — GPU particle system documentation
-- `docs/RenderGraph.md` — Render graph integration details
-- `docs/RenderPasses.md` — Pass execution and pipeline management
-- `docs/GameAPI.md` — High-level game API
-- `docs/Compute.md` — Compute pipeline details
+- `docs/ParticleSystem.md` - GPU particle system documentation
+- `docs/RenderGraph.md` - Render graph integration details
+- `docs/RenderPasses.md` - Pass execution and pipeline management
+- `docs/GameAPI.md` - High-level game API
+- `docs/Compute.md` - Compute pipeline details

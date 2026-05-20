@@ -466,7 +466,7 @@ void main(){
                 }
                 else if (punctualMode == 3u)
                 {
-                    // RT says lit — override shadow map false-shadows
+                    // RT says lit - override shadow map false-shadows
                     contrib = contribBeforeShadow;
                 }
             }
@@ -541,7 +541,7 @@ void main(){
                     }
                     else if (punctualMode == 3u)
                     {
-                        // RT says lit — override shadow map false-shadows
+                        // RT says lit - override shadow map false-shadows
                         contrib = contribBeforeShadow;
                     }
                 }

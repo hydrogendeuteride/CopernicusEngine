@@ -124,12 +124,12 @@ Lower thresholds = RT used less often (better performance). Higher thresholds = 
 
 These are set in `src/core/config.h` and require recompilation:
 
-- `kShadowCascadeCount` — Number of cascades (default `4`)
-- `kShadowCSMFar` — Far plane for cascade distribution
-- `kShadowCascadeRadiusScale` / `kShadowCascadeRadiusMargin` — Cascade sizing
-- `kShadowBorderSmoothNDC` — Border softness
-- `kShadowPCFBaseRadius` / `kShadowPCFCascadeGain` — PCF filter kernel size
-- `kShadowDepthBiasConstant` / `kShadowDepthBiasSlope` — Depth bias to prevent acne
+- `kShadowCascadeCount` - Number of cascades (default `4`)
+- `kShadowCSMFar` - Far plane for cascade distribution
+- `kShadowCascadeRadiusScale` / `kShadowCascadeRadiusMargin` - Cascade sizing
+- `kShadowBorderSmoothNDC` - Border softness
+- `kShadowPCFBaseRadius` / `kShadowPCFCascadeGain` - PCF filter kernel size
+- `kShadowDepthBiasConstant` / `kShadowDepthBiasSlope` - Depth bias to prevent acne
 
 ## Complete Example
 
@@ -184,7 +184,7 @@ Caused by texel snapping during cascade stabilization. Solutions:
 
 ## See Also
 
-- [Lighting](Lighting.md) — Directional light setup
-- [Planets](Planets.md) — Sun shadow penumbra settings for planet shadows
-- [Ray Tracing](../RayTracing.md) — RT backend details
-- [Config](../../src/core/config.h) — Shadow quality constants
+- [Lighting](Lighting.md) - Directional light setup
+- [Planets](Planets.md) - Sun shadow penumbra settings for planet shadows
+- [Ray Tracing](../RayTracing.md) - RT backend details
+- [Config](../../src/core/config.h) - Shadow quality constants

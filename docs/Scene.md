@@ -88,21 +88,21 @@ All instances store position as `WorldVec3` (double‑precision) with separate `
 
 - `MeshInstance` struct: `mesh`, `translation_world` (WorldVec3), `rotation`, `scale`, optional `boundsTypeOverride`.
 - API:
-  - `addMeshInstance(name, mesh, transform = identity, boundsType = {})` — optional `BoundsType` override.
+  - `addMeshInstance(name, mesh, transform = identity, boundsType = {})` - optional `BoundsType` override.
   - `removeMeshInstance(name)`, `clearMeshInstances()`.
-  - `getMeshInstanceTransform(name, outTransform)` / `setMeshInstanceTransform(name, transform)` — world‑space matrix (float, uses WorldVec3 translation directly).
-  - `getMeshInstanceTransformLocal(name, outTransformLocal)` / `setMeshInstanceTransformLocal(name, transformLocal)` — render‑local (floating‑origin shifted).
-  - `getMeshInstanceTRSWorld(name, outTranslationWorld, outRotation, outScale)` / `setMeshInstanceTRSWorld(name, translationWorld, rotation, scale)` — direct TRS access in double‑precision world space.
+  - `getMeshInstanceTransform(name, outTransform)` / `setMeshInstanceTransform(name, transform)` - world‑space matrix (float, uses WorldVec3 translation directly).
+  - `getMeshInstanceTransformLocal(name, outTransformLocal)` / `setMeshInstanceTransformLocal(name, transformLocal)` - render‑local (floating‑origin shifted).
+  - `getMeshInstanceTRSWorld(name, outTranslationWorld, outRotation, outScale)` / `setMeshInstanceTRSWorld(name, translationWorld, rotation, scale)` - direct TRS access in double‑precision world space.
 
 #### GLTF Instances
 
 - `GLTFInstance` struct: `scene`, `translation_world` (WorldVec3), `rotation`, `scale`, `AnimationState`, `nodeLocalOverrides`.
 - API:
   - `addGLTFInstance(name, LoadedGLTF, transform = identity)`, `removeGLTFInstance(name)`, `clearGLTFInstances()`.
-  - `getGLTFInstanceTransform` / `setGLTFInstanceTransform` — world‑space matrix.
-  - `getGLTFInstanceTransformLocal` / `setGLTFInstanceTransformLocal` — render‑local matrix.
-  - `getGLTFInstanceTRSWorld` / `setGLTFInstanceTRSWorld` — direct TRS in world space.
-  - `getGLTFInstanceScene(instanceName)` — returns the `shared_ptr<LoadedGLTF>` for a named instance.
+  - `getGLTFInstanceTransform` / `setGLTFInstanceTransform` - world‑space matrix.
+  - `getGLTFInstanceTransformLocal` / `setGLTFInstanceTransformLocal` - render‑local matrix.
+  - `getGLTFInstanceTRSWorld` / `setGLTFInstanceTRSWorld` - direct TRS in world space.
+  - `getGLTFInstanceScene(instanceName)` - returns the `shared_ptr<LoadedGLTF>` for a named instance.
 - Deferred destruction: when a GLTF instance is removed, the `shared_ptr<LoadedGLTF>` is deferred via `DeletionQueue` to ensure GPU resources aren't destroyed while still in‑flight.
 
 ### GLTF Animation / "Actions"
@@ -162,19 +162,19 @@ You can query the world transform of a specific glTF node within an instance. Th
 
 - World‑space (uses instance's stored `WorldVec3` translation, result as float matrix):
   - `bool getGLTFInstanceNodeWorldTransform(instanceName, nodeName, outWorldTransform)`
-  - `glm::mat4 getGLTFInstanceNodeWorldTransform(instanceName, nodeName)` — convenience, returns identity on failure.
+  - `glm::mat4 getGLTFInstanceNodeWorldTransform(instanceName, nodeName)` - convenience, returns identity on failure.
 - Render‑local (floating‑origin shifted, better precision near camera):
   - `bool getGLTFInstanceNodeWorldTransformLocal(instanceName, nodeName, outWorldTransformLocal)`
-  - `bool getGLTFInstanceNodeWorldTransformLocal(instanceName, nodeName, origin_world, outWorldTransformLocal)` — custom origin.
+  - `bool getGLTFInstanceNodeWorldTransformLocal(instanceName, nodeName, origin_world, outWorldTransformLocal)` - custom origin.
   - `glm::mat4` convenience overloads also available.
 - Per‑instance node overrides are automatically incorporated into the returned transforms.
 
 ### Sunlight (Directional Light)
 
-- `setSunlightDirection(const glm::vec3 &dir)` — auto‑normalizes; falls back to (0, -1, 0) for zero input.
-- `getSunlightDirection()` — returns the current normalized direction.
-- `setSunlightColor(const glm::vec3 &color, float intensity)` — sets RGB color and intensity.
-- `getSunlightColor()` / `getSunlightIntensity()` — read back current values.
+- `setSunlightDirection(const glm::vec3 &dir)` - auto‑normalizes; falls back to (0, -1, 0) for zero input.
+- `getSunlightDirection()` - returns the current normalized direction.
+- `setSunlightColor(const glm::vec3 &color, float intensity)` - sets RGB color and intensity.
+- `getSunlightColor()` / `getSunlightIntensity()` - read back current values.
 
 ### GPU Scene Data
 
@@ -204,7 +204,7 @@ You can query the world transform of a specific glTF node within an instance. Th
   - `addPointLight(const PointLight &light)`
   - `clearPointLights()`
   - `getPointLightCount()`, `getPointLight(index, outLight)`, `setPointLight(index, light)`, `removePointLight(index)`
-  - `getPointLights()` — returns const reference to the full vector.
+  - `getPointLights()` - returns const reference to the full vector.
 - Usage pattern
   - On level load: call `addPointLight` for each baked/runtime point light.
   - At runtime (e.g. gameplay): read/modify lights via the indexed helpers.
@@ -223,7 +223,7 @@ You can query the world transform of a specific glTF node within an instance. Th
   - `addSpotLight(const SpotLight &light)`
   - `clearSpotLights()`
   - `getSpotLightCount()`, `getSpotLight(index, outLight)`, `setSpotLight(index, light)`, `removeSpotLight(index)`
-  - `getSpotLights()` — returns const reference to the full vector.
+  - `getSpotLights()` - returns const reference to the full vector.
 - Usage pattern
   - On level load: call `addSpotLight` for each flashlight/beam/cone light.
   - At runtime: read/modify lights via the indexed helpers.
@@ -315,10 +315,10 @@ The scene system exposes CPU ray‑based picking and rectangle selection that th
   - Creates **static** bodies for mesh colliders (`COL_MESH` from sidecars).
   - Returns the number of bodies created.
 - **Disable sync:**
-  - `bool disableColliderSync(instanceName)` — destroys all associated physics bodies.
+  - `bool disableColliderSync(instanceName)` - destroys all associated physics bodies.
 - **Query:**
-  - `bool isColliderSyncEnabled(instanceName)` — check if sync is active.
-  - `std::vector<Physics::BodyId> getColliderSyncBodies(instanceName)` — get all body IDs for debug.
+  - `bool isColliderSyncEnabled(instanceName)` - check if sync is active.
+  - `std::vector<Physics::BodyId> getColliderSyncBodies(instanceName)` - get all body IDs for debug.
 - **Per‑frame update:**
   - `syncColliders()` is called automatically in `update_scene()` after animation updates.
   - Each kinematic body's transform is set to match the node's current world transform (including animation and node overrides).
@@ -328,7 +328,7 @@ The scene system exposes CPU ray‑based picking and rectangle selection that th
 ### Scene Stats
 
 - `SceneManager::SceneStats` tracks performance timing:
-  - `scene_update_time` — wall‑clock time of `update_scene()` in milliseconds.
+  - `scene_update_time` - wall‑clock time of `update_scene()` in milliseconds.
 - Accessible via `stats` member.
 
 ### Tips
@@ -337,4 +337,4 @@ The scene system exposes CPU ray‑based picking and rectangle selection that th
 - Keep `RenderObject` small; use device addresses for vertex data to avoid per-draw vertex buffer binds.
 - For custom sorting/culling, modify only the scene layer; render passes stay simple.
 - Use `WorldVec3` for all authoritative positions; convert to float only at render time via `world_to_local()`.
-- When working at planetary scales, rely on the floating origin — never store large float positions directly.
+- When working at planetary scales, rely on the floating origin - never store large float positions directly.

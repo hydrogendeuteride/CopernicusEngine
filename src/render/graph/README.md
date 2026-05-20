@@ -15,23 +15,23 @@ graphics passes. Supports both imported (externally owned) and transient
 
 ```
 graph/
-├── types.h        — enums (RGPassType, RGImageUsage, RGBufferUsage), handle types, descriptor structs
-├── resources.h    — RGResourceRegistry: image/buffer record storage and lookup
-├── resources.cpp  — implementation (import dedup, transient allocation, cleanup)
-├── builder.h      — RGPassBuilder (pass declaration API), RGPassResources (record-time resource access)
-├── builder.cpp    — implementation
-├── graph.h        — RenderGraph class: pass registration, compile, execute, debug helpers
-└── graph.cpp      — implementation (topo-sort, barrier gen, dynamic rendering, GPU timing)
+├── types.h        - enums (RGPassType, RGImageUsage, RGBufferUsage), handle types, descriptor structs
+├── resources.h    - RGResourceRegistry: image/buffer record storage and lookup
+├── resources.cpp  - implementation (import dedup, transient allocation, cleanup)
+├── builder.h      - RGPassBuilder (pass declaration API), RGPassResources (record-time resource access)
+├── builder.cpp    - implementation
+├── graph.h        - RenderGraph class: pass registration, compile, execute, debug helpers
+└── graph.cpp      - implementation (topo-sort, barrier gen, dynamic rendering, GPU timing)
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `RenderGraph` | Central entry point — pass registration, compile, execute, timing |
+| `RenderGraph` | Central entry point - pass registration, compile, execute, timing |
 | `RGResourceRegistry` | Tracks all image/buffer records; deduplicates imports, allocates transients |
-| `RGPassBuilder` | Builder passed to `add_pass` setup lambda — declare reads, writes, attachments |
-| `RGPassResources` | Read-only accessor passed to record callback — resolve handles to `VkImage`/`VkBuffer` |
+| `RGPassBuilder` | Builder passed to `add_pass` setup lambda - declare reads, writes, attachments |
+| `RGPassResources` | Read-only accessor passed to record callback - resolve handles to `VkImage`/`VkBuffer` |
 | `RGImageHandle` / `RGBufferHandle` | Lightweight opaque handles (uint32 ID) to graph-managed resources |
 | `RGPassType` | `Graphics`, `Compute`, `Transfer` |
 | `RGImageUsage` | `SampledFragment`, `SampledCompute`, `ColorAttachment`, `DepthAttachment`, `ComputeWrite`, `TransferSrc/Dst`, `Present` |
@@ -160,4 +160,4 @@ render graph inspector.
 
 ## Related Docs
 
-- [docs/RenderGraph.md](../../../docs/RenderGraph.md) — detailed render graph system documentation
+- [docs/RenderGraph.md](../../../docs/RenderGraph.md) - detailed render graph system documentation

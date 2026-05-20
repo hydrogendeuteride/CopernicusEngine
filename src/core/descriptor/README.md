@@ -4,7 +4,7 @@
 
 ## Purpose
 
-Provides reusable building blocks for the entire descriptor pipeline — from declaring
+Provides reusable building blocks for the entire descriptor pipeline - from declaring
 layouts, to allocating sets from pools, to writing resource bindings (buffers, images,
 acceleration structures) into those sets. Also includes a central `DescriptorManager`
 that owns engine-wide shared layouts.
@@ -13,20 +13,20 @@ that owns engine-wide shared layouts.
 
 ```
 descriptor/
-├── descriptors.h    — DescriptorLayoutBuilder, DescriptorWriter, DescriptorAllocator, DescriptorAllocatorGrowable
-├── descriptors.cpp  — implementation of all descriptor utilities
-├── manager.h        — DescriptorManager class (shared layout ownership)
-└── manager.cpp      — implementation
+├── descriptors.h    - DescriptorLayoutBuilder, DescriptorWriter, DescriptorAllocator, DescriptorAllocatorGrowable
+├── descriptors.cpp  - implementation of all descriptor utilities
+├── manager.h        - DescriptorManager class (shared layout ownership)
+└── manager.cpp      - implementation
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `DescriptorLayoutBuilder` | Fluent builder for `VkDescriptorSetLayout` — accumulates bindings, then calls `build()` |
+| `DescriptorLayoutBuilder` | Fluent builder for `VkDescriptorSetLayout` - accumulates bindings, then calls `build()` |
 | `DescriptorWriter` | Batches `VkWriteDescriptorSet` entries (image, buffer, acceleration structure) and flushes them via `update_set()` |
-| `DescriptorAllocator` | Simple fixed-size pool wrapper — init, allocate, reset, destroy |
-| `DescriptorAllocatorGrowable` | Auto-growing pool allocator — creates new pools on demand (1.5x growth, capped at 4092 sets) |
+| `DescriptorAllocator` | Simple fixed-size pool wrapper - init, allocate, reset, destroy |
+| `DescriptorAllocatorGrowable` | Auto-growing pool allocator - creates new pools on demand (1.5x growth, capped at 4092 sets) |
 | `DescriptorManager` | Owns engine-wide shared layouts (`gpuSceneDataLayout`, `singleImageLayout`) |
 
 ## Lifecycle
@@ -112,5 +112,5 @@ safe cross-frame descriptor rewrites.
 
 ## Related Docs
 
-- [docs/Descriptors.md](../../../docs/Descriptors.md) — high-level descriptor system documentation
-- [docs/FrameResources.md](../../../docs/FrameResources.md) — per-frame resource management
+- [docs/Descriptors.md](../../../docs/Descriptors.md) - high-level descriptor system documentation
+- [docs/FrameResources.md](../../../docs/FrameResources.md) - per-frame resource management

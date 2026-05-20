@@ -37,7 +37,7 @@ Optional subsystem that enables hybrid or full ray traced shadows via Ray Query.
 
 ### Modes & UI
 - Mode 0: Shadow maps only (CSM).
-- Mode 1: Hybrid — selected cascades assisted by Ray Query (configurable bitmask).
+- Mode 1: Hybrid - selected cascades assisted by Ray Query (configurable bitmask).
 - Mode 2: Ray Query only (no shadow maps).
 
 ### Notes & Caveats

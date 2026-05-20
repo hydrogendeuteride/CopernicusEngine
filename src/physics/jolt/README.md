@@ -19,9 +19,9 @@ Features:
 
 ```
 jolt/
-├── jolt_physics_world.h    — JoltPhysicsWorld class declaration
-├── jolt_physics_world.cpp  — implementation (~2000 lines)
-└── jolt_query_filters.h    — LayerMaskFilter, IgnoreBodyAndSensorsFilter
+├── jolt_physics_world.h    - JoltPhysicsWorld class declaration
+├── jolt_physics_world.cpp  - implementation (~2000 lines)
+└── jolt_query_filters.h    - LayerMaskFilter, IgnoreBodyAndSensorsFilter
 ```
 
 ## Key Types
@@ -251,12 +251,12 @@ jolt_world->for_each_debug_body([&](const PhysicsWorld::DebugBodyView& body) {
 ## Thread Safety
 
 All `PhysicsWorld` API methods are thread-safe via internal mutexes:
-- `_callbacks_mutex` — body callback registration
-- `_events_mutex` — contact event queuing
-- `_layer_mutex` — collision matrix updates
-- `_mesh_shape_cache_mutex` — mesh shape cache
-- `_joints_mutex` — joint map
-- `_debug_bodies_mutex` — debug metadata
+- `_callbacks_mutex` - body callback registration
+- `_events_mutex` - contact event queuing
+- `_layer_mutex` - collision matrix updates
+- `_mesh_shape_cache_mutex` - mesh shape cache
+- `_joints_mutex` - joint map
+- `_debug_bodies_mutex` - debug metadata
 
 Jolt's `BodyInterface` is thread-safe for queries but not for writes (use locking or schedule writes for step boundary).
 
@@ -286,6 +286,6 @@ Multiple `JoltPhysicsWorld` instances can coexist safely; Jolt is initialized on
 
 ## Related Docs
 
-- [docs/JoltBackend.md](../../../docs/JoltBackend.md) — detailed Jolt backend documentation
-- [docs/PhysicsSystem.md](../../../docs/PhysicsSystem.md) — abstract physics system API
+- [docs/JoltBackend.md](../../../docs/JoltBackend.md) - detailed Jolt backend documentation
+- [docs/PhysicsSystem.md](../../../docs/PhysicsSystem.md) - abstract physics system API
 - Jolt Physics documentation: https://jrouwe.github.io/JoltPhysics/

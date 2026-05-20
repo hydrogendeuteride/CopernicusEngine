@@ -15,7 +15,7 @@ Backend-agnostic physics simulation framework with collision detection, raycasti
 
 ### Key Types
 
-#### `BodyId` — Strongly-Typed Body Identifier
+#### `BodyId` - Strongly-Typed Body Identifier
 
 ```cpp
 struct BodyId {
@@ -26,7 +26,7 @@ struct BodyId {
 };
 ```
 
-#### `BodySettings` — Body Creation Parameters
+#### `BodySettings` - Body Creation Parameters
 
 ```cpp
 struct BodySettings {
@@ -63,7 +63,7 @@ struct BodySettings {
 };
 ```
 
-#### `CollisionShape` — Unified Shape Representation
+#### `CollisionShape` - Unified Shape Representation
 
 ```cpp
 struct CollisionShape {
@@ -91,7 +91,7 @@ struct CollisionShape {
 };
 ```
 
-#### `CompoundShape` — Multi-Primitive Collider
+#### `CompoundShape` - Multi-Primitive Collider
 
 ```cpp
 struct CompoundShape {
@@ -110,7 +110,7 @@ struct CompoundShape {
 
 ### API Surface
 
-#### PhysicsWorld — Core Interface
+#### PhysicsWorld - Core Interface
 
 **Simulation:**
 
@@ -207,7 +207,7 @@ struct CompoundShape {
 | `DebugStats debug_stats() const` | Get performance counters |
 | `void for_each_debug_body(const DebugBodyFn&) const` | Iterate bodies for debug rendering |
 
-### Quick Start — Creating Bodies
+### Quick Start - Creating Bodies
 
 **Using BodySettings struct:**
 
@@ -264,7 +264,7 @@ BodyId player = Physics::BodyBuilder(physics)
 } // Automatically destroyed here
 ```
 
-### Quick Start — Compound Shapes
+### Quick Start - Compound Shapes
 
 ```cpp
 // Character with capsule body + box feet collider
@@ -280,7 +280,7 @@ BodyId characterBody = Physics::BodyBuilder(physics)
     .build();
 ```
 
-### Quick Start — Raycasting
+### Quick Start - Raycasting
 
 **Simple raycast:**
 
@@ -310,7 +310,7 @@ options.backface_culling = true;
 RayHit hit = physics->raycast(origin, direction, options);
 ```
 
-### Quick Start — Contact Events
+### Quick Start - Contact Events
 
 ```cpp
 // Register callbacks for a body
@@ -332,7 +332,7 @@ callbacks.on_trigger = [](const TriggerEvent& e) {
 physics->set_body_callbacks(sensor_body, callbacks);
 ```
 
-### Quick Start — Collision Layers
+### Quick Start - Collision Layers
 
 ```cpp
 // Setup layer collision matrix
@@ -356,7 +356,7 @@ BodyId projectile = Physics::BodyBuilder(physics)
     .build();
 ```
 
-### Quick Start — Joints
+### Quick Start - Joints
 
 **Fixed joint (attach objects rigidly):**
 
@@ -432,7 +432,7 @@ if (glm::length(camera_pos) > 1000.0) {
 physics_context->maybe_rebase_origin_to_body(player_body.value, 1000.0, 100.0);
 ```
 
-### PhysicsContext — Floating Origin Management
+### PhysicsContext - Floating Origin Management
 
 ```cpp
 // Track physics coordinate system origin
@@ -546,6 +546,6 @@ physics->for_each_debug_body([&](const PhysicsWorld::DebugBodyView& body) {
 
 ### See Also
 
-- [JoltBackend.md](JoltBackend.md) — Jolt Physics backend implementation details
-- [ColliderSystem.md](ColliderSystem.md) — glTF-based collider authoring workflow
-- [FloatingOrigin.md](FloatingOrigin.md) — Large-world coordinate system rebasing
+- [JoltBackend.md](JoltBackend.md) - Jolt Physics backend implementation details
+- [ColliderSystem.md](ColliderSystem.md) - glTF-based collider authoring workflow
+- [FloatingOrigin.md](FloatingOrigin.md) - Large-world coordinate system rebasing

@@ -8,7 +8,7 @@ namespace Game
 // ============================================================================
 // SettingsState: Graphics, audio, controls settings
 //
-// is_overlay() = true — renders on top of whatever called it
+// is_overlay() = true - renders on top of whatever called it
 // (title screen or pause menu)
 // ============================================================================
 

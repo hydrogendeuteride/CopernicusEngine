@@ -6,22 +6,22 @@
 
 Provides a self-contained way to register compute shaders, bind resources
 (storage buffers, storage images, sampled images, uniform buffers), and dispatch
-work — either on an existing command buffer or via immediate submit. Also supports
+work - either on an existing command buffer or via immediate submit. Also supports
 long-lived **compute instances** with persistent bindings and owned resources.
 
 ## Directory Layout
 
 ```
 compute/
-├── vk_compute.h    — all types and ComputeManager / ComputePipeline classes
-└── vk_compute.cpp  — implementation
+├── vk_compute.h    - all types and ComputeManager / ComputePipeline classes
+└── vk_compute.cpp  - implementation
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `ComputeManager` | Central entry point — pipeline registry, instance management, dispatch |
+| `ComputeManager` | Central entry point - pipeline registry, instance management, dispatch |
 | `ComputePipeline` | RAII wrapper around `VkPipeline` + layout + descriptor layout |
 | `ComputeBinding` | Union-based descriptor binding (buffer / sampled image / storage image) |
 | `ComputePipelineCreateInfo` | Shader path, descriptor types, push constants, specialization |
@@ -88,4 +88,4 @@ own internal pipelines on first use).
 
 ## Related Docs
 
-- [docs/Compute.md](../../docs/Compute.md) — detailed compute system documentation
+- [docs/Compute.md](../../docs/Compute.md) - detailed compute system documentation

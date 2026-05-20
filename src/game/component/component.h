@@ -71,7 +71,7 @@ namespace Game
     };
 
     // ============================================================================
-    // Component<T>: CRTP base — provides automatic type identity
+    // Component<T>: CRTP base - provides automatic type identity
     //
     // Usage:
     //   class ShipController : public Component<ShipController> { ... };

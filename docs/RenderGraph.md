@@ -21,9 +21,9 @@ Lightweight render graph that builds a per‑frame DAG from pass declarations, c
 ### Core API
 
 **Lifecycle:**
-- `RenderGraph::init(ctx)` — Initialize with engine context. See `src/render/graph/graph.cpp:28`.
-- `RenderGraph::clear()` — Clear all passes and reset resources. See `src/render/graph/graph.cpp:34`.
-- `RenderGraph::shutdown()` — Destroy GPU resources (query pools) before device shutdown. See `src/render/graph/graph.cpp:40`.
+- `RenderGraph::init(ctx)` - Initialize with engine context. See `src/render/graph/graph.cpp:28`.
+- `RenderGraph::clear()` - Clear all passes and reset resources. See `src/render/graph/graph.cpp:34`.
+- `RenderGraph::shutdown()` - Destroy GPU resources (query pools) before device shutdown. See `src/render/graph/graph.cpp:40`.
 
 **Pass Registration:**
 - `RenderGraph::add_pass(name, RGPassType type, BuildCallback build, RecordCallback record)`
@@ -33,26 +33,26 @@ Lightweight render graph that builds a per‑frame DAG from pass declarations, c
 - Legacy form: `add_pass(name, type, record)` for passes with no resource declarations. See `src/render/graph/graph.cpp:117`.
 
 **Resource Creation:**
-- `import_image(desc)` / `import_buffer(desc)` — Import externally owned resources (deduplicated by VkImage/VkBuffer handle).
-- `create_image(desc)` / `create_buffer(desc)` — Create transient resources (destroyed at end of frame via deletion queue).
-- `create_depth_image(name, extent, format=D32_SFLOAT)` — Convenience helper for depth-only images with depth attachment + sampled usage. See `src/render/graph/graph.cpp:67`.
+- `import_image(desc)` / `import_buffer(desc)` - Import externally owned resources (deduplicated by VkImage/VkBuffer handle).
+- `create_image(desc)` / `create_buffer(desc)` - Create transient resources (destroyed at end of frame via deletion queue).
+- `create_depth_image(name, extent, format=D32_SFLOAT)` - Convenience helper for depth-only images with depth attachment + sampled usage. See `src/render/graph/graph.cpp:67`.
 
 **Compilation and Execution:**
-- `RenderGraph::compile()` — Build topological ordering (Kahn's algorithm) and per‑pass `VkImageMemoryBarrier2` / `VkBufferMemoryBarrier2` lists. Returns false on error. See `src/render/graph/graph.cpp:123`.
-- `RenderGraph::execute(cmd, frame_slot)` — Creates/recycles a frame-slot timestamp query pool, emits barriers via `vkCmdPipelineBarrier2`, begins dynamic rendering if attachments exist, invokes record callbacks, ends rendering, and writes GPU timestamps. See `src/render/graph/graph.cpp:946`.
-- `RenderGraph::resolve_timings(frame_slot)` — Fetch GPU timestamp results for the waited frame slot and convert to milliseconds. See `src/render/graph/graph.cpp:1466`.
+- `RenderGraph::compile()` - Build topological ordering (Kahn's algorithm) and per‑pass `VkImageMemoryBarrier2` / `VkBufferMemoryBarrier2` lists. Returns false on error. See `src/render/graph/graph.cpp:123`.
+- `RenderGraph::execute(cmd, frame_slot)` - Creates/recycles a frame-slot timestamp query pool, emits barriers via `vkCmdPipelineBarrier2`, begins dynamic rendering if attachments exist, invokes record callbacks, ends rendering, and writes GPU timestamps. See `src/render/graph/graph.cpp:946`.
+- `RenderGraph::resolve_timings(frame_slot)` - Fetch GPU timestamp results for the waited frame slot and convert to milliseconds. See `src/render/graph/graph.cpp:1466`.
 
 **Import Helpers:**
-- `import_draw_image()`, `import_depth_image()`, `import_gbuffer_position()`, `import_gbuffer_normal()`, `import_gbuffer_albedo()`, `import_gbuffer_extra()`, `import_id_buffer()`, `import_swapchain_image(index)` — Convenience wrappers for engine-owned images. See `src/render/graph/graph.cpp:1147–1312`.
+- `import_draw_image()`, `import_depth_image()`, `import_gbuffer_position()`, `import_gbuffer_normal()`, `import_gbuffer_albedo()`, `import_gbuffer_extra()`, `import_id_buffer()`, `import_swapchain_image(index)` - Convenience wrappers for engine-owned images. See `src/render/graph/graph.cpp:1147–1312`.
 
 **Present Chain:**
-- `add_present_chain(draw, swapchain, appendExtra)` — Inserts `PresentLetterbox` pass (blit draw→swapchain with letterboxing) and `PreparePresent` pass (layout transition to `PRESENT_SRC_KHR`). Optional `appendExtra` callback injects passes (e.g., ImGui) in between. See `src/render/graph/graph.cpp:1043`.
+- `add_present_chain(draw, swapchain, appendExtra)` - Inserts `PresentLetterbox` pass (blit draw→swapchain with letterboxing) and `PreparePresent` pass (layout transition to `PRESENT_SRC_KHR`). Optional `appendExtra` callback injects passes (e.g., ImGui) in between. See `src/render/graph/graph.cpp:1043`.
 
 **Debug and Profiling:**
-- `pass_count()`, `pass_name(i)`, `pass_enabled(i)`, `set_pass_enabled(i, enabled)` — Runtime pass enable/disable. See `src/render/graph/graph.h:105–108`.
-- `debug_get_passes(out)` — Retrieve pass metadata including GPU/CPU timings, resource access counts, attachment info. See `src/render/graph/graph.cpp:1163`.
-- `debug_get_images(out)` — Retrieve image metadata (imported/transient, format, extent, usage, lifetime). See `src/render/graph/graph.cpp:1186`.
-- `debug_get_buffers(out)` — Retrieve buffer metadata. See `src/render/graph/graph.cpp:1207`.
+- `pass_count()`, `pass_name(i)`, `pass_enabled(i)`, `set_pass_enabled(i, enabled)` - Runtime pass enable/disable. See `src/render/graph/graph.h:105–108`.
+- `debug_get_passes(out)` - Retrieve pass metadata including GPU/CPU timings, resource access counts, attachment info. See `src/render/graph/graph.cpp:1163`.
+- `debug_get_images(out)` - Retrieve image metadata (imported/transient, format, extent, usage, lifetime). See `src/render/graph/graph.cpp:1186`.
+- `debug_get_buffers(out)` - Retrieve buffer metadata. See `src/render/graph/graph.cpp:1207`.
 
 ### Declaring a Pass
 
@@ -91,14 +91,14 @@ void MyPass::register_graph(RenderGraph* graph,
 Passed to the `BuildCallback` to declare resource accesses and attachments. See `src/render/graph/builder.h:40`.
 
 **Image Access:**
-- `read(RGImageHandle, RGImageUsage)` — Declare sampled/read usage (e.g., `SampledFragment`, `TransferSrc`). See `src/render/graph/builder.cpp:20`.
-- `write(RGImageHandle, RGImageUsage)` — Declare write usage (e.g., `ComputeWrite`, `TransferDst`). See `src/render/graph/builder.cpp:25`.
-- `write_color(RGImageHandle, bool clearOnLoad=false, VkClearValue clear={})` — Declare color attachment with optional clear. Sets usage to `ColorAttachment` and `store=true` by default. See `src/render/graph/builder.cpp:30`.
-- `write_depth(RGImageHandle, bool clearOnLoad=false, VkClearValue clear={})` — Declare depth attachment with optional clear. See `src/render/graph/builder.cpp:40`.
+- `read(RGImageHandle, RGImageUsage)` - Declare sampled/read usage (e.g., `SampledFragment`, `TransferSrc`). See `src/render/graph/builder.cpp:20`.
+- `write(RGImageHandle, RGImageUsage)` - Declare write usage (e.g., `ComputeWrite`, `TransferDst`). See `src/render/graph/builder.cpp:25`.
+- `write_color(RGImageHandle, bool clearOnLoad=false, VkClearValue clear={})` - Declare color attachment with optional clear. Sets usage to `ColorAttachment` and `store=true` by default. See `src/render/graph/builder.cpp:30`.
+- `write_depth(RGImageHandle, bool clearOnLoad=false, VkClearValue clear={})` - Declare depth attachment with optional clear. See `src/render/graph/builder.cpp:40`.
 
 **Buffer Access:**
-- `read_buffer(RGBufferHandle, RGBufferUsage)` — Declare buffer read (e.g., `VertexRead`, `IndexRead`, `UniformRead`, `StorageRead`). See `src/render/graph/builder.cpp:50`.
-- `write_buffer(RGBufferHandle, RGBufferUsage)` — Declare buffer write (e.g., `StorageReadWrite`, `TransferDst`). See `src/render/graph/builder.cpp:55`.
+- `read_buffer(RGBufferHandle, RGBufferUsage)` - Declare buffer read (e.g., `VertexRead`, `IndexRead`, `UniformRead`, `StorageRead`). See `src/render/graph/builder.cpp:50`.
+- `write_buffer(RGBufferHandle, RGBufferUsage)` - Declare buffer write (e.g., `StorageReadWrite`, `TransferDst`). See `src/render/graph/builder.cpp:55`.
 - Convenience overloads: `read_buffer(VkBuffer, RGBufferUsage, size, name)` and `write_buffer(VkBuffer, ...)` automatically import and deduplicate by raw `VkBuffer` handle. See `src/render/graph/builder.cpp:60,70`.
 
 **Resource Resolution (`RGPassResources`):**

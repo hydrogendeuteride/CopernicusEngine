@@ -1,6 +1,6 @@
 # Render
 
-> Rendering layer — DAG-based render graph, deferred PBR pipeline passes, material system, pipeline builder, and procedural primitives.
+> Rendering layer - DAG-based render graph, deferred PBR pipeline passes, material system, pipeline builder, and procedural primitives.
 
 ## Purpose
 
@@ -15,14 +15,14 @@ and procedural mesh generation.
 
 ```
 render/
-├── renderpass.h / .cpp   — IRenderPass interface + RenderPassManager (pass ownership and lifecycle)
-├── materials.h / .cpp    — GLTFMetallic_Roughness: PBR material pipelines, descriptor writes
-├── pipelines.h / .cpp    — PipelineBuilder: Vulkan graphics pipeline construction helper
-├── primitives.h          — primitives namespace: CPU-side mesh generators (cube, sphere, plane, capsule)
+├── renderpass.h / .cpp   - IRenderPass interface + RenderPassManager (pass ownership and lifecycle)
+├── materials.h / .cpp    - GLTFMetallic_Roughness: PBR material pipelines, descriptor writes
+├── pipelines.h / .cpp    - PipelineBuilder: Vulkan graphics pipeline construction helper
+├── primitives.h          - primitives namespace: CPU-side mesh generators (cube, sphere, plane, capsule)
 │
-├── graph/                — RenderGraph: DAG pass scheduling, automatic barriers, transient resources
+├── graph/                - RenderGraph: DAG pass scheduling, automatic barriers, transient resources
 │   └── README.md
-└── passes/               — individual render passes (shadow, geometry, lighting, post-FX, overlays)
+└── passes/               - individual render passes (shadow, geometry, lighting, post-FX, overlays)
     └── README.md
 ```
 
@@ -41,9 +41,9 @@ render/
 
 | File | Role |
 |------|------|
-| `renderpass.h/.cpp` | `IRenderPass` — pure virtual interface all passes implement. `RenderPassManager` — constructs, owns, and manages lifecycle of all pass instances + ImGui pass |
-| `materials.h/.cpp` | `GLTFMetallic_Roughness` — builds opaque, transparent, mesh-VFX, and G-Buffer material pipelines; writes descriptor sets binding color/metallic-roughness/normal/occlusion/emissive textures + material constants buffer |
-| `pipelines.h/.cpp` | `PipelineBuilder` — wraps `VkGraphicsPipelineCreateInfo` construction with fluent API. `vkutil::load_shader_module` loads SPIR-V binaries |
+| `renderpass.h/.cpp` | `IRenderPass` - pure virtual interface all passes implement. `RenderPassManager` - constructs, owns, and manages lifecycle of all pass instances + ImGui pass |
+| `materials.h/.cpp` | `GLTFMetallic_Roughness` - builds opaque, transparent, mesh-VFX, and G-Buffer material pipelines; writes descriptor sets binding color/metallic-roughness/normal/occlusion/emissive textures + material constants buffer |
+| `pipelines.h/.cpp` | `PipelineBuilder` - wraps `VkGraphicsPipelineCreateInfo` construction with fluent API. `vkutil::load_shader_module` loads SPIR-V binaries |
 | `primitives.h` | Header-only procedural mesh generators in `primitives` namespace: unit cube, sphere (configurable sectors/stacks), XZ plane, Y-axis capsule |
 
 ## Rendering Pipeline
@@ -52,28 +52,28 @@ The full deferred PBR pipeline, executed via RenderGraph each frame:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Shadow (CSM)     — depth-only, N cascades               │
+│ Shadow (CSM)     - depth-only, N cascades               │
 ├─────────────────────────────────────────────────────────┤
-│ Background       — sky gradient / IBL cubemap → HDR     │
-│ SunDisk          — analytic sun overlay → HDR           │
+│ Background       - sky gradient / IBL cubemap → HDR     │
+│ SunDisk          - analytic sun overlay → HDR           │
 ├─────────────────────────────────────────────────────────┤
-│ Geometry         — G-Buffer fill (5 MRT + depth)        │
-│ Lighting         — fullscreen deferred PBR + IBL + CSM  │
+│ Geometry         - G-Buffer fill (5 MRT + depth)        │
+│ Lighting         - fullscreen deferred PBR + IBL + CSM  │
 ├─────────────────────────────────────────────────────────┤
-│ SSR              — screen-space reflections (HDR)       │
-│ Volumetrics      — voxel cloud/smoke raymarch (HDR)     │
-│ Atmosphere       — Rayleigh/Mie scattering (HDR)        │
-│ Particles        — GPU particle render (HDR)            │
-│ MeshVFX          — unlit mesh VFX (HDR, alpha/fresnel)  │
-│ Transparent      — forward alpha-blended objects (HDR)  │
+│ SSR              - screen-space reflections (HDR)       │
+│ Volumetrics      - voxel cloud/smoke raymarch (HDR)     │
+│ Atmosphere       - Rayleigh/Mie scattering (HDR)        │
+│ Particles        - GPU particle render (HDR)            │
+│ MeshVFX          - unlit mesh VFX (HDR, alpha/fresnel)  │
+│ Transparent      - forward alpha-blended objects (HDR)  │
 ├─────────────────────────────────────────────────────────┤
-│ AutoExposure     — compute luminance measurement        │
-│ Tonemap + Bloom  — HDR → LDR (ACES/Reinhard)           │
-│ OrbitPlot        — dedicated orbit line overlays        │
-│ DebugDraw        — wireframe overlays                   │
-│ FXAA             — post-process AA (LDR)                │
-│ ImGui            — debug UI on swapchain                │
-│ PresentChain     — letterbox blit → PRESENT_SRC         │
+│ AutoExposure     - compute luminance measurement        │
+│ Tonemap + Bloom  - HDR → LDR (ACES/Reinhard)           │
+│ OrbitPlot        - dedicated orbit line overlays        │
+│ DebugDraw        - wireframe overlays                   │
+│ FXAA             - post-process AA (LDR)                │
+│ ImGui            - debug UI on swapchain                │
+│ PresentChain     - letterbox blit → PRESENT_SRC         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -134,11 +134,11 @@ VulkanEngine::init()
 
 `render/` sits between `core/` (engine foundation) and `src/scene/` (scene graph):
 
-- **Depends on `core/`** — `DeviceManager`, `ResourceManager`, `PipelineManager`,
+- **Depends on `core/`** - `DeviceManager`, `ResourceManager`, `PipelineManager`,
   `DescriptorManager`, `SamplerManager`, `FrameResources`, `EngineContext`
-- **Consumed by `VulkanEngine`** — engine orchestrates per-frame graph construction
+- **Consumed by `VulkanEngine`** - engine orchestrates per-frame graph construction
   and execution in `draw()`
-- **Reads from `scene/`** — `DrawContext` provides render object lists for geometry,
+- **Reads from `scene/`** - `DrawContext` provides render object lists for geometry,
   shadow, and transparent passes
 
 `GLTFMetallic_Roughness` material pipelines are built once at init and shared
@@ -146,9 +146,9 @@ by both `GeometryPass` (G-Buffer variant) and `TransparentPass` (forward variant
 
 ## Related Docs
 
-- [graph/README.md](graph/README.md) — RenderGraph internals
-- [passes/README.md](passes/README.md) — individual pass documentation
-- [docs/RenderGraph.md](../../docs/RenderGraph.md) — detailed render graph system documentation
-- [docs/Shadows.md](../../docs/Shadows.md) — cascaded shadow maps
-- [docs/Particles.md](../../docs/Particles.md) — GPU particle system
-- [docs/SSR.md](../../docs/SSR.md) — screen-space reflections
+- [graph/README.md](graph/README.md) - RenderGraph internals
+- [passes/README.md](passes/README.md) - individual pass documentation
+- [docs/RenderGraph.md](../../docs/RenderGraph.md) - detailed render graph system documentation
+- [docs/Shadows.md](../../docs/Shadows.md) - cascaded shadow maps
+- [docs/Particles.md](../../docs/Particles.md) - GPU particle system
+- [docs/SSR.md](../../docs/SSR.md) - screen-space reflections

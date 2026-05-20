@@ -6,7 +6,7 @@ namespace Game
 {
 
 // ============================================================================
-// TitleScreenState: Main menu — New Game, Load, Settings, Quit
+// TitleScreenState: Main menu - New Game, Load, Settings, Quit
 // ============================================================================
 
 class TitleScreenState : public IGameState

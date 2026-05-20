@@ -13,15 +13,15 @@ lifecycle (quit, minimize, resize) and supports cursor mode switching.
 
 ```
 input/
-├── input_system.h    — all enums, structs, InputState, and InputSystem classes
-└── input_system.cpp  — SDL2 event polling and state management implementation
+├── input_system.h    - all enums, structs, InputState, and InputSystem classes
+└── input_system.cpp  - SDL2 event polling and state management implementation
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `InputSystem` | Central entry point — event pumping, window state, cursor mode, native event forwarding |
+| `InputSystem` | Central entry point - event pumping, window state, cursor mode, native event forwarding |
 | `InputState` | Per-frame snapshot of keyboard/mouse state (down/pressed/released queries) |
 | `InputEvent` | Timestamped event record with type, key/button, position, delta, and modifiers |
 | `Key` | Cross-platform key codes based on USB HID usage IDs (A–Z, 0–9, modifiers, etc.) |
@@ -104,4 +104,4 @@ forwarded to the ImGui backend via `for_each_native_event()`.
 
 ## Related Docs
 
-- [docs/InputSystem.md](../../../docs/InputSystem.md) — detailed input system documentation
+- [docs/InputSystem.md](../../../docs/InputSystem.md) - detailed input system documentation

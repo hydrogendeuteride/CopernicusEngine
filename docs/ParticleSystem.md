@@ -6,13 +6,13 @@ The particle system provides GPU-accelerated particle simulation and rendering w
 
 The system is implemented across multiple components:
 
-- **ParticlePass** (`src/render/passes/particles.h/.cpp`) — Render pass managing particle pools, compute pipelines, and graphics pipelines
-- **GameAPI** (`src/core/game_api.h`) — High-level API for creating and controlling particle systems
-- **Shaders** — Compute and graphics shaders for simulation and rendering
-  - `shaders/particles_update.comp` — Per-particle physics simulation
-  - `shaders/particles_sort_blocks.comp` — Block-level depth sorting for alpha blending
-  - `shaders/particles_build_indices.comp` — Build draw indices from sorted blocks
-  - `shaders/particles.vert/.frag` — Vertex/fragment shaders for rendering
+- **ParticlePass** (`src/render/passes/particles.h/.cpp`) - Render pass managing particle pools, compute pipelines, and graphics pipelines
+- **GameAPI** (`src/core/game_api.h`) - High-level API for creating and controlling particle systems
+- **Shaders** - Compute and graphics shaders for simulation and rendering
+  - `shaders/particles_update.comp` - Per-particle physics simulation
+  - `shaders/particles_sort_blocks.comp` - Block-level depth sorting for alpha blending
+  - `shaders/particles_build_indices.comp` - Build draw indices from sorted blocks
+  - `shaders/particles.vert/.frag` - Vertex/fragment shaders for rendering
 
 ## Key Features
 
@@ -360,7 +360,7 @@ void preload_particle_texture(const std::string& asset_path);
 
 ## See Also
 
-- `docs/RenderGraph.md` — Render graph integration details
-- `docs/RenderPasses.md` — Pass execution and pipeline management
-- `docs/GameAPI.md` — High-level game API
-- `docs/TextureLoading.md` — Asset loading and streaming
+- `docs/RenderGraph.md` - Render graph integration details
+- `docs/RenderPasses.md` - Pass execution and pipeline management
+- `docs/GameAPI.md` - High-level game API
+- `docs/TextureLoading.md` - Asset loading and streaming

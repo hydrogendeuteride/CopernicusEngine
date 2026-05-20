@@ -235,7 +235,7 @@ Binding 2: Height Map (terrain displacement; non-terrain path: metal-roughness)
 Binding 3: Detail Normal (object-space RGB; non-terrain path: normal map)
 Binding 4: Cavity / AO (R channel; reuses occlusion path)
 Binding 5: Emission Texture
-Binding 6: Specular Mask (R channel, linear — e.g., ocean specular)
+Binding 6: Specular Mask (R channel, linear - e.g., ocean specular)
 ```
 
 ### Height Displacement

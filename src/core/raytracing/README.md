@@ -14,15 +14,15 @@ hardware-accelerated shadow rays.
 
 ```
 raytracing/
-├── raytracing.h    — AccelStructureHandle, RayTracingManager class
-└── raytracing.cpp  — implementation
+├── raytracing.h    - AccelStructureHandle, RayTracingManager class
+└── raytracing.cpp  - implementation
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `RayTracingManager` | Central entry point — BLAS caching, async build queue, TLAS rebuild |
+| `RayTracingManager` | Central entry point - BLAS caching, async build queue, TLAS rebuild |
 | `AccelStructureHandle` | RAII-style handle holding `VkAccelerationStructureKHR`, backing buffer, and device address |
 | `PendingBlasBuild` | Internal queue entry for deferred BLAS builds |
 
@@ -45,7 +45,7 @@ pump_blas_builds(max_per_frame=1)          ← call once per frame
 buildTLASFromDrawContext(dc, frameDQ)      ← call once per frame
   ├─ collects instances from opaque surfaces with ready BLAS
   ├─ uploads instance buffer (CPU_TO_GPU)
-  ├─ ensure_tlas_storage() — recreates TLAS if size changed (old deferred via DQ)
+  ├─ ensure_tlas_storage() - recreates TLAS if size changed (old deferred via DQ)
   └─ immediate-submits TLAS build command
 
 flushPendingDeletes()                      ← call after GPU fence wait
@@ -67,7 +67,7 @@ AccelStructureHandle blas = ctx->raytracing->getOrBuildBLAS(meshAsset);
 ### Per-frame pump and TLAS rebuild
 
 ```cpp
-// After GPU fence wait — flush stale BLAS
+// After GPU fence wait - flush stale BLAS
 ctx->raytracing->flushPendingDeletes();
 
 // Build up to 1 BLAS per frame from the async queue
@@ -102,4 +102,4 @@ for `rayQueryEXT` in lighting shaders.
 
 ## Related Docs
 
-- [docs/RayTracing.md](../../../docs/RayTracing.md) — high-level ray tracing system documentation
+- [docs/RayTracing.md](../../../docs/RayTracing.md) - high-level ray tracing system documentation

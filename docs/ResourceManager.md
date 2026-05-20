@@ -28,7 +28,7 @@ Central allocator and uploader built on VMA. Provides creation helpers, an immed
     - Schedules deletion of staging buffers at end of frame.
 
 - Mesh upload convenience
-  - `GPUMeshBuffers uploadMesh(span<uint32_t> indices, span<Vertex> vertices)` — returns device buffers and device address.
+  - `GPUMeshBuffers uploadMesh(span<uint32_t> indices, span<Vertex> vertices)` - returns device buffers and device address.
 
 ### Per‑Frame Lifetime
 

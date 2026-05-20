@@ -38,8 +38,8 @@ GameAPI::TonemapOperator op = api.get_tonemap_operator();
 ```
 
 **Comparison:**
-- **Reinhard** — Simple, fast, good for most cases
-- **ACES** — Industry-standard filmic curve, better color preservation, slightly more expensive
+- **Reinhard** - Simple, fast, good for most cases
+- **ACES** - Industry-standard filmic curve, better color preservation, slightly more expensive
 
 ## Bloom
 
@@ -115,9 +115,9 @@ float thresholdMin = api.get_fxaa_edge_threshold_min();
 ```
 
 **Recommended Presets:**
-- **Quality** — `edge_threshold: 0.063`, `edge_threshold_min: 0.0312`
-- **Default** — `edge_threshold: 0.166`, `edge_threshold_min: 0.0833`
-- **Performance** — `edge_threshold: 0.333`, `edge_threshold_min: 0.1667`
+- **Quality** - `edge_threshold: 0.063`, `edge_threshold_min: 0.0312`
+- **Default** - `edge_threshold: 0.166`, `edge_threshold_min: 0.0833`
+- **Performance** - `edge_threshold: 0.333`, `edge_threshold_min: 0.1667`
 
 ## Screen-Space Reflections (SSR)
 
@@ -283,12 +283,12 @@ api.set_bloom_intensity(0.7f);
 
 ## Performance Considerations
 
-- **Tonemapping** — Negligible cost (single fullscreen pass)
-- **Bloom** — Moderate cost (downsampling + blur + composite)
+- **Tonemapping** - Negligible cost (single fullscreen pass)
+- **Bloom** - Moderate cost (downsampling + blur + composite)
   - Disable if targeting low-end GPUs
-- **FXAA** — Low cost (single fullscreen pass)
+- **FXAA** - Low cost (single fullscreen pass)
   - Cheaper than MSAA, good quality/performance tradeoff
-- **SSR** — Moderate to high cost
+- **SSR** - Moderate to high cost
   - Screen-space ray marching per pixel
   - RT modes require RT hardware
 
@@ -299,6 +299,6 @@ api.set_bloom_intensity(0.7f);
 
 ## See Also
 
-- [Render Passes](../RenderPasses.md) — Low-level post-processing passes
-- [Shadows](Shadows.md) — Shadow quality settings
-- [Render Graph](../RenderGraph.md) — Pass dependencies and resources
+- [Render Passes](../RenderPasses.md) - Low-level post-processing passes
+- [Shadows](Shadows.md) - Shadow quality settings
+- [Render Graph](../RenderGraph.md) - Pass dependencies and resources

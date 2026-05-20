@@ -22,24 +22,24 @@ auto chairPath = assets->modelPath("models/chair.glb");
 - Paths
   - `std::string shaderPath(std::string_view)`
   - `std::string assetPath(std::string_view)` / `modelPath(std::string_view)`
-  - `const AssetPaths& paths() const` / `void setPaths(const AssetPaths &p)` — get/set asset paths
+  - `const AssetPaths& paths() const` / `void setPaths(const AssetPaths &p)` - get/set asset paths
 - glTF
-  - `std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(std::string_view nameOrPath)` — cached by canonical absolute path
-  - `std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(std::string_view nameOrPath, const GLTFLoadCallbacks *cb)` — with custom callbacks
-  - `size_t prefetchGLTFTextures(std::string_view nameOrPath)` — schedule texture loads ahead of time
-  - `GLTFTexturePrefetchResult prefetchGLTFTexturesWithHandles(std::string_view nameOrPath)` — returns handles for tracking
+  - `std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(std::string_view nameOrPath)` - cached by canonical absolute path
+  - `std::optional<std::shared_ptr<LoadedGLTF>> loadGLTF(std::string_view nameOrPath, const GLTFLoadCallbacks *cb)` - with custom callbacks
+  - `size_t prefetchGLTFTextures(std::string_view nameOrPath)` - schedule texture loads ahead of time
+  - `GLTFTexturePrefetchResult prefetchGLTFTexturesWithHandles(std::string_view nameOrPath)` - returns handles for tracking
 - Meshes
   - `std::shared_ptr<MeshAsset> createMesh(const MeshCreateInfo &info)`
   - `std::shared_ptr<MeshAsset> createMesh(const std::string &name, std::span<Vertex> v, std::span<uint32_t> i, std::shared_ptr<GLTFMaterial> material = {}, bool build_bvh = true)`
   - `std::shared_ptr<MeshAsset> getMesh(const std::string &name) const`
-  - `std::shared_ptr<MeshAsset> getPrimitive(std::string_view name) const` — returns existing default primitives if created
+  - `std::shared_ptr<MeshAsset> getPrimitive(std::string_view name) const` - returns existing default primitives if created
   - `bool removeMesh(const std::string &name)`
-  - `bool removeMeshDeferred(const std::string &name, DeletionQueue &dq)` — deferred cleanup via deletion queue
-  - `void cleanup()` — releases meshes, material buffers, and any images owned by the manager
+  - `bool removeMeshDeferred(const std::string &name, DeletionQueue &dq)` - deferred cleanup via deletion queue
+  - `void cleanup()` - releases meshes, material buffers, and any images owned by the manager
 - Materials
-  - `std::shared_ptr<GLTFMaterial> createMaterialFromConstants(const std::string &name, const GLTFMetallic_Roughness::MaterialConstants &constants, MaterialPass pass = MaterialPass::MainColor)` — create PBR material from constants using engine default textures
+  - `std::shared_ptr<GLTFMaterial> createMaterialFromConstants(const std::string &name, const GLTFMetallic_Roughness::MaterialConstants &constants, MaterialPass pass = MaterialPass::MainColor)` - create PBR material from constants using engine default textures
 - Mesh VFX Materials
-  - `bool createOrUpdateMeshVfxMaterial(const std::string &name, const MeshVfxSettings &settings)` — create or hot-update a VFX material with noise scrolling, gradient, and fresnel parameters. Textures are streamed via `TextureCache` watch bindings (albedo → slot 1, noise1 → slot 2, noise2 → slot 3).
+  - `bool createOrUpdateMeshVfxMaterial(const std::string &name, const MeshVfxSettings &settings)` - create or hot-update a VFX material with noise scrolling, gradient, and fresnel parameters. Textures are streamed via `TextureCache` watch bindings (albedo → slot 1, noise1 → slot 2, noise2 → slot 3).
   - See [Mesh VFX documentation](gameapi/MeshVFX.md) for full parameter reference and usage examples.
 
 ### Mesh Creation Model
@@ -167,7 +167,7 @@ glm::mat4 tx = glm::scale(glm::mat4(1.f), glm::vec3(10.f, 1.f, 10.f));
 ctx->scene->addMeshInstance("ground.textured", texturedPlane, tx);
 ```
 
-Textured cube/sphere/plane/capsule via options is analogous — set `geometry.type` to `Cube`, `Sphere`, `Plane`, or `Capsule` and fill `material.options`.
+Textured cube/sphere/plane/capsule via options is analogous - set `geometry.type` to `Cube`, `Sphere`, `Plane`, or `Capsule` and fill `material.options`.
 
 Using custom material from constants:
 

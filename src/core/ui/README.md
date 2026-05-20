@@ -6,22 +6,22 @@
 
 Provides a self-contained wrapper around Dear ImGui that handles Vulkan backend
 initialization (dynamic rendering, descriptor pools), SDL2 input forwarding,
-DPI-aware font rebuilding, and a callback-based draw registration system — so the
+DPI-aware font rebuilding, and a callback-based draw registration system - so the
 rest of the engine can submit UI widgets without touching any ImGui internals.
 
 ## Directory Layout
 
 ```
 ui/
-├── imgui_system.h    — ImGuiSystem class declaration
-└── imgui_system.cpp  — implementation
+├── imgui_system.h    - ImGuiSystem class declaration
+└── imgui_system.cpp  - implementation
 ```
 
 ## Key Types
 
 | Type | Role |
 |------|------|
-| `ImGuiSystem` | Central entry point — init/cleanup, frame lifecycle, draw callbacks, DPI handling |
+| `ImGuiSystem` | Central entry point - init/cleanup, frame lifecycle, draw callbacks, DPI handling |
 | `ImGuiSystem::DrawCallback` | `std::function<void()>` alias for registered UI draw functions |
 
 ## Lifecycle
@@ -95,4 +95,4 @@ render graph after all other passes (tonemap, FXAA, transparent, debug draw).
 
 ## Related Docs
 
-- [docs/ImGuiSystem.md](../../../docs/ImGuiSystem.md) — detailed ImGui system documentation
+- [docs/ImGuiSystem.md](../../../docs/ImGuiSystem.md) - detailed ImGui system documentation

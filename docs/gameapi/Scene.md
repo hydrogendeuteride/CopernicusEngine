@@ -56,10 +56,10 @@ bool success = api.add_gltf_instance("spaceship", "vehicles/ship.gltf", td, true
 ```
 
 **Parameters:**
-- `name` — Unique identifier for this instance
-- `modelPath` — Relative to `assets/models/`
-- `transform` — Initial transform (single or double-precision)
-- `preloadTextures` — If `true`, immediately queue textures for loading
+- `name` - Unique identifier for this instance
+- `modelPath` - Relative to `assets/models/`
+- `transform` - Initial transform (single or double-precision)
+- `preloadTextures` - If `true`, immediately queue textures for loading
 
 ### Async Loading
 
@@ -290,6 +290,6 @@ while (running) {
 
 ## See Also
 
-- [Animation](Animation.md) — Control glTF animations
-- [Picking](Picking.md) — Select and interact with instances
-- [Scene Manager](../Scene.md) — Low-level scene graph details
+- [Animation](Animation.md) - Control glTF animations
+- [Picking](Picking.md) - Select and interact with instances
+- [Scene Manager](../Scene.md) - Low-level scene graph details

@@ -12,7 +12,7 @@ Audio playback system built on miniaudio with 3D spatialization, preloading, bus
 
 ### Key Types
 
-#### `SoundHandle` — Opaque Sound Instance Identifier
+#### `SoundHandle` - Opaque Sound Instance Identifier
 
 ```c++
 using SoundHandle = uint64_t;
@@ -21,7 +21,7 @@ static constexpr SoundHandle INVALID_SOUND_HANDLE = 0;
 
 Monotonically increasing handle returned by all `play_*()` methods. Used to control runtime properties (volume, pitch, position, pause, stop).
 
-#### `Bus` — Mix Bus Categories
+#### `Bus` - Mix Bus Categories
 
 ```c++
 enum class Bus : uint8_t {
@@ -40,19 +40,19 @@ Each bus has an independent volume multiplier. Sounds are routed to exactly one 
 effective_volume = base_volume * bus_volume * master_volume * (master_muted ? 0 : 1)
 ```
 
-#### `ActiveSound` — Runtime Sound State
+#### `ActiveSound` - Runtime Sound State
 
 Internal struct holding:
-- `SoundHandle handle` — unique identifier
-- `ma_sound sound` — underlying miniaudio sound object
-- `Bus bus` — assigned mix bus
-- `float base_volume` — per-sound volume before bus/master scaling
-- `float pitch` — playback rate multiplier
-- `bool looping` — loop flag
-- `bool paused` — pause state
-- `bool release_when_stopped` — auto-cleanup flag (used for fade-out)
+- `SoundHandle handle` - unique identifier
+- `ma_sound sound` - underlying miniaudio sound object
+- `Bus bus` - assigned mix bus
+- `float base_volume` - per-sound volume before bus/master scaling
+- `float pitch` - playback rate multiplier
+- `bool looping` - loop flag
+- `bool paused` - pause state
+- `bool release_when_stopped` - auto-cleanup flag (used for fade-out)
 
-#### `CachedSound` — Preloaded Sound
+#### `CachedSound` - Preloaded Sound
 
 Holds a decoded `ma_sound` in memory. When a preloaded sound is played, the system uses `ma_sound_init_copy()` to create a zero-copy instance that shares the decoded data, avoiding disk I/O and decoding overhead.
 
@@ -147,15 +147,15 @@ Automatically removes:
 
 ```
 MiniAudioSystem
-├── ma_resource_manager    — async file decoding, custom decoder backends
-├── ma_engine              — audio engine with one 3D listener
-├── _active_sounds         — vector of unique_ptr<ActiveSound>
-├── _active_by_handle      — unordered_map for O(1) handle lookup
-├── _preloaded_sounds      — unordered_map of decoded CachedSound
-├── _bus_volumes[5]        — per-bus volume multipliers
-├── _master_volume         — global volume multiplier
-├── _master_muted          — global mute flag
-└── _music_handle          — currently playing BGM handle (at most one)
+├── ma_resource_manager    - async file decoding, custom decoder backends
+├── ma_engine              - audio engine with one 3D listener
+├── _active_sounds         - vector of unique_ptr<ActiveSound>
+├── _active_by_handle      - unordered_map for O(1) handle lookup
+├── _preloaded_sounds      - unordered_map of decoded CachedSound
+├── _bus_volumes[5]        - per-bus volume multipliers
+├── _master_volume         - global volume multiplier
+├── _master_muted          - global mute flag
+└── _music_handle          - currently playing BGM handle (at most one)
 ```
 
 #### Custom Decoders
@@ -353,7 +353,7 @@ class Level {
         audio->preload("assets/sounds/laser_shot.ogg");
         audio->preload("assets/sounds/enemy_death.wav");
 
-        // Play BGM (not preloaded — streamed from disk)
+        // Play BGM (not preloaded - streamed from disk)
         audio->play_music("assets/music/level1_theme.ogg", 0.7f, true, 1.5f);
     }
 
@@ -418,5 +418,5 @@ Recommended formats:
 
 ### Related Docs
 
-- [src/audio/README.md](../src/audio/README.md) — quick reference and usage examples
-- [src/runtime/game_runtime.h](../src/runtime/game_runtime.h) — `IAudioSystem` interface definition
+- [src/audio/README.md](../src/audio/README.md) - quick reference and usage examples
+- [src/runtime/game_runtime.h](../src/runtime/game_runtime.h) - `IAudioSystem` interface definition
