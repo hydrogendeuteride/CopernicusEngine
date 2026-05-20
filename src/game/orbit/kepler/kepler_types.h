@@ -81,7 +81,7 @@ namespace Game
     };
 
     // Base arc build result for one subject.
-    struct KeplerArcBuildResult
+    struct KeplerBaseArcBuildResult
     {
         bool valid{false};
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};

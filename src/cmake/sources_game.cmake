@@ -63,6 +63,8 @@ list(APPEND VULKAN_ENGINE_SOURCES
   game/orbit/kepler/kepler_patched_conics_builder.cpp
   game/orbit/kepler/kepler_arc_line_builder.h
   game/orbit/kepler/kepler_arc_line_builder.cpp
+  game/orbit/kepler/kepler_draw_lod_line_builder.h
+  game/orbit/kepler/kepler_draw_lod_line_builder.cpp
   game/orbit/kepler/kepler_arc_info.h
   game/orbit/kepler/kepler_arc_info.cpp
 

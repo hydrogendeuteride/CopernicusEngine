@@ -150,18 +150,42 @@ namespace Game
         }
     }
 
+    struct CachedBodyStateQuery
+    {
+        orbitsim::BodyId body_id{orbitsim::kInvalidBodyId};
+        bool ephemeris_index_valid{false};
+        std::size_t ephemeris_index{0u};
+    };
+
+    CachedBodyStateQuery make_cached_body_state_query(const KeplerArcLineBuildRequest &request,
+                                                      const orbitsim::BodyId body_id)
+    {
+        CachedBodyStateQuery query{};
+        query.body_id = body_id;
+        if (request.ephemeris && !request.ephemeris->empty())
+        {
+            query.ephemeris_index_valid =
+                    request.ephemeris->body_index_for_id(body_id, &query.ephemeris_index);
+        }
+        return query;
+    }
+
     bool state_at_body(const KeplerArcLineBuildRequest &request,
-                       const orbitsim::BodyId body_id,
+                       const CachedBodyStateQuery &query,
                        const double t_s,
                        orbitsim::State &out_state)
     {
+        if (query.body_id == orbitsim::kInvalidBodyId)
+        {
+            return false;
+        }
+
         if (request.ephemeris && !request.ephemeris->empty())
         {
-            std::size_t body_index = 0u;
-            if (request.ephemeris->body_index_for_id(body_id, &body_index))
+            if (query.ephemeris_index_valid)
             {
                 const orbitsim::State ephemeris_state =
-                        request.ephemeris->body_state_at(body_index, t_s);
+                        request.ephemeris->body_state_at(query.ephemeris_index, t_s);
                 if (kepler_finite_vec3(ephemeris_state.position_m))
                 {
                     out_state = ephemeris_state;
@@ -171,7 +195,7 @@ namespace Game
         }
 
         if (request.body_state_provider.state_at &&
-            request.body_state_provider.state_at(body_id, t_s, out_state))
+            request.body_state_provider.state_at(query.body_id, t_s, out_state))
         {
             return kepler_finite_vec3(out_state.position_m);
         }
@@ -183,6 +207,9 @@ namespace Game
     LineSampleEvaluation evaluate_line_sample(const KeplerArcLineBuildRequest &request,
                                               const KeplerOrbitArc &game_arc,
                                               const double t_s,
+                                              const CachedBodyStateQuery &primary_query,
+                                              const CachedBodyStateQuery &reference_query,
+                                              const bool reference_is_primary,
                                               AdaptiveArcLineBuild &build)
     {
         ++build.requested_samples;
@@ -202,22 +229,31 @@ namespace Game
         // Prefer ephemeris states, falling back to the caller provider.
         orbitsim::State primary_state = game_arc.primary_state_inertial_at_t0;
         orbitsim::State moving_primary_state{};
-        if (state_at_body(request, game_arc.arc.primary_body_id, sample.t_s, moving_primary_state))
+        bool have_moving_primary_state = false;
+        if (state_at_body(request, primary_query, sample.t_s, moving_primary_state))
         {
             primary_state = moving_primary_state;
+            have_moving_primary_state = true;
         }
 
         // Keep the line in the current world reference frame.
         orbitsim::State reference_state = request.world_frame.world_reference_state_inertial;
         if (request.world_frame.world_reference_body_id != orbitsim::kInvalidBodyId)
         {
-            orbitsim::State moving_reference_state{};
-            if (state_at_body(request,
-                              request.world_frame.world_reference_body_id,
-                              sample.t_s,
-                              moving_reference_state))
+            if (reference_is_primary && have_moving_primary_state)
             {
-                reference_state = moving_reference_state;
+                reference_state = primary_state;
+            }
+            else
+            {
+                orbitsim::State moving_reference_state{};
+                if (state_at_body(request,
+                                  reference_query,
+                                  sample.t_s,
+                                  moving_reference_state))
+                {
+                    reference_state = moving_reference_state;
+                }
             }
         }
 
@@ -249,6 +285,9 @@ namespace Game
                                                     const AdaptiveLineConfig &config,
                                                     const KeplerArcLineVertex &known_good,
                                                     const double failed_t_s,
+                                                    const CachedBodyStateQuery &primary_query,
+                                                    const CachedBodyStateQuery &reference_query,
+                                                    const bool reference_is_primary,
                                                     AdaptiveArcLineBuild &out,
                                                     std::vector<KeplerArcLineVertex> &samples)
     {
@@ -270,7 +309,13 @@ namespace Game
             }
 
             const LineSampleEvaluation mid_eval =
-                    evaluate_line_sample(request, game_arc, mid_t_s, out);
+                    evaluate_line_sample(request,
+                                         game_arc,
+                                         mid_t_s,
+                                         primary_query,
+                                         reference_query,
+                                         reference_is_primary,
+                                         out);
             if (mid_eval.ok)
             {
                 best_eval = mid_eval;
@@ -300,6 +345,9 @@ namespace Game
                                const std::size_t arc_index,
                                const std::size_t allowed_samples,
                                AdaptiveArcLineBuild &out,
+                               const CachedBodyStateQuery &primary_query,
+                               const CachedBodyStateQuery &reference_query,
+                               const bool reference_is_primary,
                                std::vector<KeplerArcLineVertex> &samples)
     {
         double end_t_s = game_arc.arc.t1_s;
@@ -313,7 +361,13 @@ namespace Game
             const double cross_dt_s =
                     std::min({kPreferredCrossDtS, config.max_interval_s, config.duration_s * 0.25});
             LineSampleEvaluation eval =
-                    evaluate_line_sample(request, game_arc, game_arc.arc.t0_s - cross_dt_s, out);
+                    evaluate_line_sample(request,
+                                         game_arc,
+                                         game_arc.arc.t0_s - cross_dt_s,
+                                         primary_query,
+                                         reference_query,
+                                         reference_is_primary,
+                                         out);
             if (!eval.ok)
             {
                 record_propagation_failure(out, eval.kepler_status);
@@ -323,7 +377,13 @@ namespace Game
             ++out.closed_seam_shifted_samples;
             samples.push_back(eval.vertex);
 
-            eval = evaluate_line_sample(request, game_arc, game_arc.arc.t0_s + cross_dt_s, out);
+            eval = evaluate_line_sample(request,
+                                        game_arc,
+                                        game_arc.arc.t0_s + cross_dt_s,
+                                        primary_query,
+                                        reference_query,
+                                        reference_is_primary,
+                                        out);
             if (!eval.ok)
             {
                 record_propagation_failure(out, eval.kepler_status);
@@ -339,7 +399,13 @@ namespace Game
         else
         {
             LineSampleEvaluation eval =
-                    evaluate_line_sample(request, game_arc, game_arc.arc.t0_s, out);
+                    evaluate_line_sample(request,
+                                         game_arc,
+                                         game_arc.arc.t0_s,
+                                         primary_query,
+                                         reference_query,
+                                         reference_is_primary,
+                                         out);
             if (!eval.ok)
             {
                 record_propagation_failure(out, eval.kepler_status);
@@ -359,7 +425,13 @@ namespace Game
         }
 
         const LineSampleEvaluation end_eval =
-                evaluate_line_sample(request, game_arc, end_t_s, out);
+                evaluate_line_sample(request,
+                                     game_arc,
+                                     end_t_s,
+                                     primary_query,
+                                     reference_query,
+                                     reference_is_primary,
+                                     out);
         if (!end_eval.ok)
         {
             record_propagation_failure(out, end_eval.kepler_status);
@@ -368,6 +440,9 @@ namespace Game
                                                               config,
                                                               samples.back(),
                                                               end_t_s,
+                                                              primary_query,
+                                                              reference_query,
+                                                              reference_is_primary,
                                                               out,
                                                               samples);
         }
@@ -389,6 +464,9 @@ namespace Game
                                  AdaptiveArcLineBuild &out,
                                  std::vector<KeplerArcLineVertex> &samples,
                                  AdaptiveIntervalQueue &intervals,
+                                 const CachedBodyStateQuery &primary_query,
+                                 const CachedBodyStateQuery &reference_query,
+                                 const bool reference_is_primary,
                                  const std::size_t a_index,
                                  const std::size_t b_index)
     {
@@ -415,7 +493,13 @@ namespace Game
 
         const double mid_t_s = 0.5 * (a.t_s + b.t_s);
         const LineSampleEvaluation mid_eval =
-                evaluate_line_sample(request, game_arc, mid_t_s, out);
+                evaluate_line_sample(request,
+                                     game_arc,
+                                     mid_t_s,
+                                     primary_query,
+                                     reference_query,
+                                     reference_is_primary,
+                                     out);
         if (!mid_eval.ok)
         {
             record_propagation_failure(out, mid_eval.kepler_status);
@@ -461,6 +545,9 @@ namespace Game
                                  const AdaptiveLineConfig &config,
                                  const std::size_t allowed_samples,
                                  AdaptiveArcLineBuild &out,
+                                 const CachedBodyStateQuery &primary_query,
+                                 const CachedBodyStateQuery &reference_query,
+                                 const bool reference_is_primary,
                                  std::vector<KeplerArcLineVertex> &samples)
     {
         AdaptiveIntervalQueue intervals{};
@@ -473,6 +560,9 @@ namespace Game
                                          out,
                                          samples,
                                          intervals,
+                                         primary_query,
+                                         reference_query,
+                                         reference_is_primary,
                                          i - 1u,
                                          i))
             {
@@ -500,6 +590,9 @@ namespace Game
                                          out,
                                          samples,
                                          intervals,
+                                         primary_query,
+                                         reference_query,
+                                         reference_is_primary,
                                          interval.a_index,
                                          mid_index) ||
                 !queue_adaptive_interval(request,
@@ -509,6 +602,9 @@ namespace Game
                                          out,
                                          samples,
                                          intervals,
+                                         primary_query,
+                                         reference_query,
+                                         reference_is_primary,
                                          mid_index,
                                          interval.b_index))
             {
@@ -600,18 +696,31 @@ namespace Game
                 .max_chord_error_m = max_chord_error_m,
                 .chord_error_enabled = max_chord_error_m > 0.0,
         };
+        const CachedBodyStateQuery primary_query =
+                make_cached_body_state_query(request, game_arc.arc.primary_body_id);
+        const CachedBodyStateQuery reference_query =
+                make_cached_body_state_query(request, request.world_frame.world_reference_body_id);
+        const bool reference_is_primary =
+                request.world_frame.world_reference_body_id == game_arc.arc.primary_body_id;
+
         if (!seed_arc_line_samples(request,
                                    game_arc,
                                    config,
                                    arc_index,
                                    allowed_samples,
                                    out,
+                                   primary_query,
+                                   reference_query,
+                                   reference_is_primary,
                                    samples) ||
             !refine_arc_line_samples(request,
                                      game_arc,
                                      config,
                                      allowed_samples,
                                      out,
+                                     primary_query,
+                                     reference_query,
+                                     reference_is_primary,
                                      samples))
         {
             return out;

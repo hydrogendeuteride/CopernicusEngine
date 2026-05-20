@@ -21,8 +21,8 @@ namespace Game
         }
     } // namespace
 
-    double select_kepler_arc_horizon_s(const orbitsim::KeplerArc &arc,
-                                       const KeplerPredictionOptions &options)
+    double select_kepler_base_arc_horizon_s(const orbitsim::KeplerArc &arc,
+                                            const KeplerPredictionOptions &options)
     {
         // Ellipse: period-based. Open arc: time-window based.
         if (!orbitsim::kepler_arc_valid(arc))
@@ -48,9 +48,9 @@ namespace Game
         return kepler_positive_or_default(options.open_orbit_window_s, 30.0 * 24.0 * 60.0 * 60.0);
     }
 
-    KeplerArcBuildResult build_kepler_arc(const KeplerArcBuildRequest &request)
+    KeplerBaseArcBuildResult build_kepler_base_arc(const KeplerBaseArcBuildRequest &request)
     {
-        KeplerArcBuildResult out{};
+        KeplerBaseArcBuildResult out{};
         if (!request.simulation)
         {
             out.status = KeplerOrbitStatus::InvalidSimulation;
@@ -99,10 +99,10 @@ namespace Game
         out.base_arc.arc.state0_relative = relative_state;
         out.base_arc.primary_state_inertial_at_t0 = out.primary.state_inertial;
 
-        // Line tessellation samples between t0 and t1.
+        // The base arc owns the prediction time span. Draw tessellation is built later.
         out.horizon_s = (request.requested_horizon_s > 0.0)
                                 ? request.requested_horizon_s
-                                : select_kepler_arc_horizon_s(out.base_arc.arc, request.options);
+                                : select_kepler_base_arc_horizon_s(out.base_arc.arc, request.options);
         out.base_arc.arc.t1_s = request.t0_s + out.horizon_s;
 
         if (!orbitsim::kepler_arc_valid(out.base_arc.arc))

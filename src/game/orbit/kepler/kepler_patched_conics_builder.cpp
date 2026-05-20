@@ -193,7 +193,7 @@ namespace Game
                                         const KeplerOrbitArc &arc,
                                         const KeplerPredictionOptions &options)
         {
-            const double preview_horizon_s = select_kepler_arc_horizon_s(arc.arc, options);
+            const double preview_horizon_s = select_kepler_base_arc_horizon_s(arc.arc, options);
             if (!std::isfinite(preview_horizon_s) || !(preview_horizon_s > 0.0))
             {
                 return arc.arc.t1_s;
@@ -246,6 +246,8 @@ namespace Game
             }
         }
         std::vector<uint8_t> consumed_maneuver_nodes(request.maneuver_nodes.size(), 0u);
+        out.arcs.reserve(max_patch_attempts);
+        out.events.reserve(max_patch_attempts + request.maneuver_nodes.size() + 1u);
 
         const orbitsim::CelestialEphemeris empty_ephemeris{};
         const orbitsim::CelestialEphemeris &ephemeris =

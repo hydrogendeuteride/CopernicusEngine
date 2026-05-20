@@ -112,7 +112,6 @@ TEST(KeplerPrediction, PatchedConicsSplitsPlannedPreviewBeyondBaseHorizon)
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     ASSERT_TRUE(result.planned_valid) << Game::kepler_orbit_status_name(result.planned_status);
-    ASSERT_TRUE(result.planned_lines.valid);
     ASSERT_EQ(result.base_arcs.size(), 1u);
     ASSERT_GE(result.planned_arcs.size(), 3u);
     EXPECT_TRUE(std::any_of(result.planned_arcs.begin(),

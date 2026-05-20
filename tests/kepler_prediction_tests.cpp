@@ -2,6 +2,7 @@
 
 #include "game/orbit/kepler/kepler_celestial_nbody.h"
 #include "game/orbit/kepler/kepler_arc_info.h"
+#include "game/orbit/kepler/kepler_draw_lod_line_builder.h"
 #include "game/orbit/kepler/kepler_patched_conics_builder.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_builder.h"
 #include "game/states/gameplay/prediction_kepler/kepler_prediction_system.h"
@@ -196,7 +197,7 @@ namespace
     }
 } // namespace
 
-TEST(KeplerPrediction, BuilderProducesBaseOrbitLinesAndMetrics)
+TEST(KeplerPrediction, BuilderProducesBaseOrbitArcsAndMetrics)
 {
     orbitsim::GameSimulation sim = make_single_body_sim();
     Game::KeplerPredictionBuildRequest request = make_request(sim);
@@ -204,18 +205,13 @@ TEST(KeplerPrediction, BuilderProducesBaseOrbitLinesAndMetrics)
     const Game::KeplerPredictionBuildOutput result = Game::build_kepler_prediction(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
-    ASSERT_TRUE(result.base_lines.valid);
     EXPECT_TRUE(result.planned_arcs.empty());
-    EXPECT_EQ(result.base_arcs.size(), 1u);
+    ASSERT_EQ(result.base_arcs.size(), 1u);
     EXPECT_EQ(result.orbit.primary.body_id, kEarthId);
     EXPECT_TRUE(result.metrics.valid);
     EXPECT_EQ(result.metrics.primary_body_id, kEarthId);
-    ASSERT_GE(result.base_lines.vertices.size(), 2u);
-    EXPECT_TRUE(near_abs(result.base_lines.vertices.front().t_s, 10.0, 1.0e-12));
-    EXPECT_TRUE(near_abs(result.base_lines.vertices.back().t_s, 130.0, 1.0e-12));
-    EXPECT_TRUE(near_abs(result.base_lines.vertices.front().position_world.x,
-                         7'010'000.0,
-                         1.0e-6));
+    EXPECT_TRUE(near_abs(result.base_arcs.front().arc.t0_s, 10.0, 1.0e-12));
+    EXPECT_TRUE(near_abs(result.base_arcs.front().arc.t1_s, 130.0, 1.0e-12));
 }
 
 TEST(KeplerPrediction, PatchedConicsSplitsBaseOrbitAtMoonSoi)
@@ -233,7 +229,6 @@ TEST(KeplerPrediction, PatchedConicsSplitsBaseOrbitAtMoonSoi)
     EXPECT_EQ(result.base_patch_events.front().reason, Game::KeplerPatchBoundaryReason::SoiTransition);
     EXPECT_EQ(result.base_patch_events.front().from_primary_body_id, kEarthId);
     EXPECT_EQ(result.base_patch_events.front().to_primary_body_id, kMoonId);
-    EXPECT_TRUE(result.base_lines.valid);
 }
 
 TEST(KeplerPrediction, PatchedConicsKeepsTransitionStateContinuous)
@@ -385,7 +380,7 @@ TEST(KeplerPrediction, PatchedConicsSearchBudgetReportsTruncation)
                             }));
 }
 
-TEST(KeplerPrediction, BuilderProducesPlannedLinesWhenNodesAreProvided)
+TEST(KeplerPrediction, BuilderProducesPlannedArcsWhenNodesAreProvided)
 {
     orbitsim::GameSimulation sim = make_single_body_sim();
     Game::KeplerPredictionBuildRequest request = make_request(sim);
@@ -408,12 +403,9 @@ TEST(KeplerPrediction, BuilderProducesPlannedLinesWhenNodesAreProvided)
     EXPECT_TRUE(result.planned_valid);
     EXPECT_EQ(result.planned_status, Game::KeplerOrbitStatus::Ok);
     ASSERT_EQ(result.planned_arcs.size(), 2u);
-    ASSERT_TRUE(result.planned_lines.valid);
-    ASSERT_GE(result.planned_lines.vertices.size(), 3u);
     EXPECT_TRUE(near_abs(result.planned_arcs[0].arc.t1_s, 60.0, 1.0e-12));
     EXPECT_TRUE(near_abs(result.planned_arcs[1].arc.t0_s, 60.0, 1.0e-12));
-    EXPECT_GT(result.planned_lines.vertices.front().t_s, 59.0);
-    EXPECT_LT(result.planned_lines.vertices.front().t_s, 61.0);
+    EXPECT_EQ(result.first_planned_draw_arc_index, 1u);
 }
 
 TEST(KeplerPrediction, BuilderKeepsLaterPlannedNodesBeyondBaseHorizon)
@@ -446,9 +438,7 @@ TEST(KeplerPrediction, BuilderKeepsLaterPlannedNodesBeyondBaseHorizon)
     EXPECT_TRUE(near_abs(result.planned_arcs[1].arc.t0_s, 60.0, 1.0e-12));
     EXPECT_TRUE(near_abs(result.planned_arcs[1].arc.t1_s, 300.0, 1.0e-12));
     EXPECT_TRUE(near_abs(result.planned_arcs[2].arc.t0_s, 300.0, 1.0e-12));
-    ASSERT_TRUE(result.planned_lines.valid);
-    EXPECT_GT(result.planned_lines.vertices.front().t_s, 59.0);
-    EXPECT_LT(result.planned_lines.vertices.front().t_s, 61.0);
+    EXPECT_EQ(result.first_planned_draw_arc_index, 1u);
 }
 
 TEST(KeplerPrediction, BuilderKeepsBaseValidWhenPlannedArcFails)
@@ -469,12 +459,10 @@ TEST(KeplerPrediction, BuilderKeepsBaseValidWhenPlannedArcFails)
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_EQ(result.status, Game::KeplerOrbitStatus::Ok);
-    EXPECT_TRUE(result.base_lines.valid);
     EXPECT_TRUE(result.planned_requested);
     EXPECT_FALSE(result.planned_valid);
     EXPECT_EQ(result.planned_status, Game::KeplerOrbitStatus::PrimaryMismatch);
     EXPECT_TRUE(result.planned_arcs.empty());
-    EXPECT_FALSE(result.planned_lines.valid);
 }
 
 TEST(KeplerPrediction, ManeuverNodeHorizonCoversLatestFutureNode)
@@ -524,7 +512,7 @@ TEST(KeplerPrediction, PlannedPreviewHorizonUsesPostBurnEllipticPeriod)
     request.requested_horizon_s = 120.0;
     request.options.open_orbit_window_s = 600.0;
 
-    Game::KeplerArcBuildRequest orbit_request{};
+    Game::KeplerBaseArcBuildRequest orbit_request{};
     orbit_request.simulation = request.simulation;
     orbit_request.subject_state_inertial = request.subject_state_inertial;
     orbit_request.t0_s = request.t0_s;
@@ -532,7 +520,7 @@ TEST(KeplerPrediction, PlannedPreviewHorizonUsesPostBurnEllipticPeriod)
     orbit_request.fixed_primary_body_id = request.fixed_primary_body_id;
     orbit_request.current_primary_body_id = request.current_primary_body_id;
     orbit_request.options = request.options;
-    const Game::KeplerArcBuildResult orbit = Game::build_kepler_arc(orbit_request);
+    const Game::KeplerBaseArcBuildResult orbit = Game::build_kepler_base_arc(orbit_request);
     ASSERT_TRUE(orbit.valid) << Game::kepler_orbit_status_name(orbit.status);
 
     const std::vector<Game::KeplerManeuverNode> nodes{
@@ -617,7 +605,7 @@ TEST(KeplerPrediction, PlannedPreviewEphemerisHorizonUsesBuiltPostBurnArc)
     const Game::KeplerOrbitArc &last_arc = result.planned_arcs.back();
     const double expected_horizon_s =
             last_arc.arc.t0_s +
-            Game::select_kepler_arc_horizon_s(last_arc.arc, request.options) -
+            Game::select_kepler_base_arc_horizon_s(last_arc.arc, request.options) -
             request.t0_s;
 
     EXPECT_GT(horizon_s, ephemeris.t_end_s() - request.t0_s);
@@ -679,7 +667,7 @@ TEST(KeplerPrediction, BuildHorizonKeepsReusePaddingInsideCap)
                          1.0e-12));
 }
 
-TEST(KeplerPrediction, BuilderKeepsFullPlannedOpenOrbitLineWhenUniversalSolverRangeIsExceeded)
+TEST(KeplerPrediction, DrawLodKeepsFullPlannedOpenOrbitWhenUniversalSolverRangeIsExceeded)
 {
     orbitsim::GameSimulation sim = make_single_body_sim();
     Game::KeplerPredictionBuildRequest request = make_request(sim);
@@ -703,14 +691,31 @@ TEST(KeplerPrediction, BuilderKeepsFullPlannedOpenOrbitLineWhenUniversalSolverRa
     const Game::KeplerPredictionBuildOutput result = Game::build_kepler_prediction(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
-    ASSERT_TRUE(result.planned_lines.valid)
-            << Game::kepler_orbit_status_name(result.planned_lines.diagnostics.status);
-    ASSERT_GE(result.planned_lines.vertices.size(), 2u);
-    EXPECT_EQ(result.planned_lines.diagnostics.status, Game::KeplerOrbitStatus::Ok);
-    EXPECT_TRUE(near_abs(result.planned_lines.vertices.back().t_s,
+    const std::span<const Game::KeplerOrbitArc> draw_arcs(
+            result.planned_arcs.data() + result.first_planned_draw_arc_index,
+            result.planned_arcs.size() - result.first_planned_draw_arc_index);
+    const Game::KeplerArcLineSet lines = Game::build_kepler_draw_lod_lines(
+            Game::KeplerDrawLodLineBuildRequest{
+                    .arcs = draw_arcs,
+                    .ephemeris = request.ephemeris,
+                    .body_state_provider = request.body_state_provider,
+                    .world_frame = request.world_frame,
+                    .line_options = request.line_options,
+                    .viewproj = glm::mat4(1.0f),
+                    .world_origin = {0.0, 0.0, 0.0},
+                    .viewport_width_px = 1280.0,
+                    .viewport_height_px = 720.0,
+                    .render_error_px = 1.0e9,
+            });
+
+    ASSERT_TRUE(lines.valid)
+            << Game::kepler_orbit_status_name(lines.diagnostics.status);
+    ASSERT_GE(lines.vertices.size(), 2u);
+    EXPECT_EQ(lines.diagnostics.status, Game::KeplerOrbitStatus::Ok);
+    EXPECT_TRUE(near_abs(lines.vertices.back().t_s,
                          result.planned_arcs.back().arc.t1_s,
                          1.0e-9));
-    EXPECT_GT(result.planned_lines.vertices.back().t_s, nodes.front().t_s);
+    EXPECT_GT(lines.vertices.back().t_s, nodes.front().t_s);
 }
 
 TEST(KeplerPrediction, CelestialNBodyEphemerisBuildsMovingBodyLines)

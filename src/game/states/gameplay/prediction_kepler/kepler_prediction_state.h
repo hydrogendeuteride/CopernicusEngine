@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/orbit/kepler/kepler_arc_info.h"
+#include "game/orbit/kepler/kepler_prediction_options.h"
 #include "game/orbit/kepler/kepler_types.h"
 #include "game/entity.h"
 
@@ -92,6 +93,13 @@ namespace Game
         bool operator==(const KeplerPredictionInputFingerprint &) const = default;
     };
 
+    struct KeplerPredictionBuildPerfDebug
+    {
+        double orbit_ms{0.0};
+        double base_patch_ms{0.0};
+        double planned_arc_ms{0.0};
+    };
+
     // Runtime state for the gameplay Kepler prediction system.
     struct KeplerPredictionState
     {
@@ -111,22 +119,23 @@ namespace Game
             double horizon_s{0.0};
             orbitsim::BodyId primary_body_id{orbitsim::kInvalidBodyId};
 
-            KeplerArcBuildResult orbit{};
+            KeplerBaseArcBuildResult orbit{};
             KeplerWorldFrame world_frame{};
             KeplerBodyStateProvider body_state_provider{};
+            KeplerArcLineOptions line_options{};
             orbitsim::KeplerPropagationOptions line_propagation{};
             std::vector<KeplerOrbitArc> base_arcs{};
             std::vector<KeplerOrbitArc> planned_arcs{};
             std::vector<KeplerPatchEvent> base_patch_events{};
             std::vector<KeplerPatchEvent> planned_patch_events{};
-            KeplerArcLineSet base_lines{};
-            KeplerArcLineSet planned_lines{};
+            std::size_t first_planned_draw_arc_index{0};
+            KeplerArcLineSet prebuilt_base_lines{};
             bool planned_requested{false};
             bool planned_valid{false};
             KeplerOrbitStatus planned_status{KeplerOrbitStatus::Ok};
             orbitsim::KeplerManeuverDiagnostics planned_diagnostics{};
-            KeplerArcLineDiagnostics planned_line_diagnostics{};
             KeplerArcMetrics metrics{};
+            KeplerPredictionBuildPerfDebug perf{};
         };
 
         // Debug snapshot for the shared celestial n-body ephemeris cache.
@@ -152,6 +161,50 @@ namespace Game
             bool cancelled{false};
         };
 
+        // Last-update timing and last-rebuild counters for frame spike diagnosis.
+        struct PerfDebug
+        {
+            bool reused_last_update{false};
+            bool rebuilt_last_update{false};
+            bool patched_conics_needs_ephemeris{false};
+            bool needs_celestial_nbody_cache{false};
+            bool second_ephemeris_pass{false};
+
+            uint64_t rebuild_count{0};
+            double last_update_ms{0.0};
+            double last_rebuild_ms{0.0};
+            double subject_resolve_ms{0.0};
+            double horizon_resolve_ms{0.0};
+            double ephemeris_resolve_ms{0.0};
+            double build_tracks_ms{0.0};
+            double second_ephemeris_resolve_ms{0.0};
+            double second_build_tracks_ms{0.0};
+            double total_orbit_ms{0.0};
+            double total_base_patch_ms{0.0};
+            double total_planned_arc_ms{0.0};
+            double active_orbit_ms{0.0};
+            double active_base_patch_ms{0.0};
+            double active_planned_arc_ms{0.0};
+
+            std::size_t subject_count{0};
+            std::size_t celestial_subject_count{0};
+            std::size_t track_count{0};
+            std::size_t total_base_arcs{0};
+            std::size_t total_planned_arcs{0};
+            std::size_t total_prebuilt_line_vertices{0};
+            std::size_t total_prebuilt_line_requested_samples{0};
+            std::size_t total_base_patch_events{0};
+            std::size_t total_planned_patch_events{0};
+            std::size_t active_base_arcs{0};
+            std::size_t active_planned_arcs{0};
+            std::size_t active_prebuilt_line_vertices{0};
+            std::size_t active_prebuilt_line_requested_samples{0};
+
+            double required_ephemeris_horizon_s{0.0};
+            double uncapped_ephemeris_horizon_s{0.0};
+            double planned_ephemeris_horizon_s{0.0};
+        };
+
         bool enabled{true};
         bool valid{false};
         bool dirty{true};
@@ -170,6 +223,7 @@ namespace Game
 
         std::vector<Track> tracks{};
         CelestialNBodyEphemerisDebug celestial_nbody_ephemeris{};
+        PerfDebug perf{};
 
         void clear_result(const KeplerOrbitStatus new_status = KeplerOrbitStatus::InvalidInput)
         {
@@ -182,6 +236,7 @@ namespace Game
             input_fingerprint = {};
             tracks.clear();
             celestial_nbody_ephemeris = {};
+            perf = {};
         }
     };
 } // namespace Game

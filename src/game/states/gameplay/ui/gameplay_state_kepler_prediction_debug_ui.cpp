@@ -227,9 +227,9 @@ namespace Game
             }
             if (active_track)
             {
-                draw_kepler_arc_info_table_value("Active track planned", "%zu arcs / %zu samples",
+                draw_kepler_arc_info_table_value("Active track planned", "%zu arcs / draw from %zu",
                                                   active_track->planned_arcs.size(),
-                                                  active_track->planned_lines.vertices.size());
+                                                  active_track->first_planned_draw_arc_index);
                 draw_kepler_arc_info_table_value(
                         "Active planned status", "%s%s",
                         active_track->planned_requested
@@ -319,45 +319,72 @@ namespace Game
                     kepler.celestial_nbody_ephemeris.rejected_splits,
                     kepler.celestial_nbody_ephemeris.forced_boundary_splits);
             draw_kepler_arc_info_table_bool("Celestial ephem cap hit",
-                                          kepler.celestial_nbody_ephemeris.hard_cap_hit);
+                                           kepler.celestial_nbody_ephemeris.hard_cap_hit);
+            const KeplerPredictionState::PerfDebug &perf = kepler.perf;
+            draw_kepler_arc_info_table_value(
+                    "Perf update/rebuild", "%.3f / %.3f ms%s%s",
+                    perf.last_update_ms,
+                    perf.last_rebuild_ms,
+                    perf.reused_last_update ? " / reused" : "",
+                    perf.second_ephemeris_pass ? " / second ephem" : "");
+            draw_kepler_arc_info_table_value(
+                    "Perf stages", "sub %.3f / hor %.3f / eph %.3f+%.3f / tracks %.3f+%.3f ms",
+                    perf.subject_resolve_ms,
+                    perf.horizon_resolve_ms,
+                    perf.ephemeris_resolve_ms,
+                    perf.second_ephemeris_resolve_ms,
+                    perf.build_tracks_ms,
+                    perf.second_build_tracks_ms);
+            draw_kepler_arc_info_table_value(
+                    "Perf subjects/tracks", "%zu + %zu celestial / %zu tracks / rebuild %llu",
+                    perf.subject_count,
+                    perf.celestial_subject_count,
+                    perf.track_count,
+                    static_cast<unsigned long long>(perf.rebuild_count));
+            draw_kepler_arc_info_table_value(
+                    "Perf active arcs/prebuilt", "%zu/%zu arcs / %zu verts",
+                    perf.active_base_arcs,
+                    perf.active_planned_arcs,
+                    perf.active_prebuilt_line_vertices);
+            draw_kepler_arc_info_table_value(
+                    "Perf active parts", "orb %.3f / bp %.3f / pa %.3f ms",
+                    perf.active_orbit_ms,
+                    perf.active_base_patch_ms,
+                    perf.active_planned_arc_ms);
+            draw_kepler_arc_info_table_value(
+                    "Perf total parts", "orb %.3f / bp %.3f / pa %.3f ms",
+                    perf.total_orbit_ms,
+                    perf.total_base_patch_ms,
+                    perf.total_planned_arc_ms);
+            draw_kepler_arc_info_table_value(
+                    "Perf prebuilt lines", "%zu verts / %zu requested",
+                    perf.total_prebuilt_line_vertices,
+                    perf.total_prebuilt_line_requested_samples);
+            draw_kepler_arc_info_table_value(
+                    "Perf ephem horizon", "req %.3f / uncapped %.3f / planned %.3f s",
+                    perf.required_ephemeris_horizon_s,
+                    perf.uncapped_ephemeris_horizon_s,
+                    perf.planned_ephemeris_horizon_s);
             if (summary_track)
             {
-                draw_kepler_arc_info_table_value("Base arcs / samples", "%zu / %zu",
-                                              summary_track->base_arcs.size(),
-                                              summary_track->base_lines.vertices.size());
-                draw_kepler_arc_info_table_value("Planned arcs / samples", "%zu / %zu",
-                                                summary_track->planned_arcs.size(),
-                                                summary_track->planned_lines.vertices.size());
-                draw_kepler_arc_info_table_value(
-                        "Base seam shifts", "%zu arcs / %zu samples / %.6f s",
-                        summary_track->base_lines.diagnostics.closed_seam_shifted_arcs,
-                        summary_track->base_lines.diagnostics.closed_seam_shifted_samples,
-                        summary_track->base_lines.diagnostics.max_closed_seam_shift_s);
-                draw_kepler_arc_info_table_value(
-                        "Planned seam shifts", "%zu arcs / %zu samples / %.6f s",
-                        summary_track->planned_line_diagnostics.closed_seam_shifted_arcs,
-                        summary_track->planned_line_diagnostics.closed_seam_shifted_samples,
-                        summary_track->planned_line_diagnostics.max_closed_seam_shift_s);
+                draw_kepler_arc_info_table_value("Base arcs / prebuilt lines", "%zu / %zu",
+                                               summary_track->base_arcs.size(),
+                                               summary_track->prebuilt_base_lines.vertices.size());
+                draw_kepler_arc_info_table_value("Planned arcs", "%zu",
+                                                 summary_track->planned_arcs.size());
+                draw_kepler_arc_info_table_value("Planned draw first arc", "%zu",
+                                                 summary_track->first_planned_draw_arc_index);
                 draw_kepler_arc_info_table_value(
                         "Planned status", "%s%s",
                         summary_track->planned_requested
                                 ? kepler_orbit_status_name(summary_track->planned_status)
                                 : "not requested",
                         summary_track->planned_valid ? " / valid" : "");
-                if (summary_track->planned_requested &&
-                    !summary_track->planned_valid &&
-                    summary_track->planned_line_diagnostics.requested_arcs > 0u)
-                {
-                    draw_kepler_arc_info_table_value(
-                            "Planned line samples", "%zu / %zu",
-                            summary_track->planned_line_diagnostics.accepted_samples,
-                            summary_track->planned_line_diagnostics.requested_samples);
-                }
             }
             else
             {
-                draw_kepler_arc_info_table_value("Base arcs / samples", "%s", "missing");
-                draw_kepler_arc_info_table_value("Planned arcs / samples", "%s", "missing");
+                draw_kepler_arc_info_table_value("Base arcs / prebuilt lines", "%s", "missing");
+                draw_kepler_arc_info_table_value("Planned arcs", "%s", "missing");
             }
             if (summary_track && summary_track->metrics.valid)
             {

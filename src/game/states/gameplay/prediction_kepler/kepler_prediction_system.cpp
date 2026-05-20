@@ -4,6 +4,7 @@
 #include "game/states/gameplay/orbital/orbital_runtime_system.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <iterator>
 #include <span>
@@ -14,6 +15,53 @@ namespace Game
 {
     namespace
     {
+        using KeplerPerfClock = std::chrono::steady_clock;
+
+        double elapsed_ms(const KeplerPerfClock::time_point start,
+                          const KeplerPerfClock::time_point end = KeplerPerfClock::now())
+        {
+            return std::chrono::duration<double, std::milli>(end - start).count();
+        }
+
+        void record_track_perf(KeplerPredictionState::PerfDebug &perf,
+                               const KeplerPredictionState::Track &track)
+        {
+            perf.total_base_arcs += track.base_arcs.size();
+            perf.total_planned_arcs += track.planned_arcs.size();
+            perf.total_prebuilt_line_vertices += track.prebuilt_base_lines.vertices.size();
+            perf.total_prebuilt_line_requested_samples +=
+                    track.prebuilt_base_lines.diagnostics.requested_samples;
+            perf.total_base_patch_events += track.base_patch_events.size();
+            perf.total_planned_patch_events += track.planned_patch_events.size();
+            perf.total_orbit_ms += track.perf.orbit_ms;
+            perf.total_base_patch_ms += track.perf.base_patch_ms;
+            perf.total_planned_arc_ms += track.perf.planned_arc_ms;
+
+            if (!track.active_player)
+            {
+                return;
+            }
+
+            perf.active_base_arcs += track.base_arcs.size();
+            perf.active_planned_arcs += track.planned_arcs.size();
+            perf.active_prebuilt_line_vertices += track.prebuilt_base_lines.vertices.size();
+            perf.active_prebuilt_line_requested_samples +=
+                    track.prebuilt_base_lines.diagnostics.requested_samples;
+            perf.active_orbit_ms += track.perf.orbit_ms;
+            perf.active_base_patch_ms += track.perf.base_patch_ms;
+            perf.active_planned_arc_ms += track.perf.planned_arc_ms;
+        }
+
+        void record_perf_tracks(KeplerPredictionState::PerfDebug &perf,
+                                const std::vector<KeplerPredictionState::Track> &tracks)
+        {
+            perf.track_count = tracks.size();
+            for (const KeplerPredictionState::Track &track : tracks)
+            {
+                record_track_perf(perf, track);
+            }
+        }
+
         // Publishes an active-player or first-valid representative track.
         void publish_representative_track(KeplerPredictionState &state)
         {
@@ -225,19 +273,19 @@ namespace Game
             track.orbit = std::move(built.orbit);
             track.world_frame = world_frame;
             track.body_state_provider = body_state_provider;
+            track.line_options = request.line_options;
             track.line_propagation = request.line_options.propagation;
             track.base_arcs = std::move(built.base_arcs);
             track.planned_arcs = std::move(built.planned_arcs);
             track.base_patch_events = std::move(built.base_patch_events);
             track.planned_patch_events = std::move(built.planned_patch_events);
-            track.base_lines = std::move(built.base_lines);
-            track.planned_lines = std::move(built.planned_lines);
+            track.first_planned_draw_arc_index = built.first_planned_draw_arc_index;
             track.planned_requested = built.planned_requested;
             track.planned_valid = built.planned_valid;
             track.planned_status = built.planned_status;
             track.planned_diagnostics = built.planned_diagnostics;
-            track.planned_line_diagnostics = built.planned_line_diagnostics;
             track.metrics = built.metrics;
+            track.perf = built.perf;
             return track;
         }
 
@@ -283,7 +331,7 @@ namespace Game
             track.status = lines.valid ? KeplerOrbitStatus::Ok : lines.diagnostics.status;
             track.horizon_s = lines.valid ? horizon_s : 0.0;
             track.primary_body_id = world_frame.world_reference_body_id;
-            track.base_lines = std::move(lines);
+            track.prebuilt_base_lines = std::move(lines);
             return track;
         }
 
@@ -359,7 +407,7 @@ namespace Game
             }
 
             const orbitsim::GameSimulation &simulation = context.orbit->scenario()->sim;
-            KeplerArcBuildRequest request{};
+            KeplerBaseArcBuildRequest request{};
             request.simulation = &simulation;
             request.ephemeris = nullptr;
             request.subject_state_inertial = subject.state_inertial;
@@ -373,7 +421,7 @@ namespace Game
                     subject.active_player ? previous_primary_body_id : orbitsim::kInvalidBodyId;
             request.options = context.options;
 
-            const KeplerArcBuildResult orbit = build_kepler_arc(request);
+            const KeplerBaseArcBuildResult orbit = build_kepler_base_arc(request);
             if (!orbit.valid || !std::isfinite(orbit.horizon_s) || !(orbit.horizon_s > 0.0))
             {
                 return out;
@@ -695,6 +743,7 @@ namespace Game
     // Main update pipeline for all Kepler prediction tracks.
     void KeplerPredictionSystem::update(const KeplerPredictionUpdateContext &context)
     {
+        const auto update_start = KeplerPerfClock::now();
         _state.enabled = context.enabled;
         if (!context.enabled)
         {
@@ -732,8 +781,15 @@ namespace Game
         {
             // Existing tracks still cover this frame.
             _state.enabled = context.enabled;
+            _state.perf.reused_last_update = true;
+            _state.perf.rebuilt_last_update = false;
+            _state.perf.last_update_ms = elapsed_ms(update_start);
             return;
         }
+
+        KeplerPredictionState::PerfDebug perf{};
+        perf.rebuilt_last_update = true;
+        perf.rebuild_count = _state.perf.rebuild_count + 1u;
 
         const KeplerPredictionSubjectContext subject_context{
                 .orbit = context.orbit,
@@ -743,6 +799,7 @@ namespace Game
                 .scenario_config = context.scenario_config,
         };
 
+        const auto subject_start = KeplerPerfClock::now();
         std::vector<KeplerPredictionSubject> subjects =
                 resolve_kepler_prediction_orbiter_subjects(subject_context, world_frame);
         const bool needs_celestial_subjects =
@@ -758,6 +815,9 @@ namespace Game
                             celestial_subjects.begin(),
                             celestial_subjects.end());
         }
+        perf.subject_resolve_ms = elapsed_ms(subject_start);
+        perf.subject_count = subjects.size();
+        perf.celestial_subject_count = celestial_subject_count;
         if (subjects.empty() && (!context.build_celestial_nbody_tracks || celestial_subjects.empty()))
         {
             _state.clear_result(KeplerOrbitStatus::InvalidSubjectState);
@@ -786,7 +846,10 @@ namespace Game
                 context.build_celestial_nbody_tracks ||
                 context.build_celestial_kepler_tracks ||
                 patched_conics_needs_ephemeris;
+        perf.patched_conics_needs_ephemeris = patched_conics_needs_ephemeris;
+        perf.needs_celestial_nbody_cache = needs_celestial_nbody_cache;
         // Share one celestial ephemeris across all tracks.
+        const auto horizon_start = KeplerPerfClock::now();
         ResolvedCelestialNBodyHorizon required_celestial_nbody_horizon =
                 needs_celestial_nbody_cache
                         ? resolve_required_celestial_nbody_horizon(
@@ -795,9 +858,12 @@ namespace Game
                                   world_frame,
                                   previous_primary_body_id)
                         : ResolvedCelestialNBodyHorizon{};
+        perf.horizon_resolve_ms = elapsed_ms(horizon_start);
+        perf.required_ephemeris_horizon_s = required_celestial_nbody_horizon.horizon_s;
+        perf.uncapped_ephemeris_horizon_s = required_celestial_nbody_horizon.uncapped_horizon_s;
 
         const auto publish_ephemeris_debug = [this, needs_celestial_nbody_cache](
-                                                     const CelestialNBodyEphemerisCache &cache) {
+                                                      const CelestialNBodyEphemerisCache &cache) {
             if (!needs_celestial_nbody_cache)
             {
                 _state.celestial_nbody_ephemeris = {};
@@ -897,15 +963,24 @@ namespace Game
 
         const CelestialNBodyEphemerisCache *celestial_nbody =
                 needs_celestial_nbody_cache
-                        ? &resolve_celestial_nbody_cache(context,
-                                                         world_frame,
-                                                         required_celestial_nbody_horizon.horizon_s,
-                                                         required_celestial_nbody_horizon.uncapped_horizon_s,
-                                                         required_celestial_nbody_horizon.cap_s,
-                                                         required_celestial_nbody_horizon.capped)
+                        ? [&]() {
+                              const auto ephemeris_start = KeplerPerfClock::now();
+                              const CelestialNBodyEphemerisCache &cache =
+                                      resolve_celestial_nbody_cache(
+                                              context,
+                                              world_frame,
+                                              required_celestial_nbody_horizon.horizon_s,
+                                              required_celestial_nbody_horizon.uncapped_horizon_s,
+                                              required_celestial_nbody_horizon.cap_s,
+                                              required_celestial_nbody_horizon.capped);
+                              perf.ephemeris_resolve_ms = elapsed_ms(ephemeris_start);
+                              return &cache;
+                          }()
                         : &_celestial_nbody_cache;
 
+        const auto build_tracks_start = KeplerPerfClock::now();
         build_tracks(*celestial_nbody, required_celestial_nbody_horizon.horizon_s);
+        perf.build_tracks_ms = elapsed_ms(build_tracks_start);
 
         if (patched_conics_needs_ephemeris &&
             celestial_nbody->valid &&
@@ -913,8 +988,10 @@ namespace Game
         {
             const double planned_horizon_s =
                     planned_ephemeris_horizon_s(celestial_nbody->t_end_s);
+            perf.planned_ephemeris_horizon_s = planned_horizon_s;
             if (planned_horizon_s > celestial_nbody->required_horizon_s + 1.0e-6)
             {
+                perf.second_ephemeris_pass = true;
                 const double uncapped_horizon_s =
                         std::max(required_celestial_nbody_horizon.uncapped_horizon_s,
                                  planned_horizon_s);
@@ -928,6 +1005,9 @@ namespace Game
                         .cap_s = limited.cap_s,
                         .capped = limited.capped,
                 };
+                perf.required_ephemeris_horizon_s = required_celestial_nbody_horizon.horizon_s;
+                perf.uncapped_ephemeris_horizon_s = required_celestial_nbody_horizon.uncapped_horizon_s;
+                const auto second_ephemeris_start = KeplerPerfClock::now();
                 celestial_nbody =
                         &resolve_celestial_nbody_cache(context,
                                                        world_frame,
@@ -935,12 +1015,19 @@ namespace Game
                                                        required_celestial_nbody_horizon.uncapped_horizon_s,
                                                        required_celestial_nbody_horizon.cap_s,
                                                        required_celestial_nbody_horizon.capped);
+                perf.second_ephemeris_resolve_ms = elapsed_ms(second_ephemeris_start);
+                const auto second_build_tracks_start = KeplerPerfClock::now();
                 build_tracks(*celestial_nbody, required_celestial_nbody_horizon.horizon_s);
+                perf.second_build_tracks_ms = elapsed_ms(second_build_tracks_start);
             }
         }
 
         publish_ephemeris_debug(*celestial_nbody);
         publish_representative_track(_state);
+        record_perf_tracks(perf, _state.tracks);
+        perf.last_update_ms = elapsed_ms(update_start);
+        perf.last_rebuild_ms = perf.last_update_ms;
+        _state.perf = perf;
     }
 
 } // namespace Game

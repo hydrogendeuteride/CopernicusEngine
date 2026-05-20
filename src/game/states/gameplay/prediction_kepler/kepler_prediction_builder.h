@@ -2,7 +2,7 @@
 
 #include "game/orbit/kepler/kepler_arc_builder.h"
 #include "game/orbit/kepler/kepler_arc_info.h"
-#include "game/orbit/kepler/kepler_arc_line_builder.h"
+#include "game/states/gameplay/prediction_kepler/kepler_prediction_state.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -30,28 +30,27 @@ namespace Game
         uint64_t maneuver_revision{0};
     };
 
-    // Built arcs and render lines for one subject.
+    // Built arcs and maneuver metadata for one subject. Render lines are draw-time LOD.
     struct KeplerPredictionBuildOutput
     {
         bool valid{false};
         KeplerOrbitStatus status{KeplerOrbitStatus::InvalidInput};
         uint64_t maneuver_revision{0};
-        KeplerArcBuildResult orbit{};
+        KeplerBaseArcBuildResult orbit{};
         std::vector<KeplerOrbitArc> base_arcs{};
         std::vector<KeplerOrbitArc> planned_arcs{};
         std::vector<KeplerPatchEvent> base_patch_events{};
         std::vector<KeplerPatchEvent> planned_patch_events{};
-        KeplerArcLineSet base_lines{};
-        KeplerArcLineSet planned_lines{};
+        std::size_t first_planned_draw_arc_index{0};
         bool planned_requested{false};
         bool planned_valid{false};
         KeplerOrbitStatus planned_status{KeplerOrbitStatus::Ok};
         orbitsim::KeplerManeuverDiagnostics planned_diagnostics{};
-        KeplerArcLineDiagnostics planned_line_diagnostics{};
         KeplerArcMetrics metrics{};
+        KeplerPredictionBuildPerfDebug perf{};
     };
 
-    // Builds analytic arcs and their renderable line vertices.
+    // Builds analytic arcs and maneuver metadata.
     KeplerPredictionBuildOutput build_kepler_prediction(
             const KeplerPredictionBuildRequest &request);
 
@@ -63,7 +62,7 @@ namespace Game
 
     // Returns the horizon needed for the post-burn preview segment.
     double required_kepler_planned_preview_horizon_s(
-            const KeplerArcBuildResult &orbit,
+            const KeplerBaseArcBuildResult &orbit,
             const KeplerManeuverNode *nodes,
             std::size_t node_count,
             const KeplerPredictionOptions &options);

@@ -102,6 +102,7 @@ set(GAME_ORBIT_KEPLER_SOURCES
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_patched_conics_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_line_builder.cpp"
+  "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_draw_lod_line_builder.cpp"
   "${PROJECT_SOURCE_DIR}/src/game/orbit/kepler/kepler_arc_info.cpp"
 )
 

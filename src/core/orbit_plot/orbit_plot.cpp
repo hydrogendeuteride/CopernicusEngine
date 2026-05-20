@@ -85,6 +85,20 @@ void OrbitPlotSystem::add_line(const WorldVec3 &a_world,
     cmd.color = color;
     cmd.depth = depth;
     cmd.style = style;
+    add_line_command(cmd);
+}
+
+void OrbitPlotSystem::reserve_pending_lines(const std::size_t additional_line_count)
+{
+    if (additional_line_count == 0u)
+    {
+        return;
+    }
+    _pending_lines.reserve(_pending_lines.size() + additional_line_count);
+}
+
+void OrbitPlotSystem::add_line_command(const LineCommand &cmd)
+{
     _pending_lines.push_back(cmd);
     _stats.pending_line_count = static_cast<uint32_t>(_pending_lines.size());
 }
@@ -96,6 +110,7 @@ void OrbitPlotSystem::add_lines(std::span<const LineCommand> lines)
         return;
     }
 
+    reserve_pending_lines(lines.size());
     _pending_lines.insert(_pending_lines.end(), lines.begin(), lines.end());
     _stats.pending_line_count = static_cast<uint32_t>(_pending_lines.size());
 }

@@ -96,6 +96,8 @@ public:
                   const glm::vec4 &color,
                   OrbitPlotDepth depth = OrbitPlotDepth::DepthTested,
                   OrbitPlotLineStyle style = OrbitPlotLineStyle::Solid);
+    void reserve_pending_lines(std::size_t additional_line_count);
+    void add_line_command(const LineCommand &line);
     void add_lines(std::span<const LineCommand> lines);
     void add_lines_translated(std::span<const LineCommand> lines, const WorldVec3 &delta_world);
 

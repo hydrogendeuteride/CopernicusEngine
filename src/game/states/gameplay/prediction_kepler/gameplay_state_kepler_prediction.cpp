@@ -9,6 +9,27 @@
 
 namespace Game
 {
+    namespace
+    {
+        void clamp_kepler_line_options_to_render_budget(KeplerArcLineOptions &line_options,
+                                                        const int render_segment_budget)
+        {
+            if (render_segment_budget <= 1)
+            {
+                return;
+            }
+
+            constexpr std::size_t kKeplerCurveSourceVertexCap = 16384u;
+            line_options.max_vertices_total =
+                    std::min(line_options.max_vertices_total,
+                             static_cast<std::size_t>(std::min(render_segment_budget + 1,
+                                                               static_cast<int>(kKeplerCurveSourceVertexCap))));
+            line_options.max_vertices_per_arc =
+                    std::min(line_options.max_vertices_per_arc,
+                             line_options.max_vertices_total);
+        }
+    } // namespace
+
     // Marks cached Kepler tracks dirty.
     void GameplayState::mark_kepler_prediction_dirty()
     {
@@ -67,18 +88,8 @@ namespace Game
         kepler_context.build_celestial_nbody_tracks = _kepler_draw_celestial_nbody_tracks;
 
         const int render_segment_budget = _prediction->budget().render_max_segments_cpu;
-        if (render_segment_budget > 1)
-        {
-            // Clamp Kepler tessellation to the shared render budget.
-            constexpr std::size_t kKeplerCurveSourceVertexCap = 16384u;
-            kepler_context.line_options.max_vertices_total =
-                    std::min(kepler_context.line_options.max_vertices_total,
-                             static_cast<std::size_t>(std::min(render_segment_budget + 1,
-                                                               static_cast<int>(kKeplerCurveSourceVertexCap))));
-            kepler_context.line_options.max_vertices_per_arc =
-                    std::min(kepler_context.line_options.max_vertices_per_arc,
-                             kepler_context.line_options.max_vertices_total);
-        }
+        clamp_kepler_line_options_to_render_budget(kepler_context.line_options,
+                                                   render_segment_budget);
 
         _kepler_prediction->update(kepler_context);
         _kepler_maneuver.resolve_node_display_states(_kepler_prediction->state());
@@ -105,6 +116,11 @@ namespace Game
             kepler_draw.draw_planned_as_dashed = _prediction->state().draw_config.draw_planned_as_dashed;
             kepler_draw.dashed_segment_on_px = _prediction->state().draw_config.dashed_segment_on_px;
             kepler_draw.dashed_segment_off_px = _prediction->state().draw_config.dashed_segment_off_px;
+            kepler_draw.render_error_px = _prediction->budget().render_error_px;
+            kepler_draw.line_options = _kepler_arc_line_options;
+            clamp_kepler_line_options_to_render_budget(
+                    kepler_draw.line_options,
+                    _prediction->budget().render_max_segments_cpu);
         }
         if (ctx.renderer && ctx.renderer->_sceneManager)
         {

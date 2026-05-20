@@ -135,14 +135,14 @@ TEST(KeplerOrbit, ArcBuilderSelectsFixedPrimaryAndBuildsRelativeArc)
             orbitsim::make_state(earth->state.position_m + orbitsim::Vec3{r_m, 0.0, 0.0},
                                  earth->state.velocity_mps + orbitsim::Vec3{0.0, v_mps, 0.0});
 
-    Game::KeplerArcBuildRequest request{};
+    Game::KeplerBaseArcBuildRequest request{};
     request.simulation = &sim;
     request.subject_state_inertial = ship_state;
     request.t0_s = 10.0;
     request.requested_horizon_s = 600.0;
     request.fixed_primary_body_id = kEarthId;
 
-    const Game::KeplerArcBuildResult result = Game::build_kepler_arc(request);
+    const Game::KeplerBaseArcBuildResult result = Game::build_kepler_base_arc(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_EQ(result.primary.body_id, kEarthId);
@@ -169,14 +169,14 @@ TEST(KeplerOrbit, ArcBuilderHonorsExplicitHorizonWithoutMinimumClamp)
             orbitsim::make_state(earth->state.position_m + orbitsim::Vec3{r_m, 0.0, 0.0},
                                  earth->state.velocity_mps + orbitsim::Vec3{0.0, v_mps, 0.0});
 
-    Game::KeplerArcBuildRequest request{};
+    Game::KeplerBaseArcBuildRequest request{};
     request.simulation = &sim;
     request.subject_state_inertial = ship_state;
     request.t0_s = 10.0;
     request.requested_horizon_s = 1.0;
     request.fixed_primary_body_id = kEarthId;
 
-    const Game::KeplerArcBuildResult result = Game::build_kepler_arc(request);
+    const Game::KeplerBaseArcBuildResult result = Game::build_kepler_base_arc(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_TRUE(near_abs(result.horizon_s, 1.0, 1.0e-12));
@@ -194,14 +194,14 @@ TEST(KeplerOrbit, ArcBuilderUsesOpenOrbitWindowForHyperbolicArc)
             orbitsim::make_state(earth->state.position_m + orbitsim::Vec3{r_m, 0.0, 0.0},
                                  earth->state.velocity_mps + orbitsim::Vec3{0.0, 12'000.0, 0.0});
 
-    Game::KeplerArcBuildRequest request{};
+    Game::KeplerBaseArcBuildRequest request{};
     request.simulation = &sim;
     request.subject_state_inertial = ship_state;
     request.t0_s = 0.0;
     request.fixed_primary_body_id = kEarthId;
     request.options.open_orbit_window_s = 45.0 * 24.0 * 60.0 * 60.0;
 
-    const Game::KeplerArcBuildResult result = Game::build_kepler_arc(request);
+    const Game::KeplerBaseArcBuildResult result = Game::build_kepler_base_arc(request);
 
     ASSERT_TRUE(result.valid) << Game::kepler_orbit_status_name(result.status);
     EXPECT_TRUE(near_abs(result.horizon_s, request.options.open_orbit_window_s, 1.0e-12));

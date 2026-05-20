@@ -9,7 +9,7 @@
 namespace Game
 {
     // Inputs for building a primary-relative arc.
-    struct KeplerArcBuildRequest
+    struct KeplerBaseArcBuildRequest
     {
         const orbitsim::GameSimulation *simulation{nullptr};
         const orbitsim::CelestialEphemeris *ephemeris{nullptr};
@@ -22,11 +22,11 @@ namespace Game
     };
 
     // Selects the default prediction span.
-    double select_kepler_arc_horizon_s(const orbitsim::KeplerArc &arc,
-                                       const KeplerPredictionOptions &options);
+    double select_kepler_base_arc_horizon_s(const orbitsim::KeplerArc &arc,
+                                            const KeplerPredictionOptions &options);
 
     // Builds the subject's base Kepler arc.
-    KeplerArcBuildResult build_kepler_arc(const KeplerArcBuildRequest &request);
+    KeplerBaseArcBuildResult build_kepler_base_arc(const KeplerBaseArcBuildRequest &request);
 
     // Applies maneuver nodes and returns arc segments.
     KeplerManeuverArcBuildResult build_kepler_maneuver_arc_chain(
