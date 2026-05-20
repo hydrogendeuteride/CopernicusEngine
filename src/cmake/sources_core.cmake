@@ -8,6 +8,15 @@ list(APPEND VULKAN_ENGINE_SOURCES
   core/engine.h
   core/engine.cpp
   core/engine_ui.cpp
+  core/engine_ui/panels.h
+  core/engine_ui/common.h
+  core/engine_ui/asset_panels.cpp
+  core/engine_ui/camera_panel.cpp
+  core/engine_ui/planet_debug_panels.cpp
+  core/engine_ui/postfx_panel.cpp
+  core/engine_ui/render_controls.cpp
+  core/engine_ui/render_inspector.cpp
+  core/engine_ui/scene_panels.cpp
   core/game_api.h
   core/render_viewport.h
   core/render_viewport.cpp

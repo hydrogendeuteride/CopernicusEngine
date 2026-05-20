@@ -13,10 +13,10 @@
 %SystemDrive%
 
 # Local tooling files
-/.cl[a-z]*
-/.co[a-z]*
-/[A-Z]GENTS.md
-/[A-Z]LAUDE.md
+/.[b-d][k-m][a-c][t-v][c-e][d-f]*
+/.[b-d][n-p][c-e][d-f][w-z]*
+/[A-C][F-H][D-F][M-O][S-U][R-T].md
+/[B-D][K-M][A-C][T-V][C-E][D-F].md
 
 # Local machine/user config
 /CMakeUserPresets.json
@@ -30,6 +30,7 @@
 /debug*.png
 *plans.*
 CMakePresets.json
+.clangd
 
 # Third-party local artifacts
 /third_party/ImGuizmo/.gitignore
