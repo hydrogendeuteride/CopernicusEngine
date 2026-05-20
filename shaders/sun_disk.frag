@@ -108,9 +108,9 @@ void main()
         float limb = 1.0 - 0.5 * oneMinusMu - 0.1 * oneMinusMu * oneMinusMu;
         disk *= limb;
 
-        vec3 centerCol = vec3(1.0, 1.0, 0.95);
-        vec3 edgeCol   = vec3(1.0, 0.82, 0.15);
-        diskColor = mix(edgeCol, centerCol, mu * mu);
+        vec3 centerCol = vec3(1.0, 1.0, 0.98);
+        vec3 edgeCol   = vec3(1.0, 0.93, 0.78);
+        diskColor = mix(edgeCol, centerCol, smoothstep(0.0, 0.35, mu));
     }
 
     vec3 sunCol = sceneData.sunlightColor.rgb * sceneData.sunlightColor.a;
@@ -191,12 +191,12 @@ void main()
 
         // Wide warm glow  (scale 2.5 → 4/6.25 = 0.64)
         float wideGlow = exp(-s * 0.64) * 0.08;
-        halo += vec3(wideGlow * 1.2, wideGlow * 0.9, wideGlow * 0.5);
+        halo += vec3(wideGlow * 1.0, wideGlow * 0.98, wideGlow * 0.85);
 
         // Multi-layer bloom rings (scale² denominators pre-folded)
         bloom  = exp(-s * 222.222) * vec3(0.15, 0.1425, 0.1275);   // ×0.3 → 20/0.09
-        bloom += exp(-s * 2.667)   * vec3(0.06, 0.042, 0.018);     // ×1.5 → 6/2.25
-        bloom += exp(-s * 0.125)   * vec3(0.02, 0.006, 0.002);     // ×4.0 → 2/16
+        bloom += exp(-s * 2.667)   * vec3(0.06, 0.052, 0.04);      // ×1.5 → 6/2.25
+        bloom += exp(-s * 0.125)   * vec3(0.02, 0.014, 0.009);     // ×4.0 → 2/16
     }
 
     // ─── 2. CORONA TENDRILS ──────────────────────────────────────────
@@ -265,11 +265,11 @@ void main()
 
     result += haloIntensity * halo * sunCol;
 
-    result += haloIntensity * corona * (sunCol * vec3(1.0, 0.8, 0.5));
+    result += haloIntensity * corona * (sunCol * vec3(1.0, 0.96, 0.88));
 
     result += starIntensity * star * sunCol;
 
-    result += haloIntensity * streak * (sunCol * vec3(1.0, 0.9, 0.7));
+    result += haloIntensity * streak * (sunCol * vec3(1.0, 0.98, 0.92));
 
     result += haloIntensity * bloom * sunCol;
 
