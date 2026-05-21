@@ -1,7 +1,9 @@
 # QuaternionEngine
 Multipurpose Vulkan render engine specialized for physics simulation and solar system visualization
 
-![](gallery/vk2.png)
+![](gallery/vk5.png)
+
+>This repository is archived at the final open-source version. Future development continues privately.
 
 ## Introduction
 Work-In-Progress Vulkan render engine
@@ -19,10 +21,8 @@ Current structure:
 - Floating origin with double precision coordinate system
 - Planet Rendering, Cubesphere-quadtree LOD Terrain system, Rayleigh-Mie scattering atmosphere
 - Sun
-
-Work-In-Progress
-- Physics engine integration (Jolt)
-- Celestial mechanics
+- Physics engine integration (Jolt), sound (miniaudio)
+- Celestial mechanics (Kepler, n-body), navigation
 - ...AND making real game
 
 ## Build prequsites
