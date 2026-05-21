@@ -210,7 +210,7 @@ void main()
         vec3 outRgb = baseColor * transmittance;
         if (atmActive)
         {
-            outRgb += state.scatterAtm * (sunCol * atmIntensity);
+            outRgb += state.scatterAtm * (sunCol * atmIntensity * surface_atmosphere_scatter_scale());
         }
 
         outColor = vec4(outRgb, 1.0);
@@ -256,7 +256,7 @@ void main()
     vec3 outRgb = baseColor * transmittance + resolvedLighting.rgb;
     if (atmActive)
     {
-        outRgb += state.scatterAtm * (sunCol * atmIntensity);
+        outRgb += state.scatterAtm * (sunCol * atmIntensity * surface_atmosphere_scatter_scale());
     }
 
     outColor = vec4(outRgb, 1.0);

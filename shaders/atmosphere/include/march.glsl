@@ -2,6 +2,7 @@
 
 const float RAYLEIGH_PHASE_SCALE = 3.0 / (16.0 * PI);
 const float MIE_PHASE_SCALE = 1.0 / (4.0 * PI);
+const float OCEAN_ATMOSPHERE_SCATTER_SCALE = 0.38;
 
 float phase_rayleigh(float cosTheta)
 {
@@ -14,6 +15,19 @@ float phase_mie_hg(float cosTheta, float g)
     float d = max(1.0 + g2 - 2.0 * g * cosTheta, 1e-4);
     return MIE_PHASE_SCALE * (1.0 - g2) / (d * sqrt(d));
 }
+
+float surface_atmosphere_scatter_scale()
+{
+    vec4 posSample = texture(posTex, inUV);
+    if (!gbuffer_pixel_is_ocean(posSample.w))
+    {
+        return 1.0;
+    }
+
+    float oceanMask = clamp(decode_planet_gbuffer_water_mask(posSample.w), 0.0, 1.0);
+    return mix(1.0, OCEAN_ATMOSPHERE_SCATTER_SCALE, oceanMask);
+}
+
 vec2 sun_optical_depth(float r, float muS, float planetRadius, float atmRadius)
 {
     return sample_transmittance_air_mass(transmittanceLut, r, muS, planetRadius, atmRadius);
@@ -423,7 +437,7 @@ vec3 render_atmosphere_monolithic(vec3 baseColor)
     vec3 betaRA_eff = betaR_eff + betaA_eff;
     vec3 transmittance = exp(-(betaRA_eff * state.odR + betaM_eff * state.odM + vec3(CLOUD_BETA * state.odC)));
     vec3 outRgb = baseColor * transmittance;
-    if (atmActive) outRgb += state.scatterAtm * (sunCol * atmIntensity);
+    if (atmActive) outRgb += state.scatterAtm * (sunCol * atmIntensity * surface_atmosphere_scatter_scale());
     outRgb += state.scatterCloudSun * cloudSunCol;
     outRgb += state.scatterCloudAmb * (cloudAmbCol * CLOUD_AMBIENT_SCALE);
     return outRgb;

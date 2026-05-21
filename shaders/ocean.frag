@@ -178,11 +178,14 @@ vec3 evaluate_sky_reflection(vec3 reflectDir,
     vec3 ambientBase = max(ambientColor, vec3(0.02));
     vec3 zenithColor = ambientBase * vec3(0.45, 0.70, 1.25) + sunColor * 0.015;
     vec3 horizonColor = ambientBase * vec3(0.95, 1.00, 1.05) + sunColor * 0.055;
-    vec3 sky = mix(horizonColor, zenithColor, pow(up01, 0.65));
+    const float skyReflectance = 0.35;
+    const float sunReflectance = 1.15;
+
+    vec3 sky = mix(horizonColor, zenithColor, pow(up01, 0.65)) * skyReflectance;
 
     vec3 horizonWarm = sunColor * pow(sunAlign, 10.0) * (0.22 + 0.18 * horizon);
     vec3 sunHalo = sunColor * (pow(sunAlign, 160.0) * 0.22 + pow(sunAlign, 24.0) * 0.05);
-    sky += horizonWarm + sunHalo;
+    sky += (horizonWarm + sunHalo) * sunReflectance;
 
     if (atmosphereActive)
     {
@@ -296,8 +299,8 @@ void main()
     vec3 fresnel = fresnelSchlick(NdotV, F0);
     vec3 skyReflection = skyColor * fresnel * nightReflectionFactor;
 
-    vec3 waterTint = vec3(0.012, 0.026, 0.041);
-    vec3 grazingTint = waterTint * mix(0.14, 0.03, NdotV) * nightReflectionFactor;
+    vec3 waterTint = vec3(0.005, 0.015, 0.030);
+    vec3 grazingTint = waterTint * mix(0.12, 0.025, NdotV) * nightReflectionFactor;
 
     vec3 color = (direct + skyReflection + grazingTint) * coverage;
     outColor = vec4(color, 1.0);
